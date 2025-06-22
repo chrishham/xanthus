@@ -68,7 +68,7 @@ func handleLogin(c *gin.Context) {
 		c.Header("HX-Redirect", "/main")
 		c.Status(http.StatusOK)
 	} else {
-		c.Data(http.StatusUnauthorized, "text/html", []byte("Invalid Cloudflare API token. Please check your token and try again."))
+		c.Data(http.StatusOK, "text/html", []byte("❌ Invalid Cloudflare API token. Please check your token and try again."))
 	}
 }
 
