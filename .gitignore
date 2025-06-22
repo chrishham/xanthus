@@ -55,5 +55,3 @@ temp/
 # Config files with sensitive data
 config.local.yaml
 secrets.yaml
-
-xanthus
