@@ -47,6 +47,8 @@ func main() {
 	r.GET("/main", handleMainPage)
 	r.GET("/setup", handleSetupPage)
 	r.POST("/setup/hetzner", handleSetupHetzner)
+	r.GET("/setup/server", handleSetupServerPage)
+	r.POST("/setup/server", handleSetupServer)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -95,6 +97,76 @@ type SSHKeyKVData struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
+// HetznerLocation represents a Hetzner datacenter location
+type HetznerLocation struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Country     string `json:"country"`
+	City        string `json:"city"`
+	Latitude    float64 `json:"latitude"`
+	Longitude   float64 `json:"longitude"`
+}
+
+// HetznerServerType represents a Hetzner server type/instance
+type HetznerServerType struct {
+	ID                 int                 `json:"id"`
+	Name               string              `json:"name"`
+	Description        string              `json:"description"`
+	Cores              int                 `json:"cores"`
+	Memory             float64             `json:"memory"`
+	Disk               int                 `json:"disk"`
+	Prices             []HetznerPrice      `json:"prices"`
+	StorageType        string              `json:"storage_type"`
+	CPUType            string              `json:"cpu_type"`
+	Architecture       string              `json:"architecture"`
+	AvailableLocations map[string]bool     `json:"available_locations,omitempty"`
+}
+
+// HetznerPrice represents pricing information for a server type
+type HetznerPrice struct {
+	Location     string  `json:"location"`
+	PriceHourly  HetznerPriceDetail `json:"price_hourly"`
+	PriceMonthly HetznerPriceDetail `json:"price_monthly"`
+}
+
+// HetznerPriceDetail represents price details
+type HetznerPriceDetail struct {
+	Net   string `json:"net"`
+	Gross string `json:"gross"`
+}
+
+// HetznerLocationsResponse represents the API response for locations
+type HetznerLocationsResponse struct {
+	Locations []HetznerLocation `json:"locations"`
+}
+
+// HetznerServerTypesResponse represents the API response for server types
+type HetznerServerTypesResponse struct {
+	ServerTypes []HetznerServerType `json:"server_types"`
+}
+
+// HetznerDatacenter represents a Hetzner datacenter with availability info
+type HetznerDatacenter struct {
+	ID          int                        `json:"id"`
+	Name        string                     `json:"name"`
+	Description string                     `json:"description"`
+	Location    HetznerLocation            `json:"location"`
+	ServerTypes HetznerDatacenterServerTypes `json:"server_types"`
+}
+
+// HetznerDatacenterServerTypes represents server type availability in a datacenter
+type HetznerDatacenterServerTypes struct {
+	Supported           []int `json:"supported"`
+	Available           []int `json:"available"`
+	AvailableForMigration []int `json:"available_for_migration"`
+}
+
+// HetznerDatacentersResponse represents the API response for datacenters
+type HetznerDatacentersResponse struct {
+	Datacenters []HetznerDatacenter `json:"datacenters"`
+}
+
 func handleRoot(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, "/login")
 }
@@ -137,11 +209,13 @@ func handleLogin(c *gin.Context) {
 			return
 		}
 
-		// Check if this is first-time setup (Hetzner API key missing)
+		// Check setup completion status
 		client := &http.Client{Timeout: 10 * time.Second}
+		
+		// 1. Check if Hetzner API key exists
 		var hetznerKey string
 		if err := getKVValue(client, token, accountID, "config:hetzner:api_key", &hetznerKey); err != nil {
-			log.Println("🔧 First-time setup detected - Hetzner API key not found")
+			log.Println("🔧 Setup step 1 required - Hetzner API key not found")
 			// Set session cookie before redirecting to setup
 			c.SetCookie("cf_token", token, 3600, "/", "", false, true)
 			c.Header("HX-Redirect", "/setup")
@@ -149,7 +223,19 @@ func handleLogin(c *gin.Context) {
 			return
 		}
 
-		// Set a simple session cookie
+		// 2. Check if server configuration exists
+		var serverConfig map[string]string
+		if err := getKVValue(client, token, accountID, "config:server:selection", &serverConfig); err != nil {
+			log.Println("🔧 Setup step 2 required - Server configuration not found")
+			// Set session cookie before redirecting to server selection
+			c.SetCookie("cf_token", token, 3600, "/", "", false, true)
+			c.Header("HX-Redirect", "/setup/server")
+			c.Status(http.StatusOK)
+			return
+		}
+
+		// All setup complete, proceed to main app
+		log.Printf("✅ Setup complete - Server: %s in %s", serverConfig["server_type"], serverConfig["location"])
 		c.SetCookie("cf_token", token, 3600, "/", "", false, true)
 		c.Header("HX-Redirect", "/main")
 		c.Status(http.StatusOK)
@@ -222,7 +308,114 @@ func handleSetupHetzner(c *gin.Context) {
 	}
 
 	log.Println("✅ Hetzner API key validated and stored")
-	c.Header("HX-Redirect", "/main")
+	c.Header("HX-Redirect", "/setup/server")
+	c.Status(http.StatusOK)
+}
+
+func handleSetupServerPage(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	// Get account ID to fetch Hetzner key
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error accessing account"))
+		return
+	}
+
+	// Get decrypted Hetzner API key
+	hetznerKey, err := getHetznerAPIKey(token, accountID)
+	if err != nil {
+		log.Printf("Error getting Hetzner API key: %v", err)
+		c.Redirect(http.StatusTemporaryRedirect, "/setup")
+		return
+	}
+
+	// Fetch locations, server types, and real availability from Hetzner API
+	locations, err := fetchHetznerLocations(hetznerKey)
+	if err != nil {
+		log.Printf("Error fetching locations: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error fetching server locations"))
+		return
+	}
+
+	serverTypes, err := fetchHetznerServerTypes(hetznerKey)
+	if err != nil {
+		log.Printf("Error fetching server types: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error fetching server types"))
+		return
+	}
+
+	// Fetch real-time availability data
+	availability, err := fetchServerAvailability(hetznerKey)
+	if err != nil {
+		log.Printf("Error fetching server availability: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error fetching server availability"))
+		return
+	}
+
+	// Filter to only shared vCPU instances and add availability info
+	sharedServerTypes := filterSharedVCPUServers(serverTypes)
+	
+	// Add availability information to each server type
+	for i := range sharedServerTypes {
+		sharedServerTypes[i].AvailableLocations = make(map[string]bool)
+		for locationName, locationAvailability := range availability {
+			if available, exists := locationAvailability[sharedServerTypes[i].ID]; exists && available {
+				sharedServerTypes[i].AvailableLocations[locationName] = true
+			}
+		}
+	}
+
+	c.HTML(http.StatusOK, "setup-server.html", gin.H{
+		"Step":        2,
+		"Title":       "Server Selection",
+		"Locations":   locations,
+		"ServerTypes": sharedServerTypes,
+	})
+}
+
+func handleSetupServer(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	location := c.PostForm("location")
+	serverType := c.PostForm("server_type")
+
+	if location == "" || serverType == "" {
+		c.Data(http.StatusBadRequest, "text/html", []byte("❌ Please select both location and server type"))
+		return
+	}
+
+	// Get account ID for KV storage
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error accessing account"))
+		return
+	}
+
+	// Store server configuration in KV
+	client := &http.Client{Timeout: 10 * time.Second}
+	serverConfig := map[string]string{
+		"location":    location,
+		"server_type": serverType,
+		"created_at":  time.Now().UTC().Format(time.RFC3339),
+	}
+
+	if err := putKVValue(client, token, accountID, "config:server:selection", serverConfig); err != nil {
+		log.Printf("Error storing server config: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error storing server configuration"))
+		return
+	}
+
+	log.Printf("✅ Server configuration stored: %s in %s", serverType, location)
+	c.Header("HX-Redirect", "/setup/step3")
 	c.Status(http.StatusOK)
 }
 
@@ -932,4 +1125,139 @@ func validateHetznerAPIKey(apiKey string) bool {
 
 	log.Printf("❌ Hetzner API key validation failed with status: %d", resp.StatusCode)
 	return false
+}
+
+// getHetznerAPIKey retrieves and decrypts the Hetzner API key from KV
+func getHetznerAPIKey(token, accountID string) (string, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	var encryptedKey string
+	
+	if err := getKVValue(client, token, accountID, "config:hetzner:api_key", &encryptedKey); err != nil {
+		return "", fmt.Errorf("failed to get Hetzner API key: %v", err)
+	}
+	
+	decryptedKey, err := decryptData(encryptedKey, token)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt Hetzner API key: %v", err)
+	}
+	
+	return decryptedKey, nil
+}
+
+// fetchHetznerLocations fetches available datacenter locations from Hetzner API
+func fetchHetznerLocations(apiKey string) ([]HetznerLocation, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	
+	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/locations", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch locations: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+	
+	var locationsResp HetznerLocationsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&locationsResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+	
+	return locationsResp.Locations, nil
+}
+
+// fetchHetznerServerTypes fetches available server types from Hetzner API
+func fetchHetznerServerTypes(apiKey string) ([]HetznerServerType, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	
+	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/server_types", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch server types: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+	
+	var serverTypesResp HetznerServerTypesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&serverTypesResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+	
+	return serverTypesResp.ServerTypes, nil
+}
+
+// fetchServerAvailability fetches real-time server availability for all datacenters
+func fetchServerAvailability(apiKey string) (map[string]map[int]bool, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	
+	// Use the datacenters endpoint to get real availability info
+	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/datacenters", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch datacenters: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+	
+	var datacentersResp HetznerDatacentersResponse
+	if err := json.NewDecoder(resp.Body).Decode(&datacentersResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+	
+	// Build availability map: [location][serverTypeID] = available
+	availability := make(map[string]map[int]bool)
+	
+	for _, datacenter := range datacentersResp.Datacenters {
+		locationName := datacenter.Location.Name
+		availability[locationName] = make(map[int]bool)
+		
+		// Mark available server types for this location
+		for _, serverTypeID := range datacenter.ServerTypes.Available {
+			availability[locationName][serverTypeID] = true
+		}
+	}
+	
+	return availability, nil
+}
+
+// filterSharedVCPUServers filters server types to only include shared vCPU instances
+func filterSharedVCPUServers(serverTypes []HetznerServerType) []HetznerServerType {
+	var sharedServers []HetznerServerType
+	
+	for _, server := range serverTypes {
+		// Filter for shared vCPU types (typically start with "cpx" or "cx")
+		if server.CPUType == "shared" {
+			sharedServers = append(sharedServers, server)
+		}
+	}
+	
+	return sharedServers
 }

@@ -6,6 +6,16 @@
     <title>Xanthus - Setup</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"></script>
+    <style>
+        .htmx-indicator {
+            display: none;
+            pointer-events: none;
+        }
+        .htmx-request .htmx-indicator {
+            display: flex;
+            pointer-events: auto;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center">
     <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
@@ -43,34 +53,51 @@
             </div>
         </div>
 
-        <form hx-post="/setup/hetzner" hx-target="#error-message" hx-swap="innerHTML" hx-trigger="submit" class="space-y-4">
-            <div>
-                <label for="hetzner_key" class="block text-sm font-medium text-gray-700 mb-2">
-                    Hetzner Cloud API Token
-                </label>
-                <input 
-                    type="password" 
-                    id="hetzner_key" 
-                    name="hetzner_key" 
-                    required
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter your Hetzner API token"
-                    oninput="document.getElementById('error-message').innerHTML = ''"
+        <div class="relative">
+            <form hx-post="/setup/hetzner" hx-target="#error-message" hx-swap="innerHTML" hx-trigger="submit" hx-indicator="#setup-overlay" class="space-y-4">
+                <div>
+                    <label for="hetzner_key" class="block text-sm font-medium text-gray-700 mb-2">
+                        Hetzner Cloud API Token
+                    </label>
+                    <input 
+                        type="password" 
+                        id="hetzner_key" 
+                        name="hetzner_key" 
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter your Hetzner API token"
+                        oninput="document.getElementById('error-message').innerHTML = ''"
+                    >
+                    <p class="mt-1 text-xs text-gray-500">
+                        Need a token? <a href="https://console.hetzner.cloud/" target="_blank" class="text-blue-600 hover:underline">Create one in Hetzner Console</a>
+                    </p>
+                </div>
+
+                <div id="error-message" class="text-red-600 text-sm"></div>
+
+                <button 
+                    type="submit" 
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200"
                 >
-                <p class="mt-1 text-xs text-gray-500">
-                    Need a token? <a href="https://console.hetzner.cloud/" target="_blank" class="text-blue-600 hover:underline">Create one in Hetzner Console</a>
-                </p>
+                    Validate & Continue
+                </button>
+            </form>
+
+            <!-- Loading Overlay -->
+            <div id="setup-overlay" class="htmx-indicator absolute inset-0 bg-white bg-opacity-90 rounded-lg flex items-center justify-center">
+                <div class="text-center">
+                    <svg id="loading-spinner" class="animate-spin h-8 w-8 text-blue-600 mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <svg id="success-icon" class="hidden h-8 w-8 text-green-600 mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p id="loading-text" class="text-blue-600 font-medium">Validating API token...</p>
+                    <p id="success-text" class="hidden text-green-600 font-medium">Success! Proceeding to server selection...</p>
+                </div>
             </div>
-
-            <div id="error-message" class="text-red-600 text-sm"></div>
-
-            <button 
-                type="submit" 
-                class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200"
-            >
-                Validate & Continue
-            </button>
-        </form>
+        </div>
 
         <div class="mt-6 space-y-3">
             <div class="text-center">
@@ -90,5 +117,37 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // Keep loading overlay visible during redirects
+        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+            if (evt.detail.elt.querySelector('#setup-overlay')) {
+                document.getElementById('setup-overlay').style.display = 'flex';
+                document.getElementById('setup-overlay').style.pointerEvents = 'auto';
+            }
+        });
+        
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            if (evt.detail.elt.querySelector('#setup-overlay')) {
+                // Check if it's a successful response (no error message in response)
+                const response = evt.detail.xhr.responseText;
+                if (evt.detail.xhr.status === 200 && !response.includes('❌')) {
+                    // Show success message
+                    document.getElementById('loading-spinner').classList.add('hidden');
+                    document.getElementById('loading-text').classList.add('hidden');
+                    document.getElementById('success-icon').classList.remove('hidden');
+                    document.getElementById('success-text').classList.remove('hidden');
+                }
+            }
+        });
+        
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            // Only hide overlay on actual errors, not redirects
+            setTimeout(() => {
+                document.getElementById('setup-overlay').style.display = 'none';
+                document.getElementById('setup-overlay').style.pointerEvents = 'none';
+            }, 100);
+        });
+    </script>
 </body>
 </html>
