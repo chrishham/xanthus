@@ -45,6 +45,8 @@ func main() {
 	r.GET("/login", handleLoginPage)
 	r.POST("/login", handleLogin)
 	r.GET("/main", handleMainPage)
+	r.GET("/setup", handleSetupPage)
+	r.POST("/setup/hetzner", handleSetupHetzner)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -135,6 +137,18 @@ func handleLogin(c *gin.Context) {
 			return
 		}
 
+		// Check if this is first-time setup (Hetzner API key missing)
+		client := &http.Client{Timeout: 10 * time.Second}
+		var hetznerKey string
+		if err := getKVValue(client, token, accountID, "config:hetzner:api_key", &hetznerKey); err != nil {
+			log.Println("🔧 First-time setup detected - Hetzner API key not found")
+			// Set session cookie before redirecting to setup
+			c.SetCookie("cf_token", token, 3600, "/", "", false, true)
+			c.Header("HX-Redirect", "/setup")
+			c.Status(http.StatusOK)
+			return
+		}
+
 		// Set a simple session cookie
 		c.SetCookie("cf_token", token, 3600, "/", "", false, true)
 		c.Header("HX-Redirect", "/main")
@@ -151,6 +165,65 @@ func handleMainPage(c *gin.Context) {
 		return
 	}
 	c.HTML(http.StatusOK, "main.html", nil)
+}
+
+func handleSetupPage(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+	c.HTML(http.StatusOK, "setup.html", gin.H{
+		"Step": 1,
+		"Title": "Setup - Hetzner API Key",
+	})
+}
+
+func handleSetupHetzner(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	hetznerKey := c.PostForm("hetzner_key")
+	if hetznerKey == "" {
+		c.Data(http.StatusBadRequest, "text/html", []byte("❌ Hetzner API key is required"))
+		return
+	}
+
+	// Validate Hetzner API key
+	if !validateHetznerAPIKey(hetznerKey) {
+		c.Data(http.StatusOK, "text/html", []byte("❌ Invalid Hetzner API key. Please check your key and try again."))
+		return
+	}
+
+	// Get account ID for KV storage
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		log.Printf("Error getting account ID: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error: %s", err.Error())))
+		return
+	}
+
+	// Store encrypted Hetzner API key in KV
+	client := &http.Client{Timeout: 10 * time.Second}
+	encryptedKey, err := encryptData(hetznerKey, token)
+	if err != nil {
+		log.Printf("Error encrypting Hetzner key: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error storing API key"))
+		return
+	}
+
+	if err := putKVValue(client, token, accountID, "config:hetzner:api_key", encryptedKey); err != nil {
+		log.Printf("Error storing Hetzner key: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error storing API key"))
+		return
+	}
+
+	log.Println("✅ Hetzner API key validated and stored")
+	c.Header("HX-Redirect", "/main")
+	c.Status(http.StatusOK)
 }
 
 func handleLogout(c *gin.Context) {
@@ -828,4 +901,35 @@ func getOrCreateSSHKey(token, accountID string) (*SSHKeyPair, error) {
 
 	log.Printf("✅ New SSH key generated with fingerprint: %s", keyPair.Fingerprint)
 	return keyPair, nil
+}
+
+// validateHetznerAPIKey validates a Hetzner Cloud API key by making a test API call
+func validateHetznerAPIKey(apiKey string) bool {
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	// Test the API key by fetching server types (minimal API call)
+	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/server_types", nil)
+	if err != nil {
+		log.Printf("Error creating Hetzner API request: %v", err)
+		return false
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error making Hetzner API request: %v", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Check if the response is successful (200 OK)
+	if resp.StatusCode == 200 {
+		log.Println("✅ Hetzner API key validated successfully")
+		return true
+	}
+
+	log.Printf("❌ Hetzner API key validation failed with status: %d", resp.StatusCode)
+	return false
 }
