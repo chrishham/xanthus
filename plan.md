@@ -10,4 +10,4 @@ Features:
 
 - Given a Hetzner api key the app will provision an ubuntu VPS that has the essential software istalled and preconfigured .
 
-- Every setting of the app will be stored at kv at cloudfare.
+- Every setting of the app(ie the hetzner api key, the hetzner ip and others) will be stored at kv at cloudfare so the user the only thing that needs to remember for login is his Cloudfare api key.
