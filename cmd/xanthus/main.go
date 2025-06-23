@@ -52,6 +52,7 @@ func main() {
 	r.POST("/setup/hetzner", handleSetupHetzner)
 	r.GET("/setup/server", handleSetupServerPage)
 	r.POST("/setup/server", handleSetupServer)
+	r.GET("/dns", handleDNSConfigPage)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -168,6 +169,28 @@ type HetznerDatacenterServerTypes struct {
 // HetznerDatacentersResponse represents the API response for datacenters
 type HetznerDatacentersResponse struct {
 	Datacenters []HetznerDatacenter `json:"datacenters"`
+}
+
+// CloudflareDomain represents a domain zone in Cloudflare
+type CloudflareDomain struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	Paused      bool   `json:"paused"`
+	Type        string `json:"type"`
+	Managed     bool   `json:"managed"`
+	CreatedOn   string `json:"created_on"`
+	ModifiedOn  string `json:"modified_on"`
+}
+
+// CloudflareDomainsResponse represents the API response for domain zones
+type CloudflareDomainsResponse struct {
+	Success bool               `json:"success"`
+	Result  []CloudflareDomain `json:"result"`
+	Errors  []struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	} `json:"errors"`
 }
 
 func handleRoot(c *gin.Context) {
@@ -420,6 +443,43 @@ func handleSetupServer(c *gin.Context) {
 	log.Printf("✅ Server configuration stored: %s in %s", serverType, location)
 	c.Header("HX-Redirect", "/setup/step3")
 	c.Status(http.StatusOK)
+}
+
+func handleDNSConfigPage(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error accessing account"))
+		return
+	}
+
+	// Fetch domains from Cloudflare
+	domains, err := fetchCloudflareDomains(token)
+	if err != nil {
+		log.Printf("Error fetching domains: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error fetching domains"))
+		return
+	}
+
+	// Check which domains are managed by Xanthus (exist in KV)
+	client := &http.Client{Timeout: 10 * time.Second}
+	for i := range domains {
+		var domainConfig map[string]interface{}
+		kvKey := fmt.Sprintf("domain:%s:config", domains[i].Name)
+		if err := getKVValue(client, token, accountID, kvKey, &domainConfig); err == nil {
+			domains[i].Managed = true
+		}
+	}
+
+	c.HTML(http.StatusOK, "dns-config.html", gin.H{
+		"Domains": domains,
+	})
 }
 
 func handleLogout(c *gin.Context) {
@@ -1263,4 +1323,38 @@ func filterSharedVCPUServers(serverTypes []HetznerServerType) []HetznerServerTyp
 	}
 	
 	return sharedServers
+}
+
+// fetchCloudflareDomains fetches all domain zones from Cloudflare API
+func fetchCloudflareDomains(token string) ([]CloudflareDomain, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	
+	req, err := http.NewRequest("GET", "https://api.cloudflare.com/client/v4/zones", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch domains: %v", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+	
+	var domainsResp CloudflareDomainsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&domainsResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+	
+	if !domainsResp.Success {
+		return nil, fmt.Errorf("API call failed: %v", domainsResp.Errors)
+	}
+	
+	return domainsResp.Result, nil
 }
