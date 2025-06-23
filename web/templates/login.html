@@ -9,8 +9,54 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/output.css">
-    <script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"></script>
-    <script src="/static/js/notifications.min.js"></script>
+    <script src="/static/js/vendor/htmx.min.js"></script>
+    <script src="/static/js/vendor/sweetalert2.min.js"></script>
+    <style>
+        .top-notification-success {
+            background-color: #f0fdf4 !important;
+            color: #166534 !important;
+            border: 1px solid #bbf7d0 !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+            border-radius: 0.5rem !important;
+            max-width: 400px !important;
+            margin: 1rem auto !important;
+            animation: slideInFromTop 0.3s ease-out !important;
+        }
+        
+        .top-notification-error {
+            background-color: #fef2f2 !important;
+            color: #dc2626 !important;
+            border: 1px solid #fecaca !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+            border-radius: 0.5rem !important;
+            max-width: 400px !important;
+            margin: 1rem auto !important;
+            animation: slideInFromTop 0.3s ease-out !important;
+        }
+        
+        @keyframes slideInFromTop {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .swal2-container.swal2-top {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 1060 !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: flex-start !important;
+            padding-top: 1rem !important;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center">
     <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
@@ -105,7 +151,26 @@
                     document.getElementById('success-text').classList.remove('hidden');
                     
                     // Show success notification
-                    window.notify.success('Login successful! Redirecting...', 2000);
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Login successful! Redirecting...',
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false,
+                        position: 'top',
+                        backdrop: false,
+                        customClass: {
+                            popup: 'top-notification-success'
+                        },
+                        showClass: {
+                            popup: 'swal2-show',
+                            backdrop: 'swal2-backdrop-show'
+                        },
+                        hideClass: {
+                            popup: 'swal2-hide',
+                            backdrop: 'swal2-backdrop-hide'
+                        }
+                    });
                     
                     // Keep overlay visible during redirect
                     setTimeout(() => {
@@ -119,7 +184,18 @@
                     
                     if (response.includes('❌')) {
                         const errorMsg = response.replace('❌ ', '');
-                        window.notify.error(errorMsg, 6000);
+                        Swal.fire({
+                            title: 'Error!',
+                            text: errorMsg,
+                            icon: 'error',
+                            timer: 6000,
+                            showConfirmButton: true,
+                            position: 'top',
+                            backdrop: false,
+                            customClass: {
+                                popup: 'top-notification-error'
+                            }
+                        });
                     }
                 }
             }
@@ -132,7 +208,18 @@
                 document.getElementById('login-overlay').classList.add('htmx-indicator');
                 loginInProgress = false;
                 
-                window.notify.error('Network error. Please check your connection and try again.', 6000);
+                Swal.fire({
+                    title: 'Network Error!',
+                    text: 'Please check your connection and try again.',
+                    icon: 'error',
+                    timer: 6000,
+                    showConfirmButton: true,
+                    position: 'top',
+                    backdrop: false,
+                    customClass: {
+                        popup: 'top-notification-error'
+                    }
+                });
             }
         });
 

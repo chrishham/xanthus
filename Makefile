@@ -33,4 +33,4 @@ lint:
 clean:
 	rm -rf bin/
 	rm -f web/static/css/output.css
-	rm -f web/static/js/notifications.min.js
+	rm -rf web/static/js/vendor/
