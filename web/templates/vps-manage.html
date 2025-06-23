@@ -180,6 +180,24 @@
                             </div>
                         </div>
 
+                        <!-- Advanced Actions (for Xanthus-managed servers) -->
+                        <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="mb-3">
+                            <div class="flex space-x-2 mb-2">
+                                <button @click="checkVPSStatus(server.id)" 
+                                        class="flex-1 text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none focus:ring-1 focus:ring-green-500">
+                                    🔍 Health Check
+                                </button>
+                                <button @click="showVPSLogs(server.id)" 
+                                        class="flex-1 text-xs px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-500">
+                                    📝 View Logs
+                                </button>
+                                <button @click="showConfigureVPS(server.id)" 
+                                        class="flex-1 text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    ⚙️ Configure
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="flex space-x-2">
                             <!-- Power Actions -->
                             <template x-if="server.status === 'running'">
@@ -540,6 +558,183 @@
                     } catch (error) {
                         console.error('Error getting SSH instructions:', error);
                         Swal.fire('Error', 'Failed to get SSH instructions', 'error');
+                    }
+                },
+
+                async checkVPSStatus(serverId) {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`/vps/${serverId}/status`);
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            const statusColor = data.reachable ? 'success' : 'error';
+                            const k3sStatus = data.k3s_status === 'active' ? '✅ Running' : '❌ ' + data.k3s_status;
+                            
+                            Swal.fire({
+                                title: `VPS Health Status`,
+                                html: `
+                                    <div class="text-left text-sm">
+                                        <div class="grid grid-cols-2 gap-2 mb-4">
+                                            <div><strong>SSH:</strong> ${data.reachable ? '✅ Connected' : '❌ Failed'}</div>
+                                            <div><strong>K3s:</strong> ${k3sStatus}</div>
+                                        </div>
+                                        
+                                        <div class="mb-4">
+                                            <h4 class="font-semibold mb-2">🖥️ System Load:</h4>
+                                            <pre class="text-xs bg-gray-100 p-2 rounded">${data.system_load?.uptime || 'N/A'}</pre>
+                                        </div>
+                                        
+                                        <div class="mb-4">
+                                            <h4 class="font-semibold mb-2">💾 Memory:</h4>
+                                            <pre class="text-xs bg-gray-100 p-2 rounded">${data.system_load?.memory || 'N/A'}</pre>
+                                        </div>
+                                        
+                                        <div class="mb-4">
+                                            <h4 class="font-semibold mb-2">💿 Disk Usage:</h4>
+                                            <pre class="text-xs bg-gray-100 p-2 rounded">${data.disk_usage?.root || 'N/A'}</pre>
+                                        </div>
+                                        
+                                        <div>
+                                            <h4 class="font-semibold mb-2">🔧 Services:</h4>
+                                            <div class="text-xs">
+                                                ${Object.entries(data.services || {}).map(([service, status]) => 
+                                                    `<div>${service}: ${status === 'active' ? '✅' : '❌'} ${status}</div>`
+                                                ).join('')}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `,
+                                icon: statusColor,
+                                width: 600,
+                                confirmButtonText: 'Close'
+                            });
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to check VPS status', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error checking VPS status:', error);
+                        Swal.fire('Error', 'Failed to check VPS status', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async showVPSLogs(serverId) {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`/vps/${serverId}/logs?lines=100`);
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            Swal.fire({
+                                title: 'K3s Service Logs',
+                                html: `
+                                    <div class="text-left">
+                                        <div class="mb-2 text-sm text-gray-600">
+                                            Server: ${serverId} | Lines: ${data.lines} | ${data.timestamp}
+                                        </div>
+                                        <textarea readonly class="w-full h-96 p-2 text-xs font-mono bg-gray-100 border rounded" onclick="this.select()">${data.logs}</textarea>
+                                        <p class="text-xs text-gray-600 mt-1">Click to select all logs</p>
+                                    </div>
+                                `,
+                                width: 800,
+                                showCloseButton: true,
+                                confirmButtonText: 'Close'
+                            });
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to get VPS logs', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error getting VPS logs:', error);
+                        Swal.fire('Error', 'Failed to get VPS logs', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async showConfigureVPS(serverId) {
+                    // First, get the list of available domains
+                    try {
+                        const domainsResponse = await fetch('/dns/list');
+                        const domainsData = await domainsResponse.json();
+                        
+                        if (!domainsResponse.ok) {
+                            Swal.fire('Error', 'Failed to load domains', 'error');
+                            return;
+                        }
+
+                        const domains = domainsData.domains || [];
+                        const managedDomains = domains.filter(d => d.managed_by_xanthus);
+                        
+                        if (managedDomains.length === 0) {
+                            Swal.fire('No Domains', 'No managed domains found. Please configure SSL for a domain first.', 'warning');
+                            return;
+                        }
+
+                        const domainOptions = managedDomains.map(d => 
+                            `<option value="${d.name}">${d.name}</option>`
+                        ).join('');
+
+                        const { value: formValues } = await Swal.fire({
+                            title: 'Configure VPS',
+                            html: `
+                                <div class="text-left">
+                                    <div class="mb-4">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                                            Select Domain for SSL Configuration:
+                                        </label>
+                                        <select id="domain-select" class="w-full p-2 border border-gray-300 rounded-md">
+                                            ${domainOptions}
+                                        </select>
+                                    </div>
+                                    <div class="text-sm text-gray-600">
+                                        This will update the K3s cluster with SSL certificates for the selected domain.
+                                    </div>
+                                </div>
+                            `,
+                            focusConfirm: false,
+                            showCancelButton: true,
+                            confirmButtonText: 'Configure',
+                            cancelButtonText: 'Cancel',
+                            preConfirm: () => {
+                                const domain = document.getElementById('domain-select').value;
+                                return { domain };
+                            }
+                        });
+
+                        if (formValues) {
+                            await this.configureVPS(serverId, formValues.domain);
+                        }
+                    } catch (error) {
+                        console.error('Error showing configure dialog:', error);
+                        Swal.fire('Error', 'Failed to load configuration dialog', 'error');
+                    }
+                },
+
+                async configureVPS(serverId, domain) {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`/vps/${serverId}/configure`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `domain=${encodeURIComponent(domain)}`
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            Swal.fire('Success!', data.message, 'success');
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to configure VPS', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error configuring VPS:', error);
+                        Swal.fire('Error', 'Failed to configure VPS', 'error');
+                    } finally {
+                        this.loading = false;
                     }
                 }
             }

@@ -67,6 +67,10 @@ func main() {
 	r.POST("/vps/poweron", handleVPSPowerOn)
 	r.POST("/vps/reboot", handleVPSReboot)
 	r.GET("/vps/ssh-key", handleVPSSSHKey)
+	r.GET("/vps/:id/status", handleVPSStatus)
+	r.POST("/vps/:id/configure", handleVPSConfigure)
+	r.POST("/vps/:id/deploy", handleVPSDeploy)
+	r.GET("/vps/:id/logs", handleVPSLogs)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -1521,5 +1525,270 @@ func handleVPSSSHKey(c *gin.Context) {
 			"set_permissions": "chmod 600 ~/.ssh/xanthus-key.pem",
 			"ssh_command": "ssh -i ~/.ssh/xanthus-key.pem root@<server-ip>",
 		},
+	})
+}
+
+func handleVPSStatus(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS configuration not found"})
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
+		return
+	}
+
+	// Check VPS health via SSH
+	sshService := services.NewSSHService()
+	status, err := sshService.CheckVPSHealth(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to check VPS status: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+func handleVPSConfigure(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	domain := c.PostForm("domain")
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Domain is required for SSL configuration"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS configuration not found"})
+		return
+	}
+
+	// Get SSL configuration for the domain
+	domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "SSL configuration not found for domain"})
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
+		return
+	}
+
+	// Connect to VPS and configure SSL
+	sshService := services.NewSSHService()
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("SSH connection failed: %v", err)})
+		return
+	}
+	defer conn.Close()
+
+	// Configure K3s with new SSL certificates
+	if err := sshService.ConfigureK3s(conn, domainConfig.Certificate, domainConfig.PrivateKey); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to configure K3s: %v", err)})
+		return
+	}
+
+	log.Printf("✅ Successfully configured VPS %d with SSL for domain %s", serverID, domain)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("VPS successfully configured with SSL certificates for %s", domain),
+	})
+}
+
+func handleVPSDeploy(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	manifest := c.PostForm("manifest")
+	name := c.PostForm("name")
+	if manifest == "" || name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Manifest and name are required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS configuration not found"})
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
+		return
+	}
+
+	// Connect to VPS and deploy manifest
+	sshService := services.NewSSHService()
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("SSH connection failed: %v", err)})
+		return
+	}
+	defer conn.Close()
+
+	// Deploy the Kubernetes manifest
+	if err := sshService.DeployManifest(conn, manifest, name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to deploy manifest: %v", err)})
+		return
+	}
+
+	log.Printf("✅ Successfully deployed %s to VPS %d", name, serverID)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Successfully deployed %s to VPS", name),
+	})
+}
+
+func handleVPSLogs(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	// Get number of lines (default 100)
+	lines := 100
+	if linesStr := c.Query("lines"); linesStr != "" {
+		if parsedLines, err := fmt.Sscanf(linesStr, "%d", &lines); err == nil && parsedLines > 0 {
+			if lines > 1000 {
+				lines = 1000 // Limit to prevent overwhelming response
+			}
+		}
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS configuration not found"})
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
+		return
+	}
+
+	// Connect to VPS and get logs
+	sshService := services.NewSSHService()
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("SSH connection failed: %v", err)})
+		return
+	}
+	defer conn.Close()
+
+	// Get K3s logs
+	logs, err := sshService.GetK3sLogs(conn, lines)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get logs: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"server_id": serverID,
+		"lines":     lines,
+		"logs":      logs,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
 }
