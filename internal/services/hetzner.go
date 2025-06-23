@@ -26,11 +26,6 @@ func NewHetznerService() *HetznerService {
 	}
 }
 
-// HetznerResponse represents the standard Hetzner API response structure
-type HetznerResponse struct {
-	Error  *HetznerError   `json:"error"`
-	Result json.RawMessage `json:"result,omitempty"`
-}
 
 // HetznerError represents a Hetzner API error
 type HetznerError struct {
@@ -170,7 +165,7 @@ type HetznerSSHKeysResponse struct {
 }
 
 // makeRequest makes an authenticated request to the Hetzner API
-func (hs *HetznerService) makeRequest(method, endpoint, apiKey string, body interface{}) (*HetznerResponse, error) {
+func (hs *HetznerService) makeRequest(method, endpoint, apiKey string, body interface{}) ([]byte, error) {
 	url := HetznerBaseURL + endpoint
 	
 	var reqBody *bytes.Buffer
@@ -198,27 +193,45 @@ func (hs *HetznerService) makeRequest(method, endpoint, apiKey string, body inte
 	}
 	defer resp.Body.Close()
 
-	var hetznerResp HetznerResponse
-	if err := json.NewDecoder(resp.Body).Decode(&hetznerResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	// Read the raw response body
+	bodyBytes := make([]byte, 0)
+	buf := make([]byte, 1024)
+	for {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			bodyBytes = append(bodyBytes, buf[:n]...)
+		}
+		if err != nil {
+			break
+		}
 	}
 
-	if hetznerResp.Error != nil {
-		return nil, fmt.Errorf("API error %s: %s", hetznerResp.Error.Code, hetznerResp.Error.Message)
+	// Check for HTTP errors
+	if resp.StatusCode >= 400 {
+		// Try to parse error response
+		var errorResp struct {
+			Error HetznerError `json:"error"`
+		}
+		if len(bodyBytes) > 0 {
+			if err := json.Unmarshal(bodyBytes, &errorResp); err == nil && errorResp.Error.Message != "" {
+				return nil, fmt.Errorf("API error %s: %s", errorResp.Error.Code, errorResp.Error.Message)
+			}
+		}
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	return &hetznerResp, nil
+	return bodyBytes, nil
 }
 
 // ListServers retrieves all servers managed by Xanthus
 func (hs *HetznerService) ListServers(apiKey string) ([]HetznerServer, error) {
-	resp, err := hs.makeRequest("GET", "/servers?label_selector=managed_by=xanthus", apiKey, nil)
+	respBody, err := hs.makeRequest("GET", "/servers?label_selector=managed_by=xanthus", apiKey, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	var serversResp HetznerServersResponse
-	if err := json.Unmarshal(resp.Result, &serversResp); err != nil {
+	if err := json.Unmarshal(respBody, &serversResp); err != nil {
 		return nil, fmt.Errorf("failed to parse servers response: %w", err)
 	}
 
@@ -227,7 +240,7 @@ func (hs *HetznerService) ListServers(apiKey string) ([]HetznerServer, error) {
 
 // GetServer retrieves details for a specific server
 func (hs *HetznerService) GetServer(apiKey string, serverID int) (*HetznerServer, error) {
-	resp, err := hs.makeRequest("GET", fmt.Sprintf("/servers/%d", serverID), apiKey, nil)
+	respBody, err := hs.makeRequest("GET", fmt.Sprintf("/servers/%d", serverID), apiKey, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +248,7 @@ func (hs *HetznerService) GetServer(apiKey string, serverID int) (*HetznerServer
 	var serverResp struct {
 		Server HetznerServer `json:"server"`
 	}
-	if err := json.Unmarshal(resp.Result, &serverResp); err != nil {
+	if err := json.Unmarshal(respBody, &serverResp); err != nil {
 		return nil, fmt.Errorf("failed to parse server response: %w", err)
 	}
 
@@ -315,13 +328,13 @@ final_message: "Xanthus K3s server with SSL certificates is ready!"
 		},
 	}
 
-	resp, err := hs.makeRequest("POST", "/servers", apiKey, createReq)
+	respBody, err := hs.makeRequest("POST", "/servers", apiKey, createReq)
 	if err != nil {
 		return nil, err
 	}
 
 	var createResp HetznerCreateServerResponse
-	if err := json.Unmarshal(resp.Result, &createResp); err != nil {
+	if err := json.Unmarshal(respBody, &createResp); err != nil {
 		return nil, fmt.Errorf("failed to parse create server response: %w", err)
 	}
 
@@ -375,7 +388,7 @@ func (hs *HetznerService) getSSHKeyID(apiKey, keyName string) (int, error) {
 	}
 
 	var keysResp HetznerSSHKeysResponse
-	if err := json.Unmarshal(resp.Result, &keysResp); err != nil {
+	if err := json.Unmarshal(resp, &keysResp); err != nil {
 		return 0, fmt.Errorf("failed to parse SSH keys response: %w", err)
 	}
 
@@ -398,7 +411,7 @@ func (hs *HetznerService) CreateSSHKey(apiKey, name, publicKey string) (*Hetzner
 		},
 	}
 
-	resp, err := hs.makeRequest("POST", "/ssh_keys", apiKey, body)
+	respBody, err := hs.makeRequest("POST", "/ssh_keys", apiKey, body)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +419,7 @@ func (hs *HetznerService) CreateSSHKey(apiKey, name, publicKey string) (*Hetzner
 	var keyResp struct {
 		SSHKey HetznerSSHKey `json:"ssh_key"`
 	}
-	if err := json.Unmarshal(resp.Result, &keyResp); err != nil {
+	if err := json.Unmarshal(respBody, &keyResp); err != nil {
 		return nil, fmt.Errorf("failed to parse SSH key response: %w", err)
 	}
 
@@ -415,13 +428,13 @@ func (hs *HetznerService) CreateSSHKey(apiKey, name, publicKey string) (*Hetzner
 
 // ListSSHKeys retrieves all SSH keys
 func (hs *HetznerService) ListSSHKeys(apiKey string) ([]HetznerSSHKey, error) {
-	resp, err := hs.makeRequest("GET", "/ssh_keys", apiKey, nil)
+	respBody, err := hs.makeRequest("GET", "/ssh_keys", apiKey, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	var keysResp HetznerSSHKeysResponse
-	if err := json.Unmarshal(resp.Result, &keysResp); err != nil {
+	if err := json.Unmarshal(respBody, &keysResp); err != nil {
 		return nil, fmt.Errorf("failed to parse SSH keys response: %w", err)
 	}
 
