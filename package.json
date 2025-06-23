@@ -11,12 +11,17 @@
     "build-assets": "npm run build-css-prod && npm run build-js"
   },
   "dependencies": {
-    "htmx.org": "^1.9.10",
     "alpinejs": "^3.13.0",
+    "htmx.org": "^1.9.10",
     "sweetalert2": "^11.10.0"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.0",
     "terser": "^5.43.1"
-  }
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ]
 }
