@@ -66,6 +66,7 @@ func main() {
 	r.POST("/vps/poweroff", handleVPSPowerOff)
 	r.POST("/vps/poweron", handleVPSPowerOn)
 	r.POST("/vps/reboot", handleVPSReboot)
+	r.GET("/vps/ssh-key", handleVPSSSHKey)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -1473,5 +1474,52 @@ func performVPSAction(c *gin.Context, action, actionText string) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": fmt.Sprintf("Server %s successfully", actionText),
+	})
+}
+
+func handleVPSSSHKey(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get CSR configuration which contains the SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		CSR        string `json:"csr"`
+		PrivateKey string `json:"private_key"`
+		CreatedAt  string `json:"created_at"`
+	}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Error getting CSR config: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found. Please logout and login again."})
+		return
+	}
+
+	// Check if user wants to download the key
+	download := c.Query("download")
+	if download == "true" {
+		c.Header("Content-Type", "application/octet-stream")
+		c.Header("Content-Disposition", "attachment; filename=xanthus-ssh-key.pem")
+		c.String(http.StatusOK, csrConfig.PrivateKey)
+		return
+	}
+
+	// Return SSH private key and usage instructions
+	c.JSON(http.StatusOK, gin.H{
+		"private_key": csrConfig.PrivateKey,
+		"instructions": map[string]interface{}{
+			"save_to_file": "Save the private key to a file (e.g., ~/.ssh/xanthus-key.pem)",
+			"set_permissions": "chmod 600 ~/.ssh/xanthus-key.pem",
+			"ssh_command": "ssh -i ~/.ssh/xanthus-key.pem root@<server-ip>",
+		},
 	})
 }

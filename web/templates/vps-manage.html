@@ -165,11 +165,18 @@
                         <!-- SSH Connection Info (for Xanthus-managed servers) -->
                         <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="mb-3 p-2 bg-blue-50 rounded-md">
                             <div class="text-xs font-medium text-blue-900 mb-1">SSH Connection:</div>
-                            <div class="text-xs text-blue-800 font-mono">
-                                ssh root@<span x-text="server.public_net.ipv4.ip"></span>
+                            <div class="text-xs text-blue-800 font-mono mb-2">
+                                ssh -i xanthus-key.pem root@<span x-text="server.public_net.ipv4.ip"></span>
                             </div>
-                            <div class="text-xs text-blue-600 mt-1">
-                                Uses CSR private key for authentication
+                            <div class="flex items-center space-x-2">
+                                <button @click="downloadSSHKey()" 
+                                        class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    📥 Download SSH Key
+                                </button>
+                                <button @click="showSSHInstructions()" 
+                                        class="text-xs px-2 py-1 border border-blue-300 text-blue-700 rounded hover:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                    ℹ️ SSH Setup
+                                </button>
                             </div>
                         </div>
 
@@ -463,6 +470,77 @@
                         hour: '2-digit',
                         minute: '2-digit'
                     });
+                },
+
+                async downloadSSHKey() {
+                    try {
+                        // Create a temporary download link
+                        const downloadUrl = '/vps/ssh-key?download=true';
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = 'xanthus-ssh-key.pem';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        
+                        Swal.fire({
+                            title: 'SSH Key Downloaded!',
+                            html: `
+                                <div class="text-left text-sm">
+                                    <p class="mb-2">Your SSH private key has been downloaded as <code>xanthus-ssh-key.pem</code></p>
+                                    <p class="mb-2"><strong>Next steps:</strong></p>
+                                    <ol class="list-decimal list-inside space-y-1 text-xs">
+                                        <li>Set correct permissions: <code>chmod 600 xanthus-ssh-key.pem</code></li>
+                                        <li>Connect to your VPS: <code>ssh -i xanthus-ssh-key.pem root@&lt;server-ip&gt;</code></li>
+                                    </ol>
+                                </div>
+                            `,
+                            icon: 'success',
+                            confirmButtonText: 'Got it!'
+                        });
+                    } catch (error) {
+                        console.error('Error downloading SSH key:', error);
+                        Swal.fire('Error', 'Failed to download SSH key', 'error');
+                    }
+                },
+
+                async showSSHInstructions() {
+                    try {
+                        const response = await fetch('/vps/ssh-key');
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            Swal.fire({
+                                title: 'SSH Setup Instructions',
+                                html: `
+                                    <div class="text-left text-sm">
+                                        <div class="mb-4">
+                                            <h4 class="font-semibold mb-2">🔑 SSH Private Key:</h4>
+                                            <textarea readonly class="w-full h-32 p-2 text-xs font-mono bg-gray-100 border rounded" onclick="this.select()">${data.private_key}</textarea>
+                                            <p class="text-xs text-gray-600 mt-1">Click to select all text, then copy</p>
+                                        </div>
+                                        
+                                        <div class="mb-4">
+                                            <h4 class="font-semibold mb-2">📋 Setup Steps:</h4>
+                                            <ol class="list-decimal list-inside space-y-1 text-xs">
+                                                <li>Save the key above to: <code>~/.ssh/xanthus-key.pem</code></li>
+                                                <li>Set permissions: <code>chmod 600 ~/.ssh/xanthus-key.pem</code></li>
+                                                <li>Connect: <code>ssh -i ~/.ssh/xanthus-key.pem root@&lt;server-ip&gt;</code></li>
+                                            </ol>
+                                        </div>
+                                    </div>
+                                `,
+                                width: 600,
+                                showCloseButton: true,
+                                confirmButtonText: 'Close'
+                            });
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to get SSH key', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error getting SSH instructions:', error);
+                        Swal.fire('Error', 'Failed to get SSH instructions', 'error');
+                    }
                 }
             }
         }
