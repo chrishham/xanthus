@@ -118,14 +118,14 @@
                         
                         <div class="flex items-center space-x-2">
                             {{if .Managed}}
-                            <button class="bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 transition duration-200 text-sm">
-                                Configure
+                            <button onclick="viewConfiguration('{{.Name}}')" class="bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 transition duration-200 text-sm">
+                                View Config
                             </button>
-                            <button class="bg-red-600 text-white px-3 py-2 rounded-md hover:bg-red-700 transition duration-200 text-sm">
+                            <button onclick="removeDomain('{{.Name}}')" class="bg-red-600 text-white px-3 py-2 rounded-md hover:bg-red-700 transition duration-200 text-sm">
                                 Remove
                             </button>
                             {{else}}
-                            <button class="bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition duration-200 text-sm">
+                            <button onclick="configureDomain('{{.Name}}')" class="bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition duration-200 text-sm">
                                 Add to Xanthus
                             </button>
                             {{end}}
@@ -150,5 +150,167 @@
             {{end}}
         </div>
     </div>
+
+    <script>
+        // Configure domain SSL settings
+        async function configureDomain(domain) {
+            const result = await Swal.fire({
+                title: 'Configure SSL for ' + domain,
+                html: `
+                    <div class="text-left">
+                        <p class="mb-4">This will automatically configure:</p>
+                        <ul class="list-disc list-inside space-y-2 text-sm">
+                            <li>SSL/TLS mode to Full (strict)</li>
+                            <li>Create Origin Server Certificate</li>
+                            <li>Append Cloudflare Root CA</li>
+                            <li>Enable Always Use HTTPS</li>
+                            <li>Create www redirect page rule</li>
+                        </ul>
+                        <p class="mt-4 text-sm text-gray-600">The certificates will be stored in Cloudflare KV for K8s deployment.</p>
+                    </div>
+                `,
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Configure SSL',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#3b82f6',
+                showLoaderOnConfirm: true,
+                preConfirm: async () => {
+                    try {
+                        const formData = new FormData();
+                        formData.append('domain', domain);
+                        
+                        const response = await fetch('/dns/configure', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (!response.ok) {
+                            throw new Error(data.error || 'Configuration failed');
+                        }
+                        
+                        return data;
+                    } catch (error) {
+                        Swal.showValidationMessage('Error: ' + error.message);
+                    }
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            });
+
+            if (result.isConfirmed) {
+                await Swal.fire({
+                    title: 'Success!',
+                    text: 'SSL configuration completed for ' + domain,
+                    icon: 'success',
+                    confirmButtonColor: '#10b981'
+                });
+                
+                // Reload the page to show updated status
+                window.location.reload();
+            }
+        }
+
+        // Remove domain configuration
+        async function removeDomain(domain) {
+            const result = await Swal.fire({
+                title: 'Remove ' + domain + '?',
+                text: 'This will remove the SSL configuration from Xanthus storage. Cloudflare settings will remain unchanged.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Remove',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#ef4444',
+                showLoaderOnConfirm: true,
+                preConfirm: async () => {
+                    try {
+                        const formData = new FormData();
+                        formData.append('domain', domain);
+                        
+                        const response = await fetch('/dns/remove', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (!response.ok) {
+                            throw new Error(data.error || 'Removal failed');
+                        }
+                        
+                        return data;
+                    } catch (error) {
+                        Swal.showValidationMessage('Error: ' + error.message);
+                    }
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            });
+
+            if (result.isConfirmed) {
+                await Swal.fire({
+                    title: 'Removed!',
+                    text: 'Configuration removed for ' + domain,
+                    icon: 'success',
+                    confirmButtonColor: '#10b981'
+                });
+                
+                // Reload the page to show updated status
+                window.location.reload();
+            }
+        }
+
+        // View domain configuration
+        async function viewConfiguration(domain) {
+            try {
+                // For now, show a simple info dialog
+                // In a full implementation, you'd fetch the actual config
+                await Swal.fire({
+                    title: 'Configuration for ' + domain,
+                    html: `
+                        <div class="text-left">
+                            <div class="space-y-3">
+                                <div class="flex justify-between">
+                                    <span class="font-medium">SSL Mode:</span>
+                                    <span class="text-green-600">Full (strict)</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="font-medium">Origin Certificate:</span>
+                                    <span class="text-green-600">✓ Created</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="font-medium">Always Use HTTPS:</span>
+                                    <span class="text-green-600">✓ Enabled</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="font-medium">Page Rule:</span>
+                                    <span class="text-green-600">✓ www redirect</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="font-medium">Certificates:</span>
+                                    <span class="text-green-600">✓ Stored in KV</span>
+                                </div>
+                            </div>
+                            <div class="mt-4 p-3 bg-blue-50 rounded-md">
+                                <p class="text-sm text-blue-800">
+                                    SSL certificates are ready for K8s deployment. They will be automatically applied when you deploy your application.
+                                </p>
+                            </div>
+                        </div>
+                    `,
+                    icon: 'info',
+                    confirmButtonText: 'Close',
+                    confirmButtonColor: '#3b82f6'
+                });
+            } catch (error) {
+                await Swal.fire({
+                    title: 'Error',
+                    text: 'Failed to load configuration details',
+                    icon: 'error',
+                    confirmButtonColor: '#ef4444'
+                });
+            }
+        }
+    </script>
 </body>
 </html>

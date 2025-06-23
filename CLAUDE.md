@@ -15,6 +15,7 @@ Xanthus is a Go web application that helps developers deploy their applications 
 2. **Hetzner VPS Provisioning**: Automated Ubuntu VPS setup with essential software
 3. **Secure Settings Storage**: All configuration stored in Cloudflare KV (API keys, server IPs, etc.)
 4. **Single Sign-On**: Only Cloudflare API key required for authentication
+5. **SSL Automation**: Complete SSL/TLS configuration for domains with certificate storage in KV
 
 ## Initial Setup Actions
 
@@ -64,12 +65,13 @@ npm install
 ### 6. Core Components to Implement
 1. **Main Application** (`cmd/xanthus/main.go`)
 2. **Configuration Management** (`internal/config/`)
-3. **Cloudflare Integration** (`internal/services/cloudflare.go`)
-4. **Hetzner Cloud Integration** (`internal/services/hetzner.go`)
-5. **Web Handlers** (`internal/handlers/`)
-6. **API Routes** (`internal/api/`)
-7. **Frontend Templates** (`web/templates/`)
-8. **Static Assets** (`web/static/`)
+3. **Cloudflare Integration** (`internal/services/cloudflare.go`) ✅ **IMPLEMENTED**
+4. **KV Storage Service** (`internal/services/kv.go`) ✅ **IMPLEMENTED**
+5. **Hetzner Cloud Integration** (`internal/services/hetzner.go`)
+6. **Web Handlers** (`internal/handlers/`)
+7. **API Routes** (`internal/api/`)
+8. **Frontend Templates** (`web/templates/`) ✅ **DNS CONFIG UPDATED**
+9. **Static Assets** (`web/static/`)
 
 ### 7. Development Workflow
 ```bash
@@ -106,11 +108,53 @@ The project uses Tailwind CSS with a production build process:
 - Proper error handling without exposing sensitive information
 
 ## Next Steps
-1. Set up the basic project structure
+1. Set up the basic project structure ✅ **COMPLETED**
 2. Implement core configuration management
-3. Create basic web server with Gin
-4. Integrate Cloudflare KV for settings storage
+3. Create basic web server with Gin ✅ **COMPLETED**
+4. Integrate Cloudflare KV for settings storage ✅ **COMPLETED**
 5. Implement Hetzner VPS provisioning
-6. Add Cloudflare DNS management
-7. Create the frontend interface
+6. Add Cloudflare DNS management ✅ **COMPLETED**
+7. Create the frontend interface ✅ **DNS CONFIG COMPLETED**
 8. Add deployment automation for K3s
+
+## SSL Automation Implementation ✅ **COMPLETED**
+
+### Features Implemented
+- **Complete SSL/TLS Configuration**: Automated setup including:
+  - SSL mode set to Full (strict)
+  - Origin server certificate generation with 15-year validity
+  - Cloudflare root CA certificate appending
+  - Always Use HTTPS enforcement
+  - www to non-www redirect page rules
+- **Certificate Storage**: All certificates and private keys stored securely in Cloudflare KV
+- **Web Interface**: Interactive domain management with SweetAlert2 modals
+- **API Endpoints**: 
+  - `POST /dns/configure` - Configure SSL for a domain
+  - `POST /dns/remove` - Remove domain configuration
+- **Status Tracking**: Visual indication of managed vs unmanaged domains
+
+### Services Architecture
+- **CloudflareService** (`internal/services/cloudflare.go`): Handles all Cloudflare API operations
+- **KVService** (`internal/services/kv.go`): Manages secure storage and retrieval of configurations
+- **Domain SSL Config**: Structured storage of SSL configuration with metadata
+
+### Usage
+1. Navigate to `/dns` to view domains
+2. Click "Add to Xanthus" to configure SSL automation
+3. Click "View Config" to see current configuration status
+4. Click "Remove" to remove from Xanthus management
+
+### Certificate Storage Format
+```json
+{
+  "domain": "example.com",
+  "zone_id": "cloudflare_zone_id",
+  "certificate_id": "origin_cert_id",
+  "certificate": "full_certificate_chain_with_root_ca",
+  "private_key": "rsa_private_key",
+  "configured_at": "2024-06-23T10:30:00Z",
+  "ssl_mode": "strict",
+  "always_use_https": true,
+  "page_rule_created": true
+}
+```

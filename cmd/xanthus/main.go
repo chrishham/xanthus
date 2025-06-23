@@ -5,23 +5,18 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/chrishham/xanthus/internal/services"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/ssh"
 )
 
 func main() {
@@ -36,10 +31,10 @@ func main() {
 	// Set Gin to release mode for production use
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
-	
+
 	// Configure trusted proxies for security
 	r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
-	
+
 	r.LoadHTMLGlob("web/templates/*")
 	r.Static("/static", "web/static")
 
@@ -53,6 +48,8 @@ func main() {
 	r.GET("/setup/server", handleSetupServerPage)
 	r.POST("/setup/server", handleSetupServer)
 	r.GET("/dns", handleDNSConfigPage)
+	r.POST("/dns/configure", handleDNSConfigure)
+	r.POST("/dns/remove", handleDNSRemove)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -84,52 +81,35 @@ type KVNamespaceResponse struct {
 	} `json:"errors"`
 }
 
-// SSHKeyPair represents an SSH key pair
-type SSHKeyPair struct {
-	PrivateKey  string `json:"private_key"`
-	PublicKey   string `json:"public_key"`
-	Fingerprint string `json:"fingerprint"`
-	KeyName     string `json:"key_name"`
-	CreatedAt   string `json:"created_at"`
-}
-
-// SSHKeyKVData represents SSH key data stored in KV (encrypted)
-type SSHKeyKVData struct {
-	KeyData     string `json:"key_data"`
-	KeyName     string `json:"key_name"`
-	CreatedAt   string `json:"created_at"`
-	Fingerprint string `json:"fingerprint"`
-}
-
 // HetznerLocation represents a Hetzner datacenter location
 type HetznerLocation struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Country     string `json:"country"`
-	City        string `json:"city"`
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Country     string  `json:"country"`
+	City        string  `json:"city"`
 	Latitude    float64 `json:"latitude"`
 	Longitude   float64 `json:"longitude"`
 }
 
 // HetznerServerType represents a Hetzner server type/instance
 type HetznerServerType struct {
-	ID                 int                 `json:"id"`
-	Name               string              `json:"name"`
-	Description        string              `json:"description"`
-	Cores              int                 `json:"cores"`
-	Memory             float64             `json:"memory"`
-	Disk               int                 `json:"disk"`
-	Prices             []HetznerPrice      `json:"prices"`
-	StorageType        string              `json:"storage_type"`
-	CPUType            string              `json:"cpu_type"`
-	Architecture       string              `json:"architecture"`
-	AvailableLocations map[string]bool     `json:"available_locations,omitempty"`
+	ID                 int             `json:"id"`
+	Name               string          `json:"name"`
+	Description        string          `json:"description"`
+	Cores              int             `json:"cores"`
+	Memory             float64         `json:"memory"`
+	Disk               int             `json:"disk"`
+	Prices             []HetznerPrice  `json:"prices"`
+	StorageType        string          `json:"storage_type"`
+	CPUType            string          `json:"cpu_type"`
+	Architecture       string          `json:"architecture"`
+	AvailableLocations map[string]bool `json:"available_locations,omitempty"`
 }
 
 // HetznerPrice represents pricing information for a server type
 type HetznerPrice struct {
-	Location     string  `json:"location"`
+	Location     string             `json:"location"`
 	PriceHourly  HetznerPriceDetail `json:"price_hourly"`
 	PriceMonthly HetznerPriceDetail `json:"price_monthly"`
 }
@@ -152,17 +132,17 @@ type HetznerServerTypesResponse struct {
 
 // HetznerDatacenter represents a Hetzner datacenter with availability info
 type HetznerDatacenter struct {
-	ID          int                        `json:"id"`
-	Name        string                     `json:"name"`
-	Description string                     `json:"description"`
-	Location    HetznerLocation            `json:"location"`
+	ID          int                          `json:"id"`
+	Name        string                       `json:"name"`
+	Description string                       `json:"description"`
+	Location    HetznerLocation              `json:"location"`
 	ServerTypes HetznerDatacenterServerTypes `json:"server_types"`
 }
 
 // HetznerDatacenterServerTypes represents server type availability in a datacenter
 type HetznerDatacenterServerTypes struct {
-	Supported           []int `json:"supported"`
-	Available           []int `json:"available"`
+	Supported             []int `json:"supported"`
+	Available             []int `json:"available"`
 	AvailableForMigration []int `json:"available_for_migration"`
 }
 
@@ -173,14 +153,14 @@ type HetznerDatacentersResponse struct {
 
 // CloudflareDomain represents a domain zone in Cloudflare
 type CloudflareDomain struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Status      string `json:"status"`
-	Paused      bool   `json:"paused"`
-	Type        string `json:"type"`
-	Managed     bool   `json:"managed"`
-	CreatedOn   string `json:"created_on"`
-	ModifiedOn  string `json:"modified_on"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Paused     bool   `json:"paused"`
+	Type       string `json:"type"`
+	Managed    bool   `json:"managed"`
+	CreatedOn  string `json:"created_on"`
+	ModifiedOn string `json:"modified_on"`
 }
 
 // CloudflareDomainsResponse represents the API response for domain zones
@@ -227,17 +207,9 @@ func handleLogin(c *gin.Context) {
 			log.Println("✅ Xanthus KV namespace already exists")
 		}
 
-		// Initialize SSH key management
-		_, err = getOrCreateSSHKey(token, accountID)
-		if err != nil {
-			log.Printf("Error managing SSH keys: %v", err)
-			c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error setting up SSH keys: %s", err.Error())))
-			return
-		}
-
 		// Check setup completion status
 		client := &http.Client{Timeout: 10 * time.Second}
-		
+
 		// 1. Check if Hetzner API key exists
 		var hetznerKey string
 		if err := getKVValue(client, token, accountID, "config:hetzner:api_key", &hetznerKey); err != nil {
@@ -286,7 +258,7 @@ func handleSetupPage(c *gin.Context) {
 		return
 	}
 	c.HTML(http.StatusOK, "setup.html", gin.H{
-		"Step": 1,
+		"Step":  1,
 		"Title": "Setup - Hetzner API Key",
 	})
 }
@@ -385,7 +357,7 @@ func handleSetupServerPage(c *gin.Context) {
 
 	// Filter to only shared vCPU instances and add availability info
 	sharedServerTypes := filterSharedVCPUServers(serverTypes)
-	
+
 	// Add availability information to each server type
 	for i := range sharedServerTypes {
 		sharedServerTypes[i].AvailableLocations = make(map[string]bool)
@@ -468,11 +440,9 @@ func handleDNSConfigPage(c *gin.Context) {
 	}
 
 	// Check which domains are managed by Xanthus (exist in KV)
-	client := &http.Client{Timeout: 10 * time.Second}
+	kvService := services.NewKVService()
 	for i := range domains {
-		var domainConfig map[string]interface{}
-		kvKey := fmt.Sprintf("domain:%s:config", domains[i].Name)
-		if err := getKVValue(client, token, accountID, kvKey, &domainConfig); err == nil {
+		if _, err := kvService.GetDomainSSLConfig(token, accountID, domains[i].Name); err == nil {
 			domains[i].Managed = true
 		}
 	}
@@ -483,11 +453,6 @@ func handleDNSConfigPage(c *gin.Context) {
 }
 
 func handleLogout(c *gin.Context) {
-	// Clean up local SSH keys on logout
-	if err := removeLocalSSHKeys(); err != nil {
-		log.Printf("Warning: failed to clean up SSH keys on logout: %v", err)
-	}
-	
 	c.SetCookie("cf_token", "", -1, "/", "", false, true)
 	c.Redirect(http.StatusTemporaryRedirect, "/login")
 }
@@ -661,46 +626,6 @@ func findAvailablePort() string {
 	return ""
 }
 
-// generateSSHKeyPair generates a new RSA SSH key pair
-func generateSSHKeyPair() (*SSHKeyPair, error) {
-	// Generate RSA private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate private key: %v", err)
-	}
-
-	// Convert private key to PEM format
-	privateKeyPEM := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
-	}
-	privateKeyBytes := pem.EncodeToMemory(privateKeyPEM)
-
-	// Generate public key
-	publicKey, err := ssh.NewPublicKey(&privateKey.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate public key: %v", err)
-	}
-
-	// Format public key for SSH
-	publicKeyBytes := ssh.MarshalAuthorizedKey(publicKey)
-	publicKeyString := string(publicKeyBytes)
-
-	// Calculate fingerprint
-	fingerprint := ssh.FingerprintSHA256(publicKey)
-
-	// Create key pair
-	keyPair := &SSHKeyPair{
-		PrivateKey:  string(privateKeyBytes),
-		PublicKey:   publicKeyString,
-		Fingerprint: fingerprint,
-		KeyName:     "xanthus-deploy-key",
-		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
-	}
-
-	return keyPair, nil
-}
-
 // encryptData encrypts data using AES-256-GCM with a key derived from the CF token
 func encryptData(data, token string) (string, error) {
 	// Derive key from token using SHA256
@@ -771,43 +696,6 @@ func decryptData(encryptedData, token string) (string, error) {
 	return string(plaintext), nil
 }
 
-// storeSSHKeyInKV stores SSH key data in Cloudflare KV (encrypted)
-func storeSSHKeyInKV(token, accountID string, keyPair *SSHKeyPair) error {
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	// Encrypt private key
-	encryptedPrivateKey, err := encryptData(keyPair.PrivateKey, token)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt private key: %v", err)
-	}
-
-	// Store private key
-	privateKeyData := SSHKeyKVData{
-		KeyData:     encryptedPrivateKey,
-		KeyName:     keyPair.KeyName,
-		CreatedAt:   keyPair.CreatedAt,
-		Fingerprint: keyPair.Fingerprint,
-	}
-
-	if err := putKVValue(client, token, accountID, "config:ssh:private_key", privateKeyData); err != nil {
-		return fmt.Errorf("failed to store private key: %v", err)
-	}
-
-	// Store public key (no encryption needed)
-	publicKeyData := SSHKeyKVData{
-		KeyData:     keyPair.PublicKey,
-		KeyName:     keyPair.KeyName,
-		CreatedAt:   keyPair.CreatedAt,
-		Fingerprint: keyPair.Fingerprint,
-	}
-
-	if err := putKVValue(client, token, accountID, "config:ssh:public_key", publicKeyData); err != nil {
-		return fmt.Errorf("failed to store public key: %v", err)
-	}
-
-	return nil
-}
-
 // putKVValue stores a value in Cloudflare KV
 func putKVValue(client *http.Client, token, accountID, key string, value interface{}) error {
 	// First, get the Xanthus namespace ID
@@ -823,9 +711,9 @@ func putKVValue(client *http.Client, token, accountID, key string, value interfa
 	}
 
 	// Create request
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/values/%s", 
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/values/%s",
 		accountID, namespaceID, key)
-	
+
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(valueBytes))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
@@ -887,158 +775,6 @@ func getXanthusNamespaceID(client *http.Client, token, accountID string) (string
 	return "", fmt.Errorf("Xanthus namespace not found")
 }
 
-// getXanthusDir returns the Xanthus configuration directory path
-func getXanthusDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %v", err)
-	}
-	
-	xanthusDir := filepath.Join(homeDir, ".xanthus")
-	return xanthusDir, nil
-}
-
-// ensureXanthusDir creates the Xanthus directory structure if it doesn't exist
-func ensureXanthusDir() error {
-	xanthusDir, err := getXanthusDir()
-	if err != nil {
-		return err
-	}
-	
-	// Create main directory
-	if err := os.MkdirAll(xanthusDir, 0700); err != nil {
-		return fmt.Errorf("failed to create xanthus directory: %v", err)
-	}
-	
-	// Create SSH subdirectory
-	sshDir := filepath.Join(xanthusDir, "ssh")
-	if err := os.MkdirAll(sshDir, 0700); err != nil {
-		return fmt.Errorf("failed to create ssh directory: %v", err)
-	}
-	
-	return nil
-}
-
-// saveSSHKeyLocally saves SSH key pair to local cache
-func saveSSHKeyLocally(keyPair *SSHKeyPair) error {
-	if err := ensureXanthusDir(); err != nil {
-		return err
-	}
-	
-	xanthusDir, err := getXanthusDir()
-	if err != nil {
-		return err
-	}
-	
-	sshDir := filepath.Join(xanthusDir, "ssh")
-	
-	// Save private key
-	privateKeyPath := filepath.Join(sshDir, "xanthus_key")
-	if err := os.WriteFile(privateKeyPath, []byte(keyPair.PrivateKey), 0600); err != nil {
-		return fmt.Errorf("failed to write private key: %v", err)
-	}
-	
-	// Save public key
-	publicKeyPath := filepath.Join(sshDir, "xanthus_key.pub")
-	if err := os.WriteFile(publicKeyPath, []byte(keyPair.PublicKey), 0644); err != nil {
-		return fmt.Errorf("failed to write public key: %v", err)
-	}
-	
-	// Save metadata
-	metadata := map[string]string{
-		"fingerprint": keyPair.Fingerprint,
-		"key_name":    keyPair.KeyName,
-		"created_at":  keyPair.CreatedAt,
-	}
-	
-	metadataBytes, err := json.Marshal(metadata)
-	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %v", err)
-	}
-	
-	metadataPath := filepath.Join(sshDir, "key_metadata.json")
-	if err := os.WriteFile(metadataPath, metadataBytes, 0644); err != nil {
-		return fmt.Errorf("failed to write metadata: %v", err)
-	}
-	
-	log.Printf("✅ SSH keys saved locally to %s", sshDir)
-	return nil
-}
-
-// loadSSHKeyFromLocal loads SSH key pair from local cache
-func loadSSHKeyFromLocal() (*SSHKeyPair, error) {
-	xanthusDir, err := getXanthusDir()
-	if err != nil {
-		return nil, err
-	}
-	
-	sshDir := filepath.Join(xanthusDir, "ssh")
-	
-	// Check if private key exists
-	privateKeyPath := filepath.Join(sshDir, "xanthus_key")
-	if _, err := os.Stat(privateKeyPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("local SSH key not found")
-	}
-	
-	// Read private key
-	privateKeyBytes, err := os.ReadFile(privateKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read private key: %v", err)
-	}
-	
-	// Read public key
-	publicKeyPath := filepath.Join(sshDir, "xanthus_key.pub")
-	publicKeyBytes, err := os.ReadFile(publicKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read public key: %v", err)
-	}
-	
-	// Read metadata
-	metadataPath := filepath.Join(sshDir, "key_metadata.json")
-	metadataBytes, err := os.ReadFile(metadataPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read metadata: %v", err)
-	}
-	
-	var metadata map[string]string
-	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal metadata: %v", err)
-	}
-	
-	keyPair := &SSHKeyPair{
-		PrivateKey:  string(privateKeyBytes),
-		PublicKey:   string(publicKeyBytes),
-		Fingerprint: metadata["fingerprint"],
-		KeyName:     metadata["key_name"],
-		CreatedAt:   metadata["created_at"],
-	}
-	
-	return keyPair, nil
-}
-
-// removeLocalSSHKeys removes SSH keys from local cache
-func removeLocalSSHKeys() error {
-	xanthusDir, err := getXanthusDir()
-	if err != nil {
-		return err
-	}
-	
-	sshDir := filepath.Join(xanthusDir, "ssh")
-	
-	// Remove all SSH related files
-	files := []string{"xanthus_key", "xanthus_key.pub", "key_metadata.json"}
-	
-	for _, file := range files {
-		filePath := filepath.Join(sshDir, file)
-		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-			log.Printf("Warning: failed to remove %s: %v", filePath, err)
-		}
-	}
-	
-	log.Println("✅ Local SSH keys removed")
-	return nil
-}
-
 // getKVValue retrieves a value from Cloudflare KV
 func getKVValue(client *http.Client, token, accountID, key string, result interface{}) error {
 	// Get the Xanthus namespace ID
@@ -1048,9 +784,9 @@ func getKVValue(client *http.Client, token, accountID, key string, result interf
 	}
 
 	// Create request
-	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/values/%s", 
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/values/%s",
 		accountID, namespaceID, key)
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
@@ -1077,86 +813,6 @@ func getKVValue(client *http.Client, token, accountID, key string, result interf
 	}
 
 	return nil
-}
-
-// loadSSHKeyFromKV loads SSH key pair from Cloudflare KV
-func loadSSHKeyFromKV(token, accountID string) (*SSHKeyPair, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	// Load private key data
-	var privateKeyData SSHKeyKVData
-	if err := getKVValue(client, token, accountID, "config:ssh:private_key", &privateKeyData); err != nil {
-		return nil, fmt.Errorf("failed to load private key from KV: %v", err)
-	}
-
-	// Load public key data
-	var publicKeyData SSHKeyKVData
-	if err := getKVValue(client, token, accountID, "config:ssh:public_key", &publicKeyData); err != nil {
-		return nil, fmt.Errorf("failed to load public key from KV: %v", err)
-	}
-
-	// Decrypt private key
-	decryptedPrivateKey, err := decryptData(privateKeyData.KeyData, token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt private key: %v", err)
-	}
-
-	keyPair := &SSHKeyPair{
-		PrivateKey:  decryptedPrivateKey,
-		PublicKey:   publicKeyData.KeyData, // Public key is not encrypted
-		Fingerprint: privateKeyData.Fingerprint,
-		KeyName:     privateKeyData.KeyName,
-		CreatedAt:   privateKeyData.CreatedAt,
-	}
-
-	return keyPair, nil
-}
-
-// getOrCreateSSHKey retrieves SSH key with hybrid approach (local first, KV fallback, generate if none)
-func getOrCreateSSHKey(token, accountID string) (*SSHKeyPair, error) {
-	// Try to load from local cache first
-	if keyPair, err := loadSSHKeyFromLocal(); err == nil {
-		log.Println("✅ SSH key loaded from local cache")
-		return keyPair, nil
-	} else {
-		log.Printf("Local SSH key not found: %v", err)
-	}
-
-	// Try to load from KV
-	if keyPair, err := loadSSHKeyFromKV(token, accountID); err == nil {
-		log.Println("✅ SSH key loaded from Cloudflare KV")
-		
-		// Save to local cache for future use
-		if err := saveSSHKeyLocally(keyPair); err != nil {
-			log.Printf("Warning: failed to cache SSH key locally: %v", err)
-		}
-		
-		return keyPair, nil
-	} else {
-		log.Printf("SSH key not found in KV: %v", err)
-	}
-
-	// Neither local nor KV has the key, generate new one
-	log.Println("🔑 Generating new SSH key pair...")
-	keyPair, err := generateSSHKeyPair()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate SSH key: %v", err)
-	}
-
-	// Store in KV
-	if err := storeSSHKeyInKV(token, accountID, keyPair); err != nil {
-		log.Printf("Warning: failed to store SSH key in KV: %v", err)
-	} else {
-		log.Println("✅ SSH key stored in Cloudflare KV")
-	}
-
-	// Store locally
-	if err := saveSSHKeyLocally(keyPair); err != nil {
-		log.Printf("Warning: failed to store SSH key locally: %v", err)
-	}
-
-	log.Printf("✅ New SSH key generated with fingerprint: %s", keyPair.Fingerprint)
-	return keyPair, nil
 }
 
 // validateHetznerAPIKey validates a Hetzner Cloud API key by making a test API call
@@ -1194,167 +850,270 @@ func validateHetznerAPIKey(apiKey string) bool {
 func getHetznerAPIKey(token, accountID string) (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	var encryptedKey string
-	
+
 	if err := getKVValue(client, token, accountID, "config:hetzner:api_key", &encryptedKey); err != nil {
 		return "", fmt.Errorf("failed to get Hetzner API key: %v", err)
 	}
-	
+
 	decryptedKey, err := decryptData(encryptedKey, token)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt Hetzner API key: %v", err)
 	}
-	
+
 	return decryptedKey, nil
 }
 
 // fetchHetznerLocations fetches available datacenter locations from Hetzner API
 func fetchHetznerLocations(apiKey string) ([]HetznerLocation, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
-	
+
 	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/locations", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch locations: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var locationsResp HetznerLocationsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&locationsResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
-	
+
 	return locationsResp.Locations, nil
 }
 
 // fetchHetznerServerTypes fetches available server types from Hetzner API
 func fetchHetznerServerTypes(apiKey string) ([]HetznerServerType, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
-	
+
 	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/server_types", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch server types: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var serverTypesResp HetznerServerTypesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&serverTypesResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
-	
+
 	return serverTypesResp.ServerTypes, nil
 }
 
 // fetchServerAvailability fetches real-time server availability for all datacenters
 func fetchServerAvailability(apiKey string) (map[string]map[int]bool, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
-	
+
 	// Use the datacenters endpoint to get real availability info
 	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/datacenters", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch datacenters: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var datacentersResp HetznerDatacentersResponse
 	if err := json.NewDecoder(resp.Body).Decode(&datacentersResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
-	
+
 	// Build availability map: [location][serverTypeID] = available
 	availability := make(map[string]map[int]bool)
-	
+
 	for _, datacenter := range datacentersResp.Datacenters {
 		locationName := datacenter.Location.Name
 		availability[locationName] = make(map[int]bool)
-		
+
 		// Mark available server types for this location
 		for _, serverTypeID := range datacenter.ServerTypes.Available {
 			availability[locationName][serverTypeID] = true
 		}
 	}
-	
+
 	return availability, nil
 }
 
 // filterSharedVCPUServers filters server types to only include shared vCPU instances
 func filterSharedVCPUServers(serverTypes []HetznerServerType) []HetznerServerType {
 	var sharedServers []HetznerServerType
-	
+
 	for _, server := range serverTypes {
 		// Filter for shared vCPU types (typically start with "cpx" or "cx")
 		if server.CPUType == "shared" {
 			sharedServers = append(sharedServers, server)
 		}
 	}
-	
+
 	return sharedServers
 }
 
 // fetchCloudflareDomains fetches all domain zones from Cloudflare API
 func fetchCloudflareDomains(token string) ([]CloudflareDomain, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
-	
+
 	req, err := http.NewRequest("GET", "https://api.cloudflare.com/client/v4/zones", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
-	
+
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch domains: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
-	
+
 	var domainsResp CloudflareDomainsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&domainsResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
-	
+
 	if !domainsResp.Success {
 		return nil, fmt.Errorf("API call failed: %v", domainsResp.Errors)
 	}
-	
+
 	return domainsResp.Result, nil
+}
+
+// handleDNSConfigure handles the DNS configuration automation for a domain
+func handleDNSConfigure(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	domain := c.PostForm("domain")
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Domain is required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Initialize services
+	cfService := services.NewCloudflareService()
+	kvService := services.NewKVService()
+
+	// Check if domain is already configured
+	existingConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain)
+	if err == nil && existingConfig != nil {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":  "Domain already configured",
+			"config": existingConfig,
+		})
+		return
+	}
+
+	// Configure SSL for the domain
+	sslConfig, err := cfService.ConfigureDomainSSL(token, domain)
+	if err != nil {
+		log.Printf("Error configuring SSL for domain %s: %v", domain, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("SSL configuration failed: %v", err)})
+		return
+	}
+
+	// Store configuration in KV
+	if err := kvService.StoreDomainSSLConfig(token, accountID, sslConfig); err != nil {
+		log.Printf("Error storing SSL config for domain %s: %v", domain, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store configuration"})
+		return
+	}
+
+	log.Printf("✅ SSL configuration completed for domain: %s", domain)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "SSL configuration completed successfully",
+		"config":  sslConfig,
+	})
+}
+
+// handleDNSRemove handles removing DNS configuration for a domain
+func handleDNSRemove(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	domain := c.PostForm("domain")
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Domain is required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Initialize KV service
+	kvService := services.NewKVService()
+
+	// Check if domain configuration exists
+	_, err = kvService.GetDomainSSLConfig(token, accountID, domain)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Domain configuration not found"})
+		return
+	}
+
+	// Remove configuration from KV
+	if err := kvService.DeleteDomainSSLConfig(token, accountID, domain); err != nil {
+		log.Printf("Error removing SSL config for domain %s: %v", domain, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove configuration"})
+		return
+	}
+
+	log.Printf("✅ SSL configuration removed for domain: %s", domain)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Domain configuration removed successfully",
+	})
 }
