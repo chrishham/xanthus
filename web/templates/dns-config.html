@@ -266,15 +266,31 @@
             });
 
             if (result.isConfirmed) {
-                await Swal.fire({
+                const successResult = await Swal.fire({
                     title: 'Success!',
                     text: 'SSL configuration completed for ' + domain,
                     icon: 'success',
                     confirmButtonColor: '#10b981'
                 });
                 
-                // Reload the page to show updated status
-                window.location.reload();
+                // Show loading overlay after user closes the success modal
+                if (successResult.isConfirmed || successResult.isDismissed) {
+                    await Swal.fire({
+                        title: 'Updating page...',
+                        text: 'Please wait while we refresh the domain status',
+                        icon: 'info',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        showConfirmButton: false,
+                        showCancelButton: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    // Reload the page to show updated status
+                    window.location.reload();
+                }
             }
         }
 
@@ -329,7 +345,7 @@
             });
 
             if (result.isConfirmed) {
-                await Swal.fire({
+                const successResult = await Swal.fire({
                     title: 'Successfully Removed!',
                     html: `
                         <div class="text-center">
@@ -341,8 +357,24 @@
                     confirmButtonColor: '#10b981'
                 });
                 
-                // Reload the page to show updated status
-                window.location.reload();
+                // Show loading overlay after user closes the success modal
+                if (successResult.isConfirmed || successResult.isDismissed) {
+                    await Swal.fire({
+                        title: 'Updating page...',
+                        text: 'Please wait while we refresh the domain status',
+                        icon: 'info',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        showConfirmButton: false,
+                        showCancelButton: false,
+                        didOpen: () => {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    // Reload the page to show updated status
+                    window.location.reload();
+                }
             }
         }
 
