@@ -265,3 +265,138 @@ func (kvs *KVService) DeleteDomainSSLConfig(token, accountID, domain string) err
 	key := fmt.Sprintf("domain:%s:ssl_config", domain)
 	return kvs.DeleteValue(token, accountID, key)
 }
+
+// VPSConfig represents VPS configuration stored in KV
+type VPSConfig struct {
+	ServerID      int    `json:"server_id"`
+	Name          string `json:"name"`
+	ServerType    string `json:"server_type"`
+	Location      string `json:"location"`
+	PublicIPv4    string `json:"public_ipv4"`
+	Status        string `json:"status"`
+	CreatedAt     string `json:"created_at"`
+	SSLConfigured bool   `json:"ssl_configured"`
+	SSHKeyName    string `json:"ssh_key_name"`
+	SSHUser       string `json:"ssh_user"`
+	SSHPort       int    `json:"ssh_port"`
+}
+
+// StoreVPSConfig stores VPS configuration in KV
+func (kvs *KVService) StoreVPSConfig(token, accountID string, config *VPSConfig) error {
+	key := fmt.Sprintf("vps:%d:config", config.ServerID)
+	return kvs.PutValue(token, accountID, key, config)
+}
+
+// GetVPSConfig retrieves VPS configuration from KV
+func (kvs *KVService) GetVPSConfig(token, accountID string, serverID int) (*VPSConfig, error) {
+	key := fmt.Sprintf("vps:%d:config", serverID)
+	var config VPSConfig
+	if err := kvs.GetValue(token, accountID, key, &config); err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+// ListVPSConfigs retrieves all VPS configurations
+func (kvs *KVService) ListVPSConfigs(token, accountID string) (map[int]*VPSConfig, error) {
+	// Get the Xanthus namespace ID
+	namespaceID, err := kvs.GetXanthusNamespaceID(token, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get namespace ID: %w", err)
+	}
+
+	// List all keys with vps:*:config prefix
+	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/keys?prefix=vps:", 
+		CloudflareBaseURL, accountID, namespaceID)
+	
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := kvs.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var keysResp struct {
+		Success bool `json:"success"`
+		Result  []struct {
+			Name string `json:"name"`
+		} `json:"result"`
+		Errors []CFError `json:"errors"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&keysResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !keysResp.Success {
+		return nil, fmt.Errorf("KV API failed: %v", keysResp.Errors)
+	}
+
+	configs := make(map[int]*VPSConfig)
+	
+	// Fetch each VPS config
+	for _, key := range keysResp.Result {
+		if len(key.Name) > 8 && key.Name[len(key.Name)-7:] == ":config" {
+			var config VPSConfig
+			if err := kvs.GetValue(token, accountID, key.Name, &config); err == nil {
+				configs[config.ServerID] = &config
+			}
+		}
+	}
+
+	return configs, nil
+}
+
+// DeleteVPSConfig removes VPS configuration from KV
+func (kvs *KVService) DeleteVPSConfig(token, accountID string, serverID int) error {
+	key := fmt.Sprintf("vps:%d:config", serverID)
+	return kvs.DeleteValue(token, accountID, key)
+}
+
+// UpdateVPSConfig updates specific fields in VPS configuration
+func (kvs *KVService) UpdateVPSConfig(token, accountID string, serverID int, updates map[string]interface{}) error {
+	// Get existing config
+	config, err := kvs.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to get existing config: %w", err)
+	}
+
+	// Apply updates
+	for field, value := range updates {
+		switch field {
+		case "status":
+			if status, ok := value.(string); ok {
+				config.Status = status
+			}
+		case "public_ipv4":
+			if ip, ok := value.(string); ok {
+				config.PublicIPv4 = ip
+			}
+		case "ssl_configured":
+			if ssl, ok := value.(bool); ok {
+				config.SSLConfigured = ssl
+			}
+		case "ssh_key_name":
+			if key, ok := value.(string); ok {
+				config.SSHKeyName = key
+			}
+		case "ssh_user":
+			if user, ok := value.(string); ok {
+				config.SSHUser = user
+			}
+		case "ssh_port":
+			if port, ok := value.(int); ok {
+				config.SSHPort = port
+			}
+		}
+	}
+
+	// Store updated config
+	return kvs.StoreVPSConfig(token, accountID, config)
+}

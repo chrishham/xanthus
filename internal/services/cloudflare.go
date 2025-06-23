@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"golang.org/x/crypto/ssh"
 	"io"
 	"net/http"
 	"strings"
@@ -456,4 +457,34 @@ func (cs *CloudflareService) ConfigureDomainSSL(token, domain, csr, csrPrivateKe
 	config.PageRuleCreated = true
 
 	return config, nil
+}
+
+// ConvertPrivateKeyToSSH converts a PEM-encoded RSA private key to SSH public key format
+func (cs *CloudflareService) ConvertPrivateKeyToSSH(privateKeyPEM string) (string, error) {
+	// Parse the PEM private key
+	block, _ := pem.Decode([]byte(privateKeyPEM))
+	if block == nil {
+		return "", fmt.Errorf("failed to parse PEM block containing the private key")
+	}
+
+	// Parse the private key
+	privateKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	// Ensure it's an RSA private key
+	rsaKey, ok := privateKey.(*rsa.PrivateKey)
+	if !ok {
+		return "", fmt.Errorf("private key is not an RSA key")
+	}
+
+	// Generate SSH public key from RSA private key
+	sshPublicKey, err := ssh.NewPublicKey(&rsaKey.PublicKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to create SSH public key: %w", err)
+	}
+
+	// Format as SSH authorized_keys format
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPublicKey))), nil
 }

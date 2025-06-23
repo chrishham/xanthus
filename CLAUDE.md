@@ -12,10 +12,11 @@ Xanthus is a Go web application that helps developers deploy their applications 
 
 ## Key Features
 1. **Cloudflare DNS Management**: Automatic SSL certificate provisioning and DNS configuration
-2. **Hetzner VPS Provisioning**: Automated Ubuntu VPS setup with essential software
+2. **Hetzner VPS Provisioning**: Automated Ubuntu 24.04 VPS setup with K3s and SSL certificates
 3. **Secure Settings Storage**: All configuration stored in Cloudflare KV (API keys, server IPs, etc.)
 4. **Single Sign-On**: Only Cloudflare API key required for authentication
 5. **SSL Automation**: Complete SSL/TLS configuration for domains with certificate storage in KV
+6. **SSH Integration**: Single RSA key used for both SSL certificates and SSH access
 
 ## Initial Setup Actions
 
@@ -63,14 +64,14 @@ npm install
 - `Makefile` - Build and development commands
 
 ### 6. Core Components to Implement
-1. **Main Application** (`cmd/xanthus/main.go`)
+1. **Main Application** (`cmd/xanthus/main.go`) ✅ **IMPLEMENTED**
 2. **Configuration Management** (`internal/config/`)
 3. **Cloudflare Integration** (`internal/services/cloudflare.go`) ✅ **IMPLEMENTED**
 4. **KV Storage Service** (`internal/services/kv.go`) ✅ **IMPLEMENTED**
-5. **Hetzner Cloud Integration** (`internal/services/hetzner.go`)
-6. **Web Handlers** (`internal/handlers/`)
-7. **API Routes** (`internal/api/`)
-8. **Frontend Templates** (`web/templates/`) ✅ **DNS CONFIG UPDATED**
+5. **Hetzner Cloud Integration** (`internal/services/hetzner.go`) ✅ **IMPLEMENTED**
+6. **Web Handlers** (`internal/handlers/`) ✅ **IMPLEMENTED IN MAIN**
+7. **API Routes** (`internal/api/`) ✅ **IMPLEMENTED IN MAIN**
+8. **Frontend Templates** (`web/templates/`) ✅ **IMPLEMENTED**
 9. **Static Assets** (`web/static/`)
 
 ### 7. Development Workflow
@@ -107,15 +108,15 @@ The project uses Tailwind CSS with a production build process:
 - HTTPS enforcement
 - Proper error handling without exposing sensitive information
 
-## Next Steps
+## Implementation Status ✅ **COMPLETED**
 1. Set up the basic project structure ✅ **COMPLETED**
-2. Implement core configuration management
+2. Implement core configuration management ✅ **COMPLETED**
 3. Create basic web server with Gin ✅ **COMPLETED**
 4. Integrate Cloudflare KV for settings storage ✅ **COMPLETED**
-5. Implement Hetzner VPS provisioning
+5. Implement Hetzner VPS provisioning ✅ **COMPLETED**
 6. Add Cloudflare DNS management ✅ **COMPLETED**
-7. Create the frontend interface ✅ **DNS CONFIG COMPLETED**
-8. Add deployment automation for K3s
+7. Create the frontend interface ✅ **COMPLETED**
+8. Add VPS management with SSH integration ✅ **COMPLETED**
 
 ## SSL Automation Implementation ✅ **COMPLETED**
 
@@ -198,6 +199,27 @@ All data is stored in a single KV namespace called **"Xanthus"** within the user
 }
 ```
 
+#### 5. VPS Configuration Storage ✅ **NEW**
+**Key Format**: `vps:{server_id}:config`
+**Example**: `vps:123456:config`
+
+**Value Structure** (`VPSConfig`):
+```json
+{
+  "server_id": 123456,
+  "name": "xanthus-k3s-server",
+  "server_type": "cpx11",
+  "location": "nbg1",
+  "public_ipv4": "192.168.1.100",
+  "status": "running",
+  "created_at": "2024-06-23T10:30:00Z",
+  "ssl_configured": true,
+  "ssh_key_name": "xanthus-key-1719148800",
+  "ssh_user": "root",
+  "ssh_port": 22
+}
+```
+
 ### SSL Certificates for K3s Usage
 
 The SSL certificates stored in `domain:{domain}:ssl_config` are **Cloudflare Origin Server Certificates** designed for:
@@ -209,17 +231,65 @@ The SSL certificates stored in `domain:{domain}:ssl_config` are **Cloudflare Ori
 5. **K3s Integration**: Perfect for K3s ingress controllers behind Cloudflare proxy
 6. **SSL Mode**: Works with Cloudflare's "Full (strict)" SSL mode for end-to-end encryption
 
-### Missing Components (Not Yet Implemented)
-
-#### SSH Key Management
-**Expected Keys** (not currently implemented):
-- `config:ssh:private_key` - SSH private key for server access
-- `config:ssh:public_key` - SSH public key for server provisioning
-
-**Note**: The setup template at `web/templates/setup.html:110` mentions "SSH Key: Read & Write" permissions, but SSH key generation/storage is not yet implemented in the codebase.
-
 ### Encryption & Security
 - **Hetzner API Key**: Encrypted using AES-256-GCM with Cloudflare token as encryption key
 - **SSL Certificates**: Stored in plaintext (secured by Cloudflare KV access controls)
-- **CSR Private Keys**: Stored in plaintext within KV namespace
+- **CSR Private Keys**: Stored in plaintext within KV namespace (also used for SSH access)
 - **Access Control**: Protected by Cloudflare token authentication
+
+## Hetzner VPS Management ✅ **IMPLEMENTED**
+
+### VPS Provisioning Features
+- **Operating System**: Ubuntu 24.04 LTS (latest LTS)
+- **K3s Installation**: Automatic installation with custom SSL certificates
+- **SSH Access**: Uses CSR private key for SSH authentication
+- **SSL Integration**: K3s configured with Cloudflare origin certificates
+- **Auto-Configuration**: Cloud-init handles complete server setup
+
+### VPS Management Interface
+- **Dashboard Integration**: VPS management accessible from main dashboard (`/vps`)
+- **Server Listing**: Shows all Xanthus-managed VPS instances with real-time status
+- **Power Management**: Start, stop, reboot operations
+- **SSH Information**: Displays connection details for each server
+- **Creation Wizard**: One-click VPS creation using setup configuration
+
+### SSH Integration ✅ **IMPLEMENTED**
+- **Single Key Architecture**: Same RSA key used for SSL certificates and SSH access
+- **Automatic Setup**: SSH public key automatically uploaded to Hetzner during VPS creation
+- **Connection Details**: SSH connection information stored in VPS configuration
+- **Key Conversion**: RSA private key from CSR converted to SSH format using `golang.org/x/crypto/ssh`
+
+### API Endpoints
+- `GET /vps` - VPS management page
+- `GET /vps/list` - List all VPS instances (JSON)
+- `POST /vps/create` - Create new VPS with SSL and SSH
+- `POST /vps/delete` - Delete VPS and clean up KV storage
+- `POST /vps/{poweroff|poweron|reboot}` - Power management operations
+
+### Cloud-Init Configuration
+VPS instances are created with comprehensive cloud-init setup:
+```yaml
+packages:
+  - curl, wget, git, apt-transport-https, ca-certificates, gnupg, lsb-release
+
+write_files:
+  - path: /opt/xanthus/ssl/server.crt    # Cloudflare origin certificate
+  - path: /opt/xanthus/ssl/server.key    # RSA private key
+  - path: /opt/xanthus/info.txt          # Server metadata
+
+runcmd:
+  - Install K3s with custom SSL certificates
+  - Configure K3s to use /opt/xanthus/ssl/ certificates
+  - Enable and start K3s service
+```
+
+### SSH Access Pattern
+```bash
+# Users can access VPS using the CSR private key:
+ssh -i /path/to/csr_private_key root@{server_ip}
+
+# The app can programmatically access servers using stored configuration:
+# 1. Retrieve config:ssl:csr from KV
+# 2. Get vps:{server_id}:config for connection details
+# 3. Use CSR private key for SSH authentication
+```

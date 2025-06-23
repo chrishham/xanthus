@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xanthus - VPS Management</title>
+    <link rel="icon" type="image/x-icon" href="/static/icons/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/css/output.css">
+    <link rel="stylesheet" href="/static/css/sweetalert2.min.css">
+    <script src="/static/js/vendor/htmx.min.js"></script>
+    <script src="/static/js/vendor/alpine.min.js" defer></script>
+    <script src="/static/js/vendor/sweetalert2.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-md border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <img src="/static/icons/logo.png" alt="Xanthus Logo" class="w-8 h-8 mr-3">
+                    <h1 class="text-xl font-semibold text-gray-900">Xanthus</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/main" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                    <a href="/dns" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">DNS Config</a>
+                    <a href="/vps" class="text-blue-600 bg-blue-50 px-3 py-2 rounded-md text-sm font-medium">VPS Management</a>
+                    <a href="/logout" class="text-red-600 hover:text-red-800 px-3 py-2 rounded-md text-sm font-medium">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div x-data="vpsManagement()" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-2">VPS Management</h2>
+            <p class="text-gray-600">Manage your Hetzner VPS instances for K3s deployment</p>
+        </div>
+
+        <!-- Server Configuration Summary -->
+        {{if .ServerConfig}}
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">Default Server Configuration</h3>
+                    <div class="mt-1 text-sm text-blue-700">
+                        <span class="font-medium">{{.ServerConfig.server_type}}</span> in <span class="font-medium">{{.ServerConfig.location}}</span>
+                        (configured during setup)
+                    </div>
+                </div>
+            </div>
+        </div>
+        {{end}}
+
+        <!-- Action Buttons -->
+        <div class="flex justify-between items-center mb-6">
+            <div class="flex space-x-3">
+                <button @click="refreshServers()" 
+                        :disabled="loading"
+                        class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
+                    <svg class="w-4 h-4 mr-2" :class="{'animate-spin': loading}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Refresh
+                </button>
+                <button @click="showCreateServerModal()" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Create New VPS
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div x-show="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p class="mt-2 text-gray-600">Loading servers...</p>
+        </div>
+
+        <!-- No Servers State -->
+        <div x-show="!loading && servers.length === 0" class="text-center py-12">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
+            </svg>
+            <h3 class="mt-2 text-lg font-medium text-gray-900">No VPS instances found</h3>
+            <p class="mt-1 text-gray-500">Get started by creating your first VPS instance.</p>
+            <div class="mt-6">
+                <button @click="showCreateServerModal()" 
+                        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                    </svg>
+                    Create VPS
+                </button>
+            </div>
+        </div>
+
+        <!-- Servers Grid -->
+        <div x-show="!loading && servers.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <template x-for="server in servers" :key="server.id">
+                <div class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
+                    <!-- Server Header -->
+                    <div class="p-6 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-medium text-gray-900" x-text="server.name"></h3>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                  :class="{
+                                      'bg-green-100 text-green-800': server.status === 'running',
+                                      'bg-yellow-100 text-yellow-800': server.status === 'initializing',
+                                      'bg-red-100 text-red-800': server.status === 'off',
+                                      'bg-gray-100 text-gray-800': !['running', 'initializing', 'off'].includes(server.status)
+                                  }"
+                                  x-text="server.status">
+                            </span>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1" x-text="'ID: ' + server.id"></p>
+                    </div>
+
+                    <!-- Server Details -->
+                    <div class="p-6">
+                        <div class="space-y-3">
+                            <!-- Server Type -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">Server Type:</span>
+                                <span class="text-sm font-medium text-gray-900" x-text="server.server_type.name"></span>
+                            </div>
+                            
+                            <!-- Location -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">Location:</span>
+                                <span class="text-sm font-medium text-gray-900" x-text="server.datacenter.location.description"></span>
+                            </div>
+                            
+                            <!-- Resources -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">Resources:</span>
+                                <span class="text-sm font-medium text-gray-900" 
+                                      x-text="server.server_type.cores + ' CPU, ' + server.server_type.memory + 'GB RAM'"></span>
+                            </div>
+                            
+                            <!-- Public IP -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">Public IP:</span>
+                                <span class="text-sm font-medium text-gray-900 font-mono" x-text="server.public_net.ipv4.ip"></span>
+                            </div>
+                            
+                            <!-- SSL Status -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">SSL Config:</span>
+                                <span class="text-xs px-2 py-1 rounded-full"
+                                      :class="server.labels && server.labels.managed_by === 'xanthus' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
+                                      x-text="server.labels && server.labels.managed_by === 'xanthus' ? 'Configured' : 'Not configured'">
+                                </span>
+                            </div>
+
+                            <!-- SSH Access -->
+                            <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">SSH Access:</span>
+                                <span class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                                    Available
+                                </span>
+                            </div>
+                            
+                            <!-- Created -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">Created:</span>
+                                <span class="text-sm font-medium text-gray-900" x-text="formatDate(server.created)"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+                        <!-- SSH Connection Info (for Xanthus-managed servers) -->
+                        <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="mb-3 p-2 bg-blue-50 rounded-md">
+                            <div class="text-xs font-medium text-blue-900 mb-1">SSH Connection:</div>
+                            <div class="text-xs text-blue-800 font-mono">
+                                ssh root@<span x-text="server.public_net.ipv4.ip"></span>
+                            </div>
+                            <div class="text-xs text-blue-600 mt-1">
+                                Uses CSR private key for authentication
+                            </div>
+                        </div>
+
+                        <div class="flex space-x-2">
+                            <!-- Power Actions -->
+                            <template x-if="server.status === 'running'">
+                                <button @click="powerOffServer(server.id, server.name)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-orange-300 text-orange-700 bg-orange-50 rounded-md hover:bg-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500">
+                                    Power Off
+                                </button>
+                            </template>
+                            <template x-if="server.status === 'off'">
+                                <button @click="powerOnServer(server.id, server.name)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-green-300 text-green-700 bg-green-50 rounded-md hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500">
+                                    Power On
+                                </button>
+                            </template>
+                            <template x-if="server.status === 'running'">
+                                <button @click="rebootServer(server.id, server.name)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-blue-300 text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    Reboot
+                                </button>
+                            </template>
+                            
+                            <!-- Delete -->
+                            <button @click="confirmDeleteServer(server.id, server.name)" 
+                                    class="flex-1 text-xs px-3 py-2 border border-red-300 text-red-700 bg-red-50 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <script>
+        function vpsManagement() {
+            return {
+                servers: {{.Servers | toJSON}},
+                loading: false,
+
+                init() {
+                    // Initial load is handled by the server template
+                },
+
+                async refreshServers() {
+                    this.loading = true;
+                    try {
+                        const response = await fetch('/vps/list', {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.servers = data.servers || [];
+                        } else {
+                            console.error('Failed to refresh servers');
+                            Swal.fire('Error', 'Failed to refresh server list', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing servers:', error);
+                        Swal.fire('Error', 'Failed to refresh server list', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async showCreateServerModal() {
+                    const { value: formValues } = await Swal.fire({
+                        title: 'Create New VPS',
+                        html: `
+                            <div class="text-left space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Server Name</label>
+                                    <input id="server-name" class="swal2-input w-full" placeholder="my-k3s-server" value="xanthus-k3s-${Date.now()}">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Server Configuration</label>
+                                    <p class="text-xs text-gray-500 mb-2">Server will be created with K3s, SSL certificates, and your default configuration</p>
+                                    <div class="p-3 bg-blue-50 rounded-md text-sm">
+                                        <strong>OS:</strong> Ubuntu 24.04 LTS<br>
+                                        <strong>Server Type:</strong> {{.ServerConfig.server_type}}<br>
+                                        <strong>Location:</strong> {{.ServerConfig.location}}<br>
+                                        <strong>K3s:</strong> Auto-installed with SSL<br>
+                                        <strong>SSL:</strong> Cloudflare certificates included
+                                    </div>
+                                </div>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Create VPS',
+                        confirmButtonColor: '#2563eb',
+                        preConfirm: () => {
+                            const name = document.getElementById('server-name').value;
+                            if (!name) {
+                                Swal.showValidationMessage('Server name is required');
+                                return false;
+                            }
+                            return { name };
+                        }
+                    });
+
+                    if (formValues) {
+                        await this.createServer(formValues.name);
+                    }
+                },
+
+                async createServer(name) {
+                    this.loading = true;
+                    try {
+                        const response = await fetch('/vps/create', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `name=${encodeURIComponent(name)}`
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            Swal.fire({
+                                title: 'Success!',
+                                text: `VPS "${name}" is being created. This may take a few minutes.`,
+                                icon: 'success',
+                                confirmButtonColor: '#2563eb'
+                            });
+                            await this.refreshServers();
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to create VPS', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error creating server:', error);
+                        Swal.fire('Error', 'Failed to create VPS', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async confirmDeleteServer(serverId, serverName) {
+                    const result = await Swal.fire({
+                        title: 'Delete VPS?',
+                        text: `Are you sure you want to delete "${serverName}"? This action cannot be undone.`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: '#dc2626',
+                        cancelButtonColor: '#6b7280',
+                        confirmButtonText: 'Yes, delete it!'
+                    });
+
+                    if (result.isConfirmed) {
+                        await this.deleteServer(serverId, serverName);
+                    }
+                },
+
+                async deleteServer(serverId, serverName) {
+                    this.loading = true;
+                    try {
+                        const response = await fetch('/vps/delete', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `server_id=${serverId}`
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            Swal.fire('Deleted!', `VPS "${serverName}" has been deleted.`, 'success');
+                            await this.refreshServers();
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to delete VPS', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error deleting server:', error);
+                        Swal.fire('Error', 'Failed to delete VPS', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async powerOffServer(serverId, serverName) {
+                    await this.performServerAction('poweroff', serverId, serverName, 'powering off');
+                },
+
+                async powerOnServer(serverId, serverName) {
+                    await this.performServerAction('poweron', serverId, serverName, 'powering on');
+                },
+
+                async rebootServer(serverId, serverName) {
+                    await this.performServerAction('reboot', serverId, serverName, 'rebooting');
+                },
+
+                async performServerAction(action, serverId, serverName, actionText) {
+                    this.loading = true;
+                    try {
+                        const response = await fetch(`/vps/${action}`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `server_id=${serverId}`
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            Swal.fire('Success!', `VPS "${serverName}" is ${actionText}.`, 'success');
+                            // Refresh after a short delay to allow status to update
+                            setTimeout(() => this.refreshServers(), 2000);
+                        } else {
+                            Swal.fire('Error', data.error || `Failed to perform ${action}`, 'error');
+                        }
+                    } catch (error) {
+                        console.error(`Error performing ${action}:`, error);
+                        Swal.fire('Error', `Failed to perform ${action}`, 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                formatDate(dateString) {
+                    return new Date(dateString).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                }
+            }
+        }
+    </script>
+</body>
+</html>
