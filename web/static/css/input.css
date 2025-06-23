@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for Xanthus */
+.htmx-indicator {
+    display: none;
+    pointer-events: none;
+}
+.htmx-request .htmx-indicator {
+    display: flex;
+    pointer-events: auto;
+}

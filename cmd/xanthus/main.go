@@ -39,6 +39,7 @@ func main() {
 
 	r := gin.Default()
 	r.LoadHTMLGlob("web/templates/*")
+	r.Static("/static", "web/static")
 
 	// Routes
 	r.GET("/", handleRoot)

@@ -47,9 +47,11 @@ go get github.com/joho/godotenv
 
 ### 4. Frontend Dependencies
 ```bash
-# Install via CDN or download locally
+# Install Tailwind CSS for production build
+npm install
+
+# Frontend CDN dependencies (loaded in templates):
 # - HTMX: https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js
-# - Tailwind CSS: https://cdn.tailwindcss.com
 # - Alpine.js: https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js
 ```
 
@@ -71,20 +73,32 @@ go get github.com/joho/godotenv
 
 ### 7. Development Workflow
 ```bash
-# Run in development mode
+# Run in development mode (builds CSS and starts server)
 make dev
 
-# Build for production
+# Build for production (builds optimized CSS and Go binary)
 make build
 
-# Run tests
-make test
+# CSS Development Commands
+make css           # Build CSS for production (minified)
+make css-watch     # Watch CSS changes during development
 
-# Lint code
-make lint
+# Testing and Code Quality
+make test          # Run Go tests
+make lint          # Format and vet Go code
+
+# Cleanup
+make clean         # Remove build artifacts
 ```
 
-### 8. Security Considerations
+### 8. Tailwind CSS Setup
+The project uses Tailwind CSS with a production build process:
+- **Source**: `web/static/css/input.css` (Tailwind directives)
+- **Built**: `web/static/css/output.css` (optimized CSS served to browser)
+- **Config**: `tailwind.config.js` (scans templates for used classes)
+- **Benefits**: Only includes used CSS (~10KB vs 3MB CDN), offline support, faster loading
+
+### 9. Security Considerations
 - Secure API key storage in Cloudflare KV
 - Input validation for all user inputs
 - Rate limiting for API endpoints
