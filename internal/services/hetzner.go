@@ -257,14 +257,16 @@ func (hs *HetznerService) GetServer(apiKey string, serverID int) (*HetznerServer
 
 // CreateServer creates a new VPS instance with SSL certificates and K3s
 func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKeyName, sslCert, sslKey string) (*HetznerServer, error) {
-	// Get SSH key ID if provided
+	// Use SSH key name directly - Hetzner accepts both names and IDs
 	var sshKeys []string
 	if sshKeyName != "" {
-		sshKeyID, err := hs.getSSHKeyID(apiKey, sshKeyName)
+		// Verify the SSH key exists by trying to get its ID
+		_, err := hs.getSSHKeyID(apiKey, sshKeyName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get SSH key: %w", err)
+			return nil, fmt.Errorf("failed to find SSH key '%s': %w", sshKeyName, err)
 		}
-		sshKeys = []string{fmt.Sprintf("%d", sshKeyID)}
+		// Use the key name directly instead of converting to ID
+		sshKeys = []string{sshKeyName}
 	}
 
 	// Ubuntu 24.04 LTS image

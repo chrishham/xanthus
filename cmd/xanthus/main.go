@@ -56,6 +56,7 @@ func main() {
 	r.GET("/setup", handleSetupPage)
 	r.POST("/setup/hetzner", handleSetupHetzner)
 	r.GET("/dns", handleDNSConfigPage)
+	r.GET("/dns/list", handleDNSList)
 	r.POST("/dns/configure", handleDNSConfigure)
 	r.POST("/dns/remove", handleDNSRemove)
 	r.GET("/vps", handleVPSManagePage)
@@ -391,6 +392,39 @@ func handleDNSConfigPage(c *gin.Context) {
 	c.HTML(http.StatusOK, "dns-config.html", gin.H{
 		"Domains": domains,
 	})
+}
+
+func handleDNSList(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Fetch domains from Cloudflare
+	domains, err := fetchCloudflareDomains(token)
+	if err != nil {
+		log.Printf("Error fetching domains: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch domains"})
+		return
+	}
+
+	// Check which domains are managed by Xanthus (exist in KV)
+	kvService := services.NewKVService()
+	for i := range domains {
+		if _, err := kvService.GetDomainSSLConfig(token, accountID, domains[i].Name); err == nil {
+			domains[i].Managed = true
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"domains": domains})
 }
 
 func handleLogout(c *gin.Context) {
@@ -922,6 +956,100 @@ func filterSharedVCPUServers(serverTypes []HetznerServerType) []HetznerServerTyp
 	return sharedServers
 }
 
+// sortServerTypesByPriceDesc sorts server types by price in descending order (highest first)
+func sortServerTypesByPriceDesc(serverTypes []HetznerServerType) {
+	log.Printf("DEBUG: Sorting %d server types by price descending", len(serverTypes))
+	
+	// Use a simple bubble sort with better debugging
+	n := len(serverTypes)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			priceJ := getServerTypeMonthlyPrice(serverTypes[j])
+			priceJ1 := getServerTypeMonthlyPrice(serverTypes[j+1])
+			
+			// For descending order: if current price < next price, swap
+			if priceJ < priceJ1 {
+				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
+				log.Printf("DEBUG: Swapped %s (%.2f) with %s (%.2f)", serverTypes[j+1].Name, priceJ, serverTypes[j].Name, priceJ1)
+			}
+		}
+	}
+	
+	// Log final order
+	log.Printf("DEBUG: Final descending order:")
+	for i, server := range serverTypes {
+		price := getServerTypeMonthlyPrice(server)
+		log.Printf("DEBUG: %d. %s: %.2f", i+1, server.Name, price)
+	}
+}
+
+// sortServerTypesByPriceAsc sorts server types by price in ascending order (lowest first)
+func sortServerTypesByPriceAsc(serverTypes []HetznerServerType) {
+	log.Printf("DEBUG: Sorting %d server types by price ascending", len(serverTypes))
+	
+	// Use a simple bubble sort with better debugging
+	n := len(serverTypes)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			priceJ := getServerTypeMonthlyPrice(serverTypes[j])
+			priceJ1 := getServerTypeMonthlyPrice(serverTypes[j+1])
+			
+			// For ascending order: if current price > next price, swap
+			if priceJ > priceJ1 {
+				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
+				log.Printf("DEBUG: Swapped %s (%.2f) with %s (%.2f)", serverTypes[j+1].Name, priceJ, serverTypes[j].Name, priceJ1)
+			}
+		}
+	}
+	
+	// Log final order
+	log.Printf("DEBUG: Final ascending order:")
+	for i, server := range serverTypes {
+		price := getServerTypeMonthlyPrice(server)
+		log.Printf("DEBUG: %d. %s: %.2f", i+1, server.Name, price)
+	}
+}
+
+// getServerTypeMonthlyPrice gets the monthly price for a server type (uses first available location)
+func getServerTypeMonthlyPrice(serverType HetznerServerType) float64 {
+	if len(serverType.Prices) == 0 {
+		return 0.0
+	}
+	
+	// Use the first available price location
+	priceStr := serverType.Prices[0].PriceMonthly.Gross
+	
+	// Debug: log the price string format
+	log.Printf("DEBUG: Server %s price string: '%s'", serverType.Name, priceStr)
+	
+	// Parse price string - it might be in format like "4.90" or "4.90 EUR"
+	// Remove any non-numeric characters except decimal point
+	cleanPrice := ""
+	foundDecimal := false
+	for _, char := range priceStr {
+		if char >= '0' && char <= '9' {
+			cleanPrice += string(char)
+		} else if char == '.' && !foundDecimal {
+			cleanPrice += string(char)
+			foundDecimal = true
+		}
+	}
+	
+	if cleanPrice == "" {
+		log.Printf("DEBUG: Could not extract numeric price from '%s'", priceStr)
+		return 0.0
+	}
+	
+	var priceFloat float64
+	if _, err := fmt.Sscanf(cleanPrice, "%f", &priceFloat); err != nil {
+		log.Printf("DEBUG: Failed to parse price '%s' from '%s': %v", cleanPrice, priceStr, err)
+		return 0.0
+	}
+	
+	log.Printf("DEBUG: Server %s parsed price: %.2f", serverType.Name, priceFloat)
+	return priceFloat
+}
+
 // fetchCloudflareDomains fetches all domain zones from Cloudflare API
 func fetchCloudflareDomains(token string) ([]CloudflareDomain, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -1188,6 +1316,14 @@ func handleVPSServerOptions(c *gin.Context) {
 
 	// Filter to only shared vCPU servers for cost efficiency
 	sharedServerTypes := filterSharedVCPUServers(serverTypes)
+
+	// Get sort parameter and sort by price
+	sortBy := c.Query("sort")
+	if sortBy == "price_desc" {
+		sortServerTypesByPriceDesc(sharedServerTypes)
+	} else if sortBy == "price_asc" {
+		sortServerTypesByPriceAsc(sharedServerTypes)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"locations":    locations,
