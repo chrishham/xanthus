@@ -54,13 +54,12 @@ func main() {
 	r.GET("/main", handleMainPage)
 	r.GET("/setup", handleSetupPage)
 	r.POST("/setup/hetzner", handleSetupHetzner)
-	r.GET("/setup/server", handleSetupServerPage)
-	r.POST("/setup/server", handleSetupServer)
 	r.GET("/dns", handleDNSConfigPage)
 	r.POST("/dns/configure", handleDNSConfigure)
 	r.POST("/dns/remove", handleDNSRemove)
 	r.GET("/vps", handleVPSManagePage)
 	r.GET("/vps/list", handleVPSList)
+	r.GET("/vps/server-options", handleVPSServerOptions)
 	r.POST("/vps/create", handleVPSCreate)
 	r.POST("/vps/delete", handleVPSDelete)
 	r.POST("/vps/poweroff", handleVPSPowerOff)
@@ -249,31 +248,7 @@ func handleLogin(c *gin.Context) {
 			log.Println("✅ CSR already exists in KV")
 		}
 
-		// Check setup completion status
-		// 1. Check if Hetzner API key exists
-		var hetznerKey string
-		if err := getKVValue(client, token, accountID, "config:hetzner:api_key", &hetznerKey); err != nil {
-			log.Println("🔧 Setup step 1 required - Hetzner API key not found")
-			// Set session cookie before redirecting to setup
-			c.SetCookie("cf_token", token, 3600, "/", "", false, true)
-			c.Header("HX-Redirect", "/setup")
-			c.Status(http.StatusOK)
-			return
-		}
-
-		// 2. Check if server configuration exists
-		var serverConfig map[string]string
-		if err := getKVValue(client, token, accountID, "config:server:selection", &serverConfig); err != nil {
-			log.Println("🔧 Setup step 2 required - Server configuration not found")
-			// Set session cookie before redirecting to server selection
-			c.SetCookie("cf_token", token, 3600, "/", "", false, true)
-			c.Header("HX-Redirect", "/setup/server")
-			c.Status(http.StatusOK)
-			return
-		}
-
-		// All setup complete, proceed to main app
-		log.Printf("✅ Setup complete - Server: %s in %s", serverConfig["server_type"], serverConfig["location"])
+		// Valid token - proceed to main app
 		c.SetCookie("cf_token", token, 3600, "/", "", false, true)
 		c.Header("HX-Redirect", "/main")
 		c.Status(http.StatusOK)
@@ -297,9 +272,24 @@ func handleSetupPage(c *gin.Context) {
 		c.Redirect(http.StatusTemporaryRedirect, "/login")
 		return
 	}
+
+	// Try to get existing Hetzner API key for prepopulation
+	var existingKey string
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err == nil {
+		// If we can get the account ID, try to retrieve the existing key
+		if hetznerKey, err := getHetznerAPIKey(token, accountID); err == nil {
+			// Mask the key for security (show only first 4 and last 4 characters)
+			if len(hetznerKey) > 8 {
+				existingKey = hetznerKey[:4] + "..." + hetznerKey[len(hetznerKey)-4:]
+			}
+		}
+	}
+
 	c.HTML(http.StatusOK, "setup.html", gin.H{
-		"Step":  1,
-		"Title": "Setup - Hetzner API Key",
+		"Step":        1,
+		"Title":       "Setup - Hetzner API Key",
+		"ExistingKey": existingKey,
 	})
 }
 
@@ -311,9 +301,27 @@ func handleSetupHetzner(c *gin.Context) {
 	}
 
 	hetznerKey := c.PostForm("hetzner_key")
-	if hetznerKey == "" {
-		c.Data(http.StatusBadRequest, "text/html", []byte("❌ Hetzner API key is required"))
+	
+	// Get account ID for checking existing key
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		log.Printf("Error getting account ID: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error: %s", err.Error())))
 		return
+	}
+	
+	// If no key provided, check if there's an existing key
+	if hetznerKey == "" {
+		if existingKey, err := getHetznerAPIKey(token, accountID); err == nil && existingKey != "" {
+			// Use existing key - proceed to next step
+			log.Println("✅ Using existing Hetzner API key")
+			c.Header("HX-Redirect", "/setup/server")
+			c.Status(http.StatusOK)
+			return
+		} else {
+			c.Data(http.StatusBadRequest, "text/html", []byte("❌ Hetzner API key is required"))
+			return
+		}
 	}
 
 	// Validate Hetzner API key
@@ -322,13 +330,6 @@ func handleSetupHetzner(c *gin.Context) {
 		return
 	}
 
-	// Get account ID for KV storage
-	_, accountID, err := checkKVNamespaceExists(token)
-	if err != nil {
-		log.Printf("Error getting account ID: %v", err)
-		c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error: %s", err.Error())))
-		return
-	}
 
 	// Store encrypted Hetzner API key in KV
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -346,116 +347,10 @@ func handleSetupHetzner(c *gin.Context) {
 	}
 
 	log.Println("✅ Hetzner API key validated and stored")
-	c.Header("HX-Redirect", "/setup/server")
+	c.Header("HX-Redirect", "/main")
 	c.Status(http.StatusOK)
 }
 
-func handleSetupServerPage(c *gin.Context) {
-	token, err := c.Cookie("cf_token")
-	if err != nil || !verifyCloudflareToken(token) {
-		c.Redirect(http.StatusTemporaryRedirect, "/login")
-		return
-	}
-
-	// Get account ID to fetch Hetzner key
-	_, accountID, err := checkKVNamespaceExists(token)
-	if err != nil {
-		c.Data(http.StatusOK, "text/html", []byte("❌ Error accessing account"))
-		return
-	}
-
-	// Get decrypted Hetzner API key
-	hetznerKey, err := getHetznerAPIKey(token, accountID)
-	if err != nil {
-		log.Printf("Error getting Hetzner API key: %v", err)
-		c.Redirect(http.StatusTemporaryRedirect, "/setup")
-		return
-	}
-
-	// Fetch locations, server types, and real availability from Hetzner API
-	locations, err := fetchHetznerLocations(hetznerKey)
-	if err != nil {
-		log.Printf("Error fetching locations: %v", err)
-		c.Data(http.StatusOK, "text/html", []byte("❌ Error fetching server locations"))
-		return
-	}
-
-	serverTypes, err := fetchHetznerServerTypes(hetznerKey)
-	if err != nil {
-		log.Printf("Error fetching server types: %v", err)
-		c.Data(http.StatusOK, "text/html", []byte("❌ Error fetching server types"))
-		return
-	}
-
-	// Fetch real-time availability data
-	availability, err := fetchServerAvailability(hetznerKey)
-	if err != nil {
-		log.Printf("Error fetching server availability: %v", err)
-		c.Data(http.StatusOK, "text/html", []byte("❌ Error fetching server availability"))
-		return
-	}
-
-	// Filter to only shared vCPU instances and add availability info
-	sharedServerTypes := filterSharedVCPUServers(serverTypes)
-
-	// Add availability information to each server type
-	for i := range sharedServerTypes {
-		sharedServerTypes[i].AvailableLocations = make(map[string]bool)
-		for locationName, locationAvailability := range availability {
-			if available, exists := locationAvailability[sharedServerTypes[i].ID]; exists && available {
-				sharedServerTypes[i].AvailableLocations[locationName] = true
-			}
-		}
-	}
-
-	c.HTML(http.StatusOK, "setup-server.html", gin.H{
-		"Step":        2,
-		"Title":       "Server Selection",
-		"Locations":   locations,
-		"ServerTypes": sharedServerTypes,
-	})
-}
-
-func handleSetupServer(c *gin.Context) {
-	token, err := c.Cookie("cf_token")
-	if err != nil || !verifyCloudflareToken(token) {
-		c.Redirect(http.StatusTemporaryRedirect, "/login")
-		return
-	}
-
-	location := c.PostForm("location")
-	serverType := c.PostForm("server_type")
-
-	if location == "" || serverType == "" {
-		c.Data(http.StatusBadRequest, "text/html", []byte("❌ Please select both location and server type"))
-		return
-	}
-
-	// Get account ID for KV storage
-	_, accountID, err := checkKVNamespaceExists(token)
-	if err != nil {
-		c.Data(http.StatusOK, "text/html", []byte("❌ Error accessing account"))
-		return
-	}
-
-	// Store server configuration in KV
-	client := &http.Client{Timeout: 10 * time.Second}
-	serverConfig := map[string]string{
-		"location":    location,
-		"server_type": serverType,
-		"created_at":  time.Now().UTC().Format(time.RFC3339),
-	}
-
-	if err := putKVValue(client, token, accountID, "config:server:selection", serverConfig); err != nil {
-		log.Printf("Error storing server config: %v", err)
-		c.Data(http.StatusOK, "text/html", []byte("❌ Error storing server configuration"))
-		return
-	}
-
-	log.Printf("✅ Server configuration stored: %s in %s", serverType, location)
-	c.Header("HX-Redirect", "/setup/step3")
-	c.Status(http.StatusOK)
-}
 
 func handleDNSConfigPage(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
@@ -1203,17 +1098,6 @@ func handleVPSManagePage(c *gin.Context) {
 		return
 	}
 
-	// Get server configuration
-	client := &http.Client{Timeout: 10 * time.Second}
-	var serverConfig map[string]string
-	if err := getKVValue(client, token, accountID, "config:server:selection", &serverConfig); err != nil {
-		log.Printf("Error getting server config: %v", err)
-		serverConfig = map[string]string{
-			"server_type": "Unknown",
-			"location":    "Unknown",
-		}
-	}
-
 	// Initialize Hetzner service and list servers
 	hetznerService := services.NewHetznerService()
 	servers, err := hetznerService.ListServers(hetznerKey)
@@ -1223,8 +1107,7 @@ func handleVPSManagePage(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "vps-manage.html", gin.H{
-		"Servers":      servers,
-		"ServerConfig": serverConfig,
+		"Servers": servers,
 	})
 }
 
@@ -1261,16 +1144,10 @@ func handleVPSList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"servers": servers})
 }
 
-func handleVPSCreate(c *gin.Context) {
+func handleVPSServerOptions(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !verifyCloudflareToken(token) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-		return
-	}
-
-	name := c.PostForm("name")
-	if name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Server name is required"})
 		return
 	}
 
@@ -1288,13 +1165,73 @@ func handleVPSCreate(c *gin.Context) {
 		return
 	}
 
-	// Get server configuration
-	client := &http.Client{Timeout: 10 * time.Second}
-	var serverConfig map[string]string
-	if err := getKVValue(client, token, accountID, "config:server:selection", &serverConfig); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Server configuration not found"})
+	// Fetch locations and server types
+	locations, err := fetchHetznerLocations(hetznerKey)
+	if err != nil {
+		log.Printf("Error fetching locations: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch locations"})
 		return
 	}
+
+	serverTypes, err := fetchHetznerServerTypes(hetznerKey)
+	if err != nil {
+		log.Printf("Error fetching server types: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch server types"})
+		return
+	}
+
+	// Filter to only shared vCPU servers for cost efficiency
+	sharedServerTypes := filterSharedVCPUServers(serverTypes)
+
+	c.JSON(http.StatusOK, gin.H{
+		"locations":    locations,
+		"serverTypes":  sharedServerTypes,
+	})
+}
+
+func handleVPSCreate(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	name := c.PostForm("name")
+	location := c.PostForm("location")
+	serverType := c.PostForm("server_type")
+	
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server name is required"})
+		return
+	}
+	if location == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server location is required"})
+		return
+	}
+	if serverType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server type is required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Check if Hetzner API key exists - if not, guide user to setup
+	hetznerKey, err := getHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Hetzner API key not configured", 
+			"setup_required": true,
+			"setup_step": "hetzner_api",
+			"message": "Please configure your Hetzner API key first in the setup section"})
+		return
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
 
 	// Get SSL CSR configuration
 	var csrConfig struct {
@@ -1347,7 +1284,7 @@ func handleVPSCreate(c *gin.Context) {
 	}
 
 	// Create server with SSL configuration and SSH key
-	server, err := hetznerService.CreateServer(hetznerKey, name, serverConfig["server_type"], serverConfig["location"], sshKeyName, sslCert, sslKey)
+	server, err := hetznerService.CreateServer(hetznerKey, name, serverType, location, sshKeyName, sslCert, sslKey)
 	if err != nil {
 		log.Printf("Error creating server: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create server: %v", err)})
@@ -1358,8 +1295,8 @@ func handleVPSCreate(c *gin.Context) {
 	vpsConfig := &services.VPSConfig{
 		ServerID:      server.ID,
 		Name:          server.Name,
-		ServerType:    serverConfig["server_type"],
-		Location:      serverConfig["location"],
+		ServerType:    serverType,
+		Location:      location,
 		PublicIPv4:    server.PublicNet.IPv4.IP,
 		Status:        server.Status,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),

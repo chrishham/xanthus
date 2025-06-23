@@ -56,28 +56,64 @@
                     <label for="hetzner_key" class="block text-sm font-medium text-gray-700 mb-2">
                         Hetzner Cloud API Token
                     </label>
+                    {{if .ExistingKey}}
+                    <div class="mb-3 p-3 bg-green-50 border border-green-200 rounded-md">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-green-800 font-medium">✓ API Key configured</p>
+                                <p class="text-xs text-green-600 font-mono">{{.ExistingKey}}</p>
+                            </div>
+                            <button type="button" onclick="showChangeKeyForm()" class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200">
+                                Change
+                            </button>
+                        </div>
+                    </div>
+                    <div id="change-key-form" class="hidden">
+                    {{end}}
                     <input 
                         type="password" 
                         id="hetzner_key" 
                         name="hetzner_key" 
-                        required
+                        {{if not .ExistingKey}}required{{end}}
                         class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter your Hetzner API token"
+                        placeholder="{{if .ExistingKey}}Enter new Hetzner API token{{else}}Enter your Hetzner API token{{end}}"
                         oninput="document.getElementById('error-message').innerHTML = ''"
                     >
                     <p class="mt-1 text-xs text-gray-500">
                         Need a token? <a href="https://console.hetzner.cloud/" target="_blank" class="text-blue-600 hover:underline">Create one in Hetzner Console</a>
                     </p>
+                    {{if .ExistingKey}}
+                    </div>
+                    {{end}}
                 </div>
 
                 <div id="error-message" class="text-red-600 text-sm"></div>
 
+                {{if .ExistingKey}}
+                <div class="flex space-x-3">
+                    <button 
+                        type="submit" 
+                        class="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition duration-200"
+                    >
+                        Continue with Current Key
+                    </button>
+                    <button 
+                        type="submit" 
+                        id="update-key-btn"
+                        onclick="return validateKeyChange()"
+                        class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200 hidden"
+                    >
+                        Update & Continue
+                    </button>
+                </div>
+                {{else}}
                 <button 
                     type="submit" 
                     class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200"
                 >
                     Validate & Continue
                 </button>
+                {{end}}
             </form>
 
             <!-- Loading Overlay -->
@@ -116,6 +152,30 @@
     </div>
 
     <script>
+        // Show/hide change key form
+        function showChangeKeyForm() {
+            document.getElementById('change-key-form').classList.remove('hidden');
+            document.getElementById('hetzner_key').setAttribute('required', 'required');
+            document.getElementById('hetzner_key').focus();
+            
+            // Show the update button and hide the continue button
+            const updateBtn = document.getElementById('update-key-btn');
+            if (updateBtn) {
+                updateBtn.classList.remove('hidden');
+                updateBtn.previousElementSibling.style.display = 'none';
+            }
+        }
+
+        // Validate key change before submitting
+        function validateKeyChange() {
+            const keyInput = document.getElementById('hetzner_key');
+            if (!keyInput.value.trim()) {
+                document.getElementById('error-message').innerHTML = '❌ Please enter a new API key or use the "Continue with Current Key" button';
+                return false;
+            }
+            return true;
+        }
+
         // Keep loading overlay visible during redirects
         document.body.addEventListener('htmx:beforeRequest', function(evt) {
             if (evt.detail.elt.querySelector('#setup-overlay')) {
