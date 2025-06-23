@@ -144,7 +144,18 @@ The project uses Tailwind CSS with a production build process:
 3. Click "View Config" to see current configuration status
 4. Click "Remove" to remove from Xanthus management
 
-### Certificate Storage Format
+## Cloudflare KV Storage Architecture ✅ **IMPLEMENTED**
+
+### KV Namespace Structure
+All data is stored in a single KV namespace called **"Xanthus"** within the user's Cloudflare account.
+
+### KV Key-Value Pairs Structure
+
+#### 1. SSL Configuration Storage
+**Key Format**: `domain:{domain}:ssl_config`
+**Example**: `domain:example.com:ssl_config`
+
+**Value Structure** (`DomainSSLConfig`):
 ```json
 {
   "domain": "example.com",
@@ -158,3 +169,57 @@ The project uses Tailwind CSS with a production build process:
   "page_rule_created": true
 }
 ```
+
+#### 2. CSR Configuration Storage
+**Key**: `config:ssl:csr`
+
+**Value Structure** (`CSRConfig`):
+```json
+{
+  "csr": "-----BEGIN CERTIFICATE REQUEST-----\n...",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...",
+  "created_at": "2024-06-23T10:30:00Z"
+}
+```
+
+#### 3. Hetzner API Key Storage
+**Key**: `config:hetzner:api_key`
+**Value**: AES-256-GCM encrypted string (encrypted using Cloudflare token as key)
+
+#### 4. Server Configuration Storage
+**Key**: `config:server:selection`
+
+**Value Structure**:
+```json
+{
+  "location": "nbg1",
+  "server_type": "cpx11",
+  "created_at": "2024-06-23T10:30:00Z"
+}
+```
+
+### SSL Certificates for K3s Usage
+
+The SSL certificates stored in `domain:{domain}:ssl_config` are **Cloudflare Origin Server Certificates** designed for:
+
+1. **Certificate Type**: RSA origin certificates with 15-year validity
+2. **Certificate Chain**: Full chain including Cloudflare's root CA certificate
+3. **Hostnames**: Covers both `domain.com` and `*.domain.com` (wildcard support)
+4. **Private Key**: 2048-bit RSA private key stored alongside certificate
+5. **K3s Integration**: Perfect for K3s ingress controllers behind Cloudflare proxy
+6. **SSL Mode**: Works with Cloudflare's "Full (strict)" SSL mode for end-to-end encryption
+
+### Missing Components (Not Yet Implemented)
+
+#### SSH Key Management
+**Expected Keys** (not currently implemented):
+- `config:ssh:private_key` - SSH private key for server access
+- `config:ssh:public_key` - SSH public key for server provisioning
+
+**Note**: The setup template at `web/templates/setup.html:110` mentions "SSH Key: Read & Write" permissions, but SSH key generation/storage is not yet implemented in the codebase.
+
+### Encryption & Security
+- **Hetzner API Key**: Encrypted using AES-256-GCM with Cloudflare token as encryption key
+- **SSL Certificates**: Stored in plaintext (secured by Cloudflare KV access controls)
+- **CSR Private Keys**: Stored in plaintext within KV namespace
+- **Access Control**: Protected by Cloudflare token authentication
