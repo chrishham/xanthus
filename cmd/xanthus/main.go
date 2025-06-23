@@ -1267,16 +1267,19 @@ func handleVPSCreate(c *gin.Context) {
 	}
 	log.Printf("✅ Generated SSH public key (length: %d)", len(sshPublicKey))
 
-	// Create SSH key in Hetzner Cloud
+	// Create or find SSH key in Hetzner Cloud
 	hetznerService := services.NewHetznerService()
 	sshKeyName := fmt.Sprintf("xanthus-key-%d", time.Now().Unix())
-	_, err = hetznerService.CreateSSHKey(hetznerKey, sshKeyName, sshPublicKey)
+	sshKey, err := hetznerService.CreateOrFindSSHKey(hetznerKey, sshKeyName, sshPublicKey)
 	if err != nil {
-		log.Printf("Error creating SSH key in Hetzner: %v", err)
+		log.Printf("Error creating/finding SSH key in Hetzner: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create SSH key in Hetzner Cloud: %v", err)})
 		return
 	}
-	log.Printf("✅ Created SSH key: %s", sshKeyName)
+	
+	// Use the actual key name from the found/created key
+	sshKeyName = sshKey.Name
+	log.Printf("✅ Using SSH key: %s (ID: %d)", sshKeyName, sshKey.ID)
 
 	// Get SSL certificate (using first available domain's SSL config as template)
 	kvService := services.NewKVService()

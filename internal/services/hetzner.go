@@ -440,3 +440,35 @@ func (hs *HetznerService) ListSSHKeys(apiKey string) ([]HetznerSSHKey, error) {
 
 	return keysResp.SSHKeys, nil
 }
+
+// FindSSHKeyByPublicKey finds an existing SSH key by its public key content
+func (hs *HetznerService) FindSSHKeyByPublicKey(apiKey, publicKey string) (*HetznerSSHKey, error) {
+	keys, err := hs.ListSSHKeys(apiKey)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, key := range keys {
+		if key.PublicKey == publicKey {
+			return &key, nil
+		}
+	}
+
+	return nil, nil // Not found
+}
+
+// CreateOrFindSSHKey creates a new SSH key or returns existing one if it already exists
+func (hs *HetznerService) CreateOrFindSSHKey(apiKey, name, publicKey string) (*HetznerSSHKey, error) {
+	// First, try to find an existing key with the same public key
+	existingKey, err := hs.FindSSHKeyByPublicKey(apiKey, publicKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search for existing SSH key: %w", err)
+	}
+
+	if existingKey != nil {
+		return existingKey, nil
+	}
+
+	// If not found, create a new one
+	return hs.CreateSSHKey(apiKey, name, publicKey)
+}
