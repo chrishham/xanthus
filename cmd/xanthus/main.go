@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/chrishham/xanthus/internal/services"
@@ -1253,6 +1254,18 @@ func handleVPSCreate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate SSH key from CSR"})
 		return
 	}
+	
+	// Validate SSH public key format
+	if !strings.HasPrefix(sshPublicKey, "ssh-rsa ") {
+		keyPreview := sshPublicKey
+		if len(keyPreview) > 50 {
+			keyPreview = keyPreview[:50] + "..."
+		}
+		log.Printf("Invalid SSH public key format: %s", keyPreview)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Generated SSH key has invalid format"})
+		return
+	}
+	log.Printf("✅ Generated SSH public key (length: %d)", len(sshPublicKey))
 
 	// Create SSH key in Hetzner Cloud
 	hetznerService := services.NewHetznerService()
@@ -1260,11 +1273,10 @@ func handleVPSCreate(c *gin.Context) {
 	_, err = hetznerService.CreateSSHKey(hetznerKey, sshKeyName, sshPublicKey)
 	if err != nil {
 		log.Printf("Error creating SSH key in Hetzner: %v", err)
-		// Continue without SSH key - don't fail the creation
-		sshKeyName = ""
-	} else {
-		log.Printf("✅ Created SSH key: %s", sshKeyName)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create SSH key in Hetzner Cloud: %v", err)})
+		return
 	}
+	log.Printf("✅ Created SSH key: %s", sshKeyName)
 
 	// Get SSL certificate (using first available domain's SSL config as template)
 	kvService := services.NewKVService()
