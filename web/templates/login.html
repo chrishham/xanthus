@@ -10,6 +10,7 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/output.css">
     <script src="https://unpkg.com/htmx.org@1.9.10/dist/htmx.min.js"></script>
+    <script src="/static/js/notifications.min.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center">
     <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
@@ -73,34 +74,74 @@
     </div>
 
     <script>
-        // Keep loading overlay visible during redirects
+        let loginInProgress = false;
+
+        // Show loading overlay when login starts
         document.body.addEventListener('htmx:beforeRequest', function(evt) {
-            if (evt.detail.elt.querySelector('#login-overlay')) {
-                document.getElementById('login-overlay').style.display = 'flex';
-                document.getElementById('login-overlay').style.pointerEvents = 'auto';
+            if (evt.detail.elt.closest('form') && evt.detail.elt.closest('form').getAttribute('hx-post') === '/login') {
+                loginInProgress = true;
+                const overlay = document.getElementById('login-overlay');
+                overlay.style.display = 'flex';
+                overlay.classList.remove('htmx-indicator');
+                
+                // Reset to loading state
+                document.getElementById('loading-spinner').classList.remove('hidden');
+                document.getElementById('loading-text').classList.remove('hidden');
+                document.getElementById('success-icon').classList.add('hidden');
+                document.getElementById('success-text').classList.add('hidden');
             }
         });
         
         document.body.addEventListener('htmx:afterRequest', function(evt) {
-            if (evt.detail.elt.querySelector('#login-overlay')) {
-                // Check if it's a successful response (no error message in response)
+            if (loginInProgress && evt.detail.elt.closest('form') && evt.detail.elt.closest('form').getAttribute('hx-post') === '/login') {
                 const response = evt.detail.xhr.responseText;
-                if (evt.detail.xhr.status === 200 && !response.includes('❌')) {
-                    // Show success message
+                const status = evt.detail.xhr.status;
+                
+                if (status === 200 && !response.includes('❌')) {
+                    // Success - show success state in overlay
                     document.getElementById('loading-spinner').classList.add('hidden');
                     document.getElementById('loading-text').classList.add('hidden');
                     document.getElementById('success-icon').classList.remove('hidden');
                     document.getElementById('success-text').classList.remove('hidden');
+                    
+                    // Show success notification
+                    window.notify.success('Login successful! Redirecting...', 2000);
+                    
+                    // Keep overlay visible during redirect
+                    setTimeout(() => {
+                        loginInProgress = false;
+                    }, 1500);
+                } else {
+                    // Error - hide overlay and show error notification
+                    document.getElementById('login-overlay').style.display = 'none';
+                    document.getElementById('login-overlay').classList.add('htmx-indicator');
+                    loginInProgress = false;
+                    
+                    if (response.includes('❌')) {
+                        const errorMsg = response.replace('❌ ', '');
+                        window.notify.error(errorMsg, 6000);
+                    }
                 }
             }
         });
         
         document.body.addEventListener('htmx:responseError', function(evt) {
-            // Only hide overlay on actual errors, not redirects
-            setTimeout(() => {
+            if (loginInProgress) {
+                // Hide overlay on network/server errors
                 document.getElementById('login-overlay').style.display = 'none';
-                document.getElementById('login-overlay').style.pointerEvents = 'none';
-            }, 100);
+                document.getElementById('login-overlay').classList.add('htmx-indicator');
+                loginInProgress = false;
+                
+                window.notify.error('Network error. Please check your connection and try again.', 6000);
+            }
+        });
+
+        // Handle redirects by keeping overlay visible
+        document.body.addEventListener('htmx:beforeHistoryUpdate', function(evt) {
+            if (loginInProgress) {
+                // Keep the loading overlay visible during redirects
+                evt.preventDefault();
+            }
         });
     </script>
 </body>

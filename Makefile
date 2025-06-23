@@ -5,10 +5,14 @@ dev: css
 	go run cmd/xanthus/main.go
 
 # Build for production
-build: css
+build: assets
 	go build -o bin/xanthus cmd/xanthus/main.go
 
-# Build CSS
+# Build all assets (CSS + JS)
+assets:
+	npm run build-assets
+
+# Build CSS only
 css:
 	npm run build-css-prod
 
@@ -29,3 +33,4 @@ lint:
 clean:
 	rm -rf bin/
 	rm -f web/static/css/output.css
+	rm -f web/static/js/notifications.min.js

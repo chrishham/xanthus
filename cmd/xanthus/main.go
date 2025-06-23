@@ -37,7 +37,13 @@ func main() {
 
 	fmt.Printf("🚀 Xanthus is starting on http://localhost:%s\n", port)
 
+	// Set Gin to release mode for production use
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	
+	// Configure trusted proxies for security
+	r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
+	
 	r.LoadHTMLGlob("web/templates/*")
 	r.Static("/static", "web/static")
 

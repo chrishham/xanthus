@@ -4,9 +4,12 @@
   "description": "K3s Deployment Tool",
   "scripts": {
     "build-css": "tailwindcss -i ./web/static/css/input.css -o ./web/static/css/output.css --watch",
-    "build-css-prod": "tailwindcss -i ./web/static/css/input.css -o ./web/static/css/output.css --minify"
+    "build-css-prod": "tailwindcss -i ./web/static/css/input.css -o ./web/static/css/output.css --minify",
+    "build-js": "terser web/static/js/notifications.js -o web/static/js/notifications.min.js -c -m",
+    "build-assets": "npm run build-css-prod && npm run build-js"
   },
   "devDependencies": {
-    "tailwindcss": "^3.4.0"
+    "tailwindcss": "^3.4.0",
+    "terser": "^5.43.1"
   }
 }
