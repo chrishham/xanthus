@@ -281,11 +281,27 @@
         // Remove domain configuration
         async function removeDomain(domain) {
             const result = await Swal.fire({
-                title: 'Remove ' + domain + '?',
-                text: 'This will remove the SSL configuration from Xanthus storage. Cloudflare settings will remain unchanged.',
+                title: 'Remove ' + domain + ' from Xanthus?',
+                html: `
+                    <div class="text-left">
+                        <p class="mb-4">This will completely revert all Cloudflare changes made by Xanthus:</p>
+                        <ul class="list-disc list-inside space-y-2 text-sm text-red-600">
+                            <li>Delete origin server certificate</li>
+                            <li>Remove www redirect page rules</li>
+                            <li>Reset SSL mode to Flexible</li>
+                            <li>Disable Always Use HTTPS</li>
+                            <li>Remove configuration from Xanthus storage</li>
+                        </ul>
+                        <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                            <p class="text-sm text-amber-800">
+                                <strong>Warning:</strong> Your domain will return to its original Cloudflare state before Xanthus management.
+                            </p>
+                        </div>
+                    </div>
+                `,
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Remove',
+                confirmButtonText: 'Remove & Revert All',
                 cancelButtonText: 'Cancel',
                 confirmButtonColor: '#ef4444',
                 showLoaderOnConfirm: true,
@@ -314,8 +330,13 @@
 
             if (result.isConfirmed) {
                 await Swal.fire({
-                    title: 'Removed!',
-                    text: 'Configuration removed for ' + domain,
+                    title: 'Successfully Removed!',
+                    html: `
+                        <div class="text-center">
+                            <p class="mb-3">All Cloudflare changes have been reverted for <strong>${domain}</strong></p>
+                            <p class="text-sm text-gray-600">Your domain has been restored to its original Cloudflare configuration.</p>
+                        </div>
+                    `,
                     icon: 'success',
                     confirmButtonColor: '#10b981'
                 });

@@ -207,9 +207,33 @@ func handleLogin(c *gin.Context) {
 			log.Println("✅ Xanthus KV namespace already exists")
 		}
 
-		// Check setup completion status
+		// Check and create CSR if not exists
 		client := &http.Client{Timeout: 10 * time.Second}
+		var existingCSR map[string]interface{}
+		if err := getKVValue(client, token, accountID, "config:ssl:csr", &existingCSR); err != nil {
+			log.Println("🔧 Generating new CSR for SSL certificates")
+			
+			cfService := services.NewCloudflareService()
+			csrConfig, err := cfService.GenerateCSR()
+			if err != nil {
+				log.Printf("Error generating CSR: %v", err)
+				c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error generating CSR: %s", err.Error())))
+				return
+			}
 
+			// Store CSR in KV
+			if err := putKVValue(client, token, accountID, "config:ssl:csr", csrConfig); err != nil {
+				log.Printf("Error storing CSR: %v", err)
+				c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error storing CSR: %s", err.Error())))
+				return
+			}
+
+			log.Println("✅ CSR generated and stored successfully")
+		} else {
+			log.Println("✅ CSR already exists in KV")
+		}
+
+		// Check setup completion status
 		// 1. Check if Hetzner API key exists
 		var hetznerKey string
 		if err := getKVValue(client, token, accountID, "config:hetzner:api_key", &hetznerKey); err != nil {
@@ -1050,8 +1074,21 @@ func handleDNSConfigure(c *gin.Context) {
 		return
 	}
 
+	// Get CSR from KV
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		CSR        string `json:"csr"`
+		PrivateKey string `json:"private_key"`
+		CreatedAt  string `json:"created_at"`
+	}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Error getting CSR from KV: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "CSR not found. Please logout and login again."})
+		return
+	}
+
 	// Configure SSL for the domain
-	sslConfig, err := cfService.ConfigureDomainSSL(token, domain)
+	sslConfig, err := cfService.ConfigureDomainSSL(token, domain, csrConfig.CSR, csrConfig.PrivateKey)
 	if err != nil {
 		log.Printf("Error configuring SSL for domain %s: %v", domain, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("SSL configuration failed: %v", err)})
@@ -1094,13 +1131,21 @@ func handleDNSRemove(c *gin.Context) {
 		return
 	}
 
-	// Initialize KV service
+	// Initialize services
+	cfService := services.NewCloudflareService()
 	kvService := services.NewKVService()
 
-	// Check if domain configuration exists
-	_, err = kvService.GetDomainSSLConfig(token, accountID, domain)
+	// Get existing domain configuration
+	domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Domain configuration not found"})
+		return
+	}
+
+	// Revert all Cloudflare changes made by Xanthus
+	if err := cfService.RemoveDomainFromXanthus(token, domain, domainConfig); err != nil {
+		log.Printf("Error reverting Cloudflare changes for domain %s: %v", domain, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to revert Cloudflare changes: %v", err)})
 		return
 	}
 
@@ -1111,9 +1156,9 @@ func handleDNSRemove(c *gin.Context) {
 		return
 	}
 
-	log.Printf("✅ SSL configuration removed for domain: %s", domain)
+	log.Printf("✅ SSL configuration and Cloudflare changes reverted for domain: %s", domain)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Domain configuration removed successfully",
+		"message": "Domain configuration removed and Cloudflare changes reverted successfully",
 	})
 }
