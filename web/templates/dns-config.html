@@ -9,9 +9,45 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/output.css">
+    <link rel="stylesheet" href="/static/css/sweetalert2.min.css">
     <script src="/static/js/vendor/htmx.min.js"></script>
     <script src="/static/js/vendor/alpine.min.js" defer></script>
     <script src="/static/js/vendor/sweetalert2.min.js"></script>
+    <style>
+        /* SweetAlert2 modal positioning fixes */
+        .swal2-container {
+            z-index: 10000 !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .swal2-popup {
+            z-index: 10001 !important;
+            position: relative !important;
+            margin: auto !important;
+            transform: none !important;
+        }
+        .swal-container {
+            z-index: 10000 !important;
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+        }
+        .swal-popup {
+            z-index: 10001 !important;
+            position: relative !important;
+            margin: auto !important;
+        }
+        
+        /* Ensure backdrop covers everything */
+        .swal2-backdrop-show {
+            background: rgba(0, 0, 0, 0.4) !important;
+        }
+    </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto px-4 py-8">
@@ -152,8 +188,31 @@
     </div>
 
     <script>
+        // Debug function to test SweetAlert2
+        function testSwal() {
+            if (typeof Swal === 'undefined') {
+                console.error('SweetAlert2 is not loaded');
+                return false;
+            }
+            console.log('SweetAlert2 is loaded successfully');
+            return true;
+        }
+        
+        // Test SweetAlert2 on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            testSwal();
+        });
+        
         // Configure domain SSL settings
         async function configureDomain(domain) {
+            // Check if SweetAlert2 is loaded
+            if (typeof Swal === 'undefined') {
+                alert('SweetAlert2 is not loaded properly. Please refresh the page.');
+                return;
+            }
+            
+            console.log('Starting configureDomain for:', domain);
+            
             const result = await Swal.fire({
                 title: 'Configure SSL for ' + domain,
                 html: `
@@ -175,6 +234,14 @@
                 cancelButtonText: 'Cancel',
                 confirmButtonColor: '#3b82f6',
                 showLoaderOnConfirm: true,
+                backdrop: true,
+                allowOutsideClick: false,
+                position: 'center',
+                heightAuto: false,
+                customClass: {
+                    container: 'swal-container',
+                    popup: 'swal-popup'
+                },
                 preConfirm: async () => {
                     try {
                         const formData = new FormData();
@@ -195,8 +262,7 @@
                     } catch (error) {
                         Swal.showValidationMessage('Error: ' + error.message);
                     }
-                },
-                allowOutsideClick: () => !Swal.isLoading()
+                }
             });
 
             if (result.isConfirmed) {
@@ -243,8 +309,7 @@
                     } catch (error) {
                         Swal.showValidationMessage('Error: ' + error.message);
                     }
-                },
-                allowOutsideClick: () => !Swal.isLoading()
+                }
             });
 
             if (result.isConfirmed) {
