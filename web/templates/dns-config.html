@@ -275,7 +275,7 @@
                 
                 // Show loading overlay after user closes the success modal
                 if (successResult.isConfirmed || successResult.isDismissed) {
-                    await Swal.fire({
+                    Swal.fire({
                         title: 'Updating page...',
                         text: 'Please wait while we refresh the domain status',
                         icon: 'info',
@@ -285,11 +285,12 @@
                         showCancelButton: false,
                         didOpen: () => {
                             Swal.showLoading();
+                            // Reload the page after a short delay to show the loading state
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 500);
                         }
                     });
-                    
-                    // Reload the page to show updated status
-                    window.location.reload();
                 }
             }
         }
@@ -359,7 +360,7 @@
                 
                 // Show loading overlay after user closes the success modal
                 if (successResult.isConfirmed || successResult.isDismissed) {
-                    await Swal.fire({
+                    Swal.fire({
                         title: 'Updating page...',
                         text: 'Please wait while we refresh the domain status',
                         icon: 'info',
@@ -369,11 +370,12 @@
                         showCancelButton: false,
                         didOpen: () => {
                             Swal.showLoading();
+                            // Reload the page after a short delay to show the loading state
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 500);
                         }
                     });
-                    
-                    // Reload the page to show updated status
-                    window.location.reload();
                 }
             }
         }
