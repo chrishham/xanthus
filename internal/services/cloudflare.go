@@ -149,7 +149,6 @@ func (cs *CloudflareService) CreateOriginCertificate(token, domain string) (*Cer
 		"hostnames":          []string{domain, "*." + domain},
 		"requested_validity": 5475, // 15 years (maximum)
 		"request_type":       "origin-rsa",
-		"csr":               "",
 	}
 
 	resp, err := cs.makeRequest("POST", "/certificates", token, body)
