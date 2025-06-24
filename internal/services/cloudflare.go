@@ -55,15 +55,15 @@ type Certificate struct {
 
 // DomainSSLConfig represents SSL configuration for a domain
 type DomainSSLConfig struct {
-	Domain           string `json:"domain"`
-	ZoneID           string `json:"zone_id"`
-	CertificateID    string `json:"certificate_id"`
-	Certificate      string `json:"certificate"`
-	PrivateKey       string `json:"private_key"`
-	ConfiguredAt     string `json:"configured_at"`
-	SSLMode          string `json:"ssl_mode"`
-	AlwaysUseHTTPS   bool   `json:"always_use_https"`
-	PageRuleCreated  bool   `json:"page_rule_created"`
+	Domain          string `json:"domain"`
+	ZoneID          string `json:"zone_id"`
+	CertificateID   string `json:"certificate_id"`
+	Certificate     string `json:"certificate"`
+	PrivateKey      string `json:"private_key"`
+	ConfiguredAt    string `json:"configured_at"`
+	SSLMode         string `json:"ssl_mode"`
+	AlwaysUseHTTPS  bool   `json:"always_use_https"`
+	PageRuleCreated bool   `json:"page_rule_created"`
 }
 
 // CSRConfig represents a Certificate Signing Request configuration
@@ -124,7 +124,7 @@ func (cs *CloudflareService) GenerateCSR() (*CSRConfig, error) {
 // makeRequest makes an authenticated request to the Cloudflare API
 func (cs *CloudflareService) makeRequest(method, endpoint, token string, body interface{}) (*CFResponse, error) {
 	url := CloudflareBaseURL + endpoint
-	
+
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -203,8 +203,8 @@ func (cs *CloudflareService) GetZoneID(token, domain string) (string, error) {
 // SetSSLMode sets SSL/TLS mode to Full (strict)
 func (cs *CloudflareService) SetSSLMode(token, zoneID string) error {
 	body := map[string]string{"value": "strict"}
-	_, err := cs.makeRequest("PATCH", 
-		fmt.Sprintf("/zones/%s/settings/ssl", zoneID), 
+	_, err := cs.makeRequest("PATCH",
+		fmt.Sprintf("/zones/%s/settings/ssl", zoneID),
 		token, body)
 	return err
 }
@@ -215,7 +215,7 @@ func (cs *CloudflareService) CreateOriginCertificate(token, domain, csr string) 
 		"hostnames":          []string{domain, "*." + domain},
 		"requested_validity": 5475, // 15 years (maximum)
 		"request_type":       "origin-rsa",
-		"csr":               csr,
+		"csr":                csr,
 	}
 
 	resp, err := cs.makeRequest("POST", "/certificates", token, body)
@@ -298,16 +298,16 @@ func (cs *CloudflareService) CreatePageRule(token, zoneID, domain string) error 
 
 // DeleteOriginCertificate removes an origin certificate
 func (cs *CloudflareService) DeleteOriginCertificate(token, certificateID string) error {
-	_, err := cs.makeRequest("DELETE", 
-		fmt.Sprintf("/certificates/%s", certificateID), 
+	_, err := cs.makeRequest("DELETE",
+		fmt.Sprintf("/certificates/%s", certificateID),
 		token, nil)
 	return err
 }
 
 // GetPageRules retrieves page rules for a zone
 func (cs *CloudflareService) GetPageRules(token, zoneID string) ([]map[string]interface{}, error) {
-	resp, err := cs.makeRequest("GET", 
-		fmt.Sprintf("/zones/%s/pagerules", zoneID), 
+	resp, err := cs.makeRequest("GET",
+		fmt.Sprintf("/zones/%s/pagerules", zoneID),
 		token, nil)
 	if err != nil {
 		return nil, err
@@ -329,8 +329,8 @@ func (cs *CloudflareService) GetPageRules(token, zoneID string) ([]map[string]in
 
 // DeletePageRule removes a page rule
 func (cs *CloudflareService) DeletePageRule(token, zoneID, pageRuleID string) error {
-	_, err := cs.makeRequest("DELETE", 
-		fmt.Sprintf("/zones/%s/pagerules/%s", zoneID, pageRuleID), 
+	_, err := cs.makeRequest("DELETE",
+		fmt.Sprintf("/zones/%s/pagerules/%s", zoneID, pageRuleID),
 		token, nil)
 	return err
 }
@@ -338,8 +338,8 @@ func (cs *CloudflareService) DeletePageRule(token, zoneID, pageRuleID string) er
 // ResetSSLMode sets SSL/TLS mode back to Flexible
 func (cs *CloudflareService) ResetSSLMode(token, zoneID string) error {
 	body := map[string]string{"value": "flexible"}
-	_, err := cs.makeRequest("PATCH", 
-		fmt.Sprintf("/zones/%s/settings/ssl", zoneID), 
+	_, err := cs.makeRequest("PATCH",
+		fmt.Sprintf("/zones/%s/settings/ssl", zoneID),
 		token, body)
 	return err
 }

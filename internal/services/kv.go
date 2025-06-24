@@ -83,9 +83,9 @@ func (kvs *KVService) PutValue(token, accountID, key string, value interface{}) 
 	}
 
 	// Create request
-	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/values/%s", 
+	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/values/%s",
 		CloudflareBaseURL, accountID, namespaceID, key)
-	
+
 	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(valueBytes))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -121,9 +121,9 @@ func (kvs *KVService) GetValue(token, accountID, key string, result interface{})
 	}
 
 	// Create request
-	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/values/%s", 
+	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/values/%s",
 		CloudflareBaseURL, accountID, namespaceID, key)
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -161,9 +161,9 @@ func (kvs *KVService) DeleteValue(token, accountID, key string) error {
 	}
 
 	// Create request
-	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/values/%s", 
+	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/values/%s",
 		CloudflareBaseURL, accountID, namespaceID, key)
-	
+
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -209,9 +209,9 @@ func (kvs *KVService) ListDomainSSLConfigs(token, accountID string) (map[string]
 	}
 
 	// List all keys with domain:*:ssl_config prefix
-	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/keys?prefix=domain:", 
+	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/keys?prefix=domain:",
 		CloudflareBaseURL, accountID, namespaceID)
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -242,14 +242,14 @@ func (kvs *KVService) ListDomainSSLConfigs(token, accountID string) (map[string]
 	}
 
 	configs := make(map[string]*DomainSSLConfig)
-	
+
 	// Fetch each SSL config
 	for _, key := range keysResp.Result {
 		if len(key.Name) > 20 && key.Name[len(key.Name)-11:] == ":ssl_config" {
 			// Extract domain from key format: domain:example.com:ssl_config
-			parts := key.Name[7:] // Remove "domain:" prefix
+			parts := key.Name[7:]           // Remove "domain:" prefix
 			domain := parts[:len(parts)-11] // Remove ":ssl_config" suffix
-			
+
 			var config DomainSSLConfig
 			if err := kvs.GetValue(token, accountID, key.Name, &config); err == nil {
 				configs[domain] = &config
@@ -306,9 +306,9 @@ func (kvs *KVService) ListVPSConfigs(token, accountID string) (map[int]*VPSConfi
 	}
 
 	// List all keys with vps:*:config prefix
-	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/keys?prefix=vps:", 
+	url := fmt.Sprintf("%s/accounts/%s/storage/kv/namespaces/%s/keys?prefix=vps:",
 		CloudflareBaseURL, accountID, namespaceID)
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -339,7 +339,7 @@ func (kvs *KVService) ListVPSConfigs(token, accountID string) (map[int]*VPSConfi
 	}
 
 	configs := make(map[int]*VPSConfig)
-	
+
 	// Fetch each VPS config
 	for _, key := range keysResp.Result {
 		if len(key.Name) > 8 && key.Name[len(key.Name)-7:] == ":config" {

@@ -8,15 +8,14 @@
 - is there a way to determine the degree of utilisation of the vps ? so that the user will know if he needs to provision another vps
 - at vps creation state that the prices are without tax. or can we fetch and the tax here to?
 
-
-
-
-
 Step 4: Review Configuration
-
 
 # Tests
 
 no e2e all the others
+
+# Initial setup for the user
+
+buy domain, point nameservers to cloudfare, wait for the domain to be active and then use xanthus
 
 

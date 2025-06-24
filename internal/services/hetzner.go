@@ -26,7 +26,6 @@ func NewHetznerService() *HetznerService {
 	}
 }
 
-
 // HetznerError represents a Hetzner API error
 type HetznerError struct {
 	Code    string `json:"code"`
@@ -39,17 +38,17 @@ type HetznerError struct {
 
 // HetznerServer represents a Hetzner VPS instance
 type HetznerServer struct {
-	ID          int                    `json:"id"`
-	Name        string                 `json:"name"`
-	Status      string                 `json:"status"`
-	PublicNet   HetznerPublicNet       `json:"public_net"`
-	PrivateNet  []HetznerPrivateNet    `json:"private_net"`
-	ServerType  HetznerServerTypeInfo  `json:"server_type"`
-	Datacenter  HetznerDatacenterInfo  `json:"datacenter"`
-	Image       HetznerImageInfo       `json:"image"`
-	Created     string                 `json:"created"`
-	Labels      map[string]string      `json:"labels"`
-	Protection  HetznerProtection      `json:"protection"`
+	ID         int                   `json:"id"`
+	Name       string                `json:"name"`
+	Status     string                `json:"status"`
+	PublicNet  HetznerPublicNet      `json:"public_net"`
+	PrivateNet []HetznerPrivateNet   `json:"private_net"`
+	ServerType HetznerServerTypeInfo `json:"server_type"`
+	Datacenter HetznerDatacenterInfo `json:"datacenter"`
+	Image      HetznerImageInfo      `json:"image"`
+	Created    string                `json:"created"`
+	Labels     map[string]string     `json:"labels"`
+	Protection HetznerProtection     `json:"protection"`
 }
 
 // HetznerPublicNet represents public network information
@@ -90,10 +89,10 @@ type HetznerServerTypeInfo struct {
 
 // HetznerDatacenterInfo represents datacenter information
 type HetznerDatacenterInfo struct {
-	ID          int               `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Location    HetznerLocation   `json:"location"`
+	ID          int             `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Location    HetznerLocation `json:"location"`
 }
 
 // HetznerLocation represents location information
@@ -118,8 +117,8 @@ type HetznerImageInfo struct {
 
 // HetznerProtection represents server protection settings
 type HetznerProtection struct {
-	Delete   bool `json:"delete"`
-	Rebuild  bool `json:"rebuild"`
+	Delete  bool `json:"delete"`
+	Rebuild bool `json:"rebuild"`
 }
 
 // HetznerServersResponse represents the API response for servers
@@ -129,14 +128,14 @@ type HetznerServersResponse struct {
 
 // HetznerCreateServerRequest represents a server creation request
 type HetznerCreateServerRequest struct {
-	Name       string            `json:"name"`
-	ServerType string            `json:"server_type"`
-	Location   string            `json:"location"`
-	Image      string            `json:"image"`
-	SSHKeys    []string          `json:"ssh_keys,omitempty"`
-	UserData   string            `json:"user_data,omitempty"`
-	Labels     map[string]string `json:"labels,omitempty"`
-	StartAfterCreate bool        `json:"start_after_create"`
+	Name             string            `json:"name"`
+	ServerType       string            `json:"server_type"`
+	Location         string            `json:"location"`
+	Image            string            `json:"image"`
+	SSHKeys          []string          `json:"ssh_keys,omitempty"`
+	UserData         string            `json:"user_data,omitempty"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	StartAfterCreate bool              `json:"start_after_create"`
 }
 
 // HetznerCreateServerResponse represents a server creation response
@@ -167,7 +166,7 @@ type HetznerSSHKeysResponse struct {
 // makeRequest makes an authenticated request to the Hetzner API
 func (hs *HetznerService) makeRequest(method, endpoint, apiKey string, body interface{}) ([]byte, error) {
 	url := HetznerBaseURL + endpoint
-	
+
 	var reqBody *bytes.Buffer
 	if body != nil {
 		jsonBody, err := json.Marshal(body)

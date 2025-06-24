@@ -44,7 +44,7 @@ func main() {
 			return template.JS(b)
 		},
 	})
-	
+
 	r.LoadHTMLGlob("web/templates/*")
 	r.Static("/static", "web/static")
 
@@ -240,7 +240,7 @@ func handleLogin(c *gin.Context) {
 		var existingCSR map[string]interface{}
 		if err := getKVValue(client, token, accountID, "config:ssl:csr", &existingCSR); err != nil {
 			log.Println("🔧 Generating new CSR for SSL certificates")
-			
+
 			cfService := services.NewCloudflareService()
 			csrConfig, err := cfService.GenerateCSR()
 			if err != nil {
@@ -314,7 +314,7 @@ func handleSetupHetzner(c *gin.Context) {
 	}
 
 	hetznerKey := c.PostForm("hetzner_key")
-	
+
 	// Get account ID for checking existing key
 	_, accountID, err := checkKVNamespaceExists(token)
 	if err != nil {
@@ -322,7 +322,7 @@ func handleSetupHetzner(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error: %s", err.Error())))
 		return
 	}
-	
+
 	// If no key provided, check if there's an existing key
 	if hetznerKey == "" {
 		if existingKey, err := getHetznerAPIKey(token, accountID); err == nil && existingKey != "" {
@@ -343,7 +343,6 @@ func handleSetupHetzner(c *gin.Context) {
 		return
 	}
 
-
 	// Store encrypted Hetzner API key in KV
 	client := &http.Client{Timeout: 10 * time.Second}
 	encryptedKey, err := encryptData(hetznerKey, token)
@@ -363,7 +362,6 @@ func handleSetupHetzner(c *gin.Context) {
 	c.Header("HX-Redirect", "/main")
 	c.Status(http.StatusOK)
 }
-
 
 func handleDNSConfigPage(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
@@ -969,7 +967,7 @@ func sortServerTypesByPriceDesc(serverTypes []HetznerServerType) {
 		for j := 0; j < n-i-1; j++ {
 			priceJ := getServerTypeMonthlyPrice(serverTypes[j])
 			priceJ1 := getServerTypeMonthlyPrice(serverTypes[j+1])
-			
+
 			// For descending order: if current price < next price, swap
 			if priceJ < priceJ1 {
 				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
@@ -985,7 +983,7 @@ func sortServerTypesByPriceAsc(serverTypes []HetznerServerType) {
 		for j := 0; j < n-i-1; j++ {
 			priceJ := getServerTypeMonthlyPrice(serverTypes[j])
 			priceJ1 := getServerTypeMonthlyPrice(serverTypes[j+1])
-			
+
 			// For ascending order: if current price > next price, swap
 			if priceJ > priceJ1 {
 				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
@@ -999,10 +997,10 @@ func getServerTypeMonthlyPrice(serverType HetznerServerType) float64 {
 	if len(serverType.Prices) == 0 {
 		return 0.0
 	}
-	
+
 	// Use the first available price location
 	priceStr := serverType.Prices[0].PriceMonthly.Gross
-	
+
 	// Parse price string - it might be in format like "4.90" or "4.90 EUR"
 	// Remove any non-numeric characters except decimal point
 	cleanPrice := ""
@@ -1015,16 +1013,16 @@ func getServerTypeMonthlyPrice(serverType HetznerServerType) float64 {
 			foundDecimal = true
 		}
 	}
-	
+
 	if cleanPrice == "" {
 		return 0.0
 	}
-	
+
 	var priceFloat float64
 	if _, err := fmt.Sscanf(cleanPrice, "%f", &priceFloat); err != nil {
 		return 0.0
 	}
-	
+
 	return priceFloat
 }
 
@@ -1376,8 +1374,8 @@ func handleVPSServerOptions(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"locations":    locations,
-		"serverTypes":  sharedServerTypes,
+		"locations":   locations,
+		"serverTypes": sharedServerTypes,
 	})
 }
 
@@ -1391,7 +1389,7 @@ func handleVPSCreate(c *gin.Context) {
 	name := c.PostForm("name")
 	location := c.PostForm("location")
 	serverType := c.PostForm("server_type")
-	
+
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Server name is required"})
 		return
@@ -1416,10 +1414,10 @@ func handleVPSCreate(c *gin.Context) {
 	hetznerKey, err := getHetznerAPIKey(token, accountID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Hetzner API key not configured", 
+			"error":          "Hetzner API key not configured",
 			"setup_required": true,
-			"setup_step": "hetzner_api",
-			"message": "Please configure your Hetzner API key first in the setup section"})
+			"setup_step":     "hetzner_api",
+			"message":        "Please configure your Hetzner API key first in the setup section"})
 		return
 	}
 
@@ -1445,7 +1443,7 @@ func handleVPSCreate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate SSH key from CSR"})
 		return
 	}
-	
+
 	// Validate SSH public key format
 	if !strings.HasPrefix(sshPublicKey, "ssh-rsa ") {
 		keyPreview := sshPublicKey
@@ -1467,7 +1465,7 @@ func handleVPSCreate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create SSH key in Hetzner Cloud: %v", err)})
 		return
 	}
-	
+
 	// Use the actual key name from the found/created key
 	sshKeyName = sshKey.Name
 	log.Printf("✅ Using SSH key: %s (ID: %d)", sshKeyName, sshKey.ID)
@@ -1493,14 +1491,14 @@ func handleVPSCreate(c *gin.Context) {
 	server, err := hetznerService.CreateServer(hetznerKey, name, serverType, location, sshKeyName, sslCert, sslKey)
 	if err != nil {
 		log.Printf("Error creating server: %v", err)
-		
+
 		// Check for specific error types and provide user-friendly messages
 		errorStr := err.Error()
 		if strings.Contains(errorStr, "server name is already used") || strings.Contains(errorStr, "uniqueness_error") {
 			c.JSON(http.StatusConflict, gin.H{"error": "A server with this name already exists. Please choose a different name."})
 			return
 		}
-		
+
 		// Generic error for other cases
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create server: %v", err)})
 		return
@@ -1716,9 +1714,9 @@ func handleVPSSSHKey(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"private_key": csrConfig.PrivateKey,
 		"instructions": map[string]interface{}{
-			"save_to_file": "Save the private key to a file (e.g., ~/.ssh/xanthus-key.pem)",
+			"save_to_file":    "Save the private key to a file (e.g., ~/.ssh/xanthus-key.pem)",
 			"set_permissions": "chmod 600 ~/.ssh/xanthus-key.pem",
-			"ssh_command": "ssh -i ~/.ssh/xanthus-key.pem root@<server-ip>",
+			"ssh_command":     "ssh -i ~/.ssh/xanthus-key.pem root@<server-ip>",
 		},
 	})
 }
@@ -2146,7 +2144,7 @@ func handleVPSValidateName(c *gin.Context) {
 		if server.Name == name {
 			c.JSON(http.StatusConflict, gin.H{
 				"available": false,
-				"error": "A VPS with this name already exists in your Hetzner account",
+				"error":     "A VPS with this name already exists in your Hetzner account",
 			})
 			return
 		}
@@ -2154,7 +2152,7 @@ func handleVPSValidateName(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"available": true,
-		"message": "Name is available",
+		"message":   "Name is available",
 	})
 }
 

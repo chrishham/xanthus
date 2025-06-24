@@ -52,6 +52,14 @@
                     </svg>
                     Refresh
                 </button>
+                <button @click="toggleAutoRefresh()" 
+                        class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        :class="{'bg-green-50 border-green-300 text-green-700': autoRefreshEnabled}">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <span x-text="autoRefreshEnabled ? 'Auto-refresh ON' : 'Auto-refresh OFF'"></span>
+                </button>
                 <a href="/vps/create" 
                    class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -59,6 +67,13 @@
                     </svg>
                     Create New VPS
                 </a>
+            </div>
+            <div x-show="autoRefreshEnabled" class="text-sm text-gray-500">
+                <span x-text="'Auto-refreshing every ' + (getAdaptiveInterval() / 1000) + ' seconds'"></span>
+                <span x-show="adaptivePolling && servers.some(s => ['initializing', 'starting', 'stopping'].includes(s.status))" 
+                      class="text-blue-600 font-medium">
+                    (fast mode)
+                </span>
             </div>
         </div>
 
@@ -236,9 +251,107 @@
             return {
                 servers: {{.Servers | toJSON}},
                 loading: false,
+                autoRefreshEnabled: true,
+                refreshInterval: 10000, // 10 seconds - faster for better UX
+                intervalId: null,
+                adaptivePolling: true,
 
                 init() {
-                    // Initial load is handled by the server template
+                    // Start automatic refresh
+                    this.startAutoRefresh();
+                    
+                    // Stop polling when page is hidden/unfocused
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.hidden) {
+                            this.stopAutoRefresh();
+                        } else {
+                            this.startAutoRefresh();
+                            // Refresh immediately when page becomes visible
+                            this.refreshServersQuietly();
+                        }
+                    });
+                },
+
+                startAutoRefresh() {
+                    if (this.autoRefreshEnabled && !this.intervalId) {
+                        this.intervalId = setInterval(() => {
+                            this.refreshServersQuietly();
+                        }, this.getAdaptiveInterval());
+                    }
+                },
+
+                getAdaptiveInterval() {
+                    if (!this.adaptivePolling) {
+                        return this.refreshInterval;
+                    }
+                    
+                    // Check if any servers are in transitional states
+                    const transitionalStates = ['initializing', 'starting', 'stopping'];
+                    const hasTransitionalServers = this.servers.some(server => 
+                        transitionalStates.includes(server.status)
+                    );
+                    
+                    // Use faster polling (5 seconds) when servers are transitioning
+                    return hasTransitionalServers ? 5000 : this.refreshInterval;
+                },
+
+                restartAutoRefreshWithNewInterval() {
+                    if (this.autoRefreshEnabled) {
+                        this.stopAutoRefresh();
+                        this.startAutoRefresh();
+                    }
+                },
+
+                stopAutoRefresh() {
+                    if (this.intervalId) {
+                        clearInterval(this.intervalId);
+                        this.intervalId = null;
+                    }
+                },
+
+                toggleAutoRefresh() {
+                    this.autoRefreshEnabled = !this.autoRefreshEnabled;
+                    if (this.autoRefreshEnabled) {
+                        this.startAutoRefresh();
+                    } else {
+                        this.stopAutoRefresh();
+                    }
+                },
+
+                async refreshServersQuietly() {
+                    // Refresh without showing loading spinner
+                    try {
+                        const response = await fetch('/vps/list', {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            const oldServers = this.servers;
+                            this.servers = data.servers || [];
+                            
+                            // Check if we need to adjust polling interval
+                            if (this.adaptivePolling) {
+                                const oldHasTransitional = oldServers.some(s => 
+                                    ['initializing', 'starting', 'stopping'].includes(s.status)
+                                );
+                                const newHasTransitional = this.servers.some(s => 
+                                    ['initializing', 'starting', 'stopping'].includes(s.status)
+                                );
+                                
+                                // Restart with new interval if transitional state changed
+                                if (oldHasTransitional !== newHasTransitional) {
+                                    this.restartAutoRefreshWithNewInterval();
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.log('Background refresh failed:', error);
+                        // Silently fail for background updates
+                    }
                 },
 
                 async refreshServers() {
@@ -736,6 +849,11 @@
                     } finally {
                         this.loading = false;
                     }
+                },
+
+                // Cleanup on component destroy
+                destroy() {
+                    this.stopAutoRefresh();
                 }
             }
         }
