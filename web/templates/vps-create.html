@@ -394,8 +394,7 @@
                             <span class="text-blue-900" x-text="'€' + (parseFloat(selectedServerType?.monthlyPrice || 0) + 0.5).toFixed(2) + '/month'"></span>
                         </div>
                         <div class="mt-2 pt-1 border-t border-blue-200">
-                            <p class="text-xs text-blue-600">* Prices are including VAT</p>
-                            <p class="text-xs text-blue-600">* Final billing may vary based on your tax jurisdiction</p>
+                            <p class="text-xs text-blue-600" x-text="'* Prices include ' + (selectedServerType?.vatPercentage || '0') + '% VAT'"></p>
                         </div>
                     </div>
                 </div>
@@ -546,16 +545,23 @@
                         if (response.ok) {
                             // Process server types to add computed fields
                             this.serverTypes = (data.serverTypes || []).map(type => {
-                                // Calculate monthly price from hourly rate
-                                const hourlyPrice = type.prices.find(p => p.location !== 'monthly_calc')?.price_hourly?.gross || '0';
-                                const monthlyPrice = (parseFloat(hourlyPrice) * 24 * 30).toFixed(2);
+                                // Use Hetzner's actual monthly pricing (not calculated from hourly)
+                                const priceData = type.prices.find(p => p.location !== 'monthly_calc');
+                                const monthlyPriceGross = priceData?.price_monthly?.gross || '0';
+                                const monthlyPriceNet = priceData?.price_monthly?.net || '0';
+                                
+                                // Calculate VAT percentage
+                                const vatPercentage = parseFloat(monthlyPriceNet) > 0 ? 
+                                    (((parseFloat(monthlyPriceGross) - parseFloat(monthlyPriceNet)) / parseFloat(monthlyPriceNet)) * 100).toFixed(0) : '0';
                                 
                                 // Check availability for selected location
                                 const available = type.available_locations && type.available_locations[this.selectedLocation.name] !== false;
                                 
                                 return {
                                     ...type,
-                                    monthlyPrice: monthlyPrice,
+                                    monthlyPrice: parseFloat(monthlyPriceGross).toFixed(2),
+                                    monthlyPriceNet: parseFloat(monthlyPriceNet).toFixed(2),
+                                    vatPercentage: vatPercentage,
                                     available: available
                                 };
                             });

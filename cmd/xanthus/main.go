@@ -964,9 +964,6 @@ func filterSharedVCPUServers(serverTypes []HetznerServerType) []HetznerServerTyp
 
 // sortServerTypesByPriceDesc sorts server types by price in descending order (highest first)
 func sortServerTypesByPriceDesc(serverTypes []HetznerServerType) {
-	log.Printf("DEBUG: Sorting %d server types by price descending", len(serverTypes))
-	
-	// Use a simple bubble sort with better debugging
 	n := len(serverTypes)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -976,24 +973,13 @@ func sortServerTypesByPriceDesc(serverTypes []HetznerServerType) {
 			// For descending order: if current price < next price, swap
 			if priceJ < priceJ1 {
 				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
-				log.Printf("DEBUG: Swapped %s (%.2f) with %s (%.2f)", serverTypes[j+1].Name, priceJ, serverTypes[j].Name, priceJ1)
 			}
 		}
-	}
-	
-	// Log final order
-	log.Printf("DEBUG: Final descending order:")
-	for i, server := range serverTypes {
-		price := getServerTypeMonthlyPrice(server)
-		log.Printf("DEBUG: %d. %s: %.2f", i+1, server.Name, price)
 	}
 }
 
 // sortServerTypesByPriceAsc sorts server types by price in ascending order (lowest first)
 func sortServerTypesByPriceAsc(serverTypes []HetznerServerType) {
-	log.Printf("DEBUG: Sorting %d server types by price ascending", len(serverTypes))
-	
-	// Use a simple bubble sort with better debugging
 	n := len(serverTypes)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -1003,16 +989,8 @@ func sortServerTypesByPriceAsc(serverTypes []HetznerServerType) {
 			// For ascending order: if current price > next price, swap
 			if priceJ > priceJ1 {
 				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
-				log.Printf("DEBUG: Swapped %s (%.2f) with %s (%.2f)", serverTypes[j+1].Name, priceJ, serverTypes[j].Name, priceJ1)
 			}
 		}
-	}
-	
-	// Log final order
-	log.Printf("DEBUG: Final ascending order:")
-	for i, server := range serverTypes {
-		price := getServerTypeMonthlyPrice(server)
-		log.Printf("DEBUG: %d. %s: %.2f", i+1, server.Name, price)
 	}
 }
 
@@ -1024,9 +1002,6 @@ func getServerTypeMonthlyPrice(serverType HetznerServerType) float64 {
 	
 	// Use the first available price location
 	priceStr := serverType.Prices[0].PriceMonthly.Gross
-	
-	// Debug: log the price string format
-	log.Printf("DEBUG: Server %s price string: '%s'", serverType.Name, priceStr)
 	
 	// Parse price string - it might be in format like "4.90" or "4.90 EUR"
 	// Remove any non-numeric characters except decimal point
@@ -1042,17 +1017,14 @@ func getServerTypeMonthlyPrice(serverType HetznerServerType) float64 {
 	}
 	
 	if cleanPrice == "" {
-		log.Printf("DEBUG: Could not extract numeric price from '%s'", priceStr)
 		return 0.0
 	}
 	
 	var priceFloat float64
 	if _, err := fmt.Sscanf(cleanPrice, "%f", &priceFloat); err != nil {
-		log.Printf("DEBUG: Failed to parse price '%s' from '%s': %v", cleanPrice, priceStr, err)
 		return 0.0
 	}
 	
-	log.Printf("DEBUG: Server %s parsed price: %.2f", serverType.Name, priceFloat)
 	return priceFloat
 }
 
