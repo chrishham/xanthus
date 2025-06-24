@@ -258,6 +258,22 @@ The SSL certificates stored in `domain:{domain}:ssl_config` are **Cloudflare Ori
 - **Automatic Setup**: SSH public key automatically uploaded to Hetzner during VPS creation
 - **Connection Details**: SSH connection information stored in VPS configuration
 - **Key Conversion**: RSA private key from CSR converted to SSH format using `golang.org/x/crypto/ssh`
+- **Smart Key Reuse**: SSH keys are intelligently reused across VPS instances based on public key content matching
+
+### SSH Key Management ✅ **IMPLEMENTED**
+- **Key Naming Pattern**: `xanthus-key-{unix_timestamp}` (e.g., `xanthus-key-1750699924`)
+- **Content-Based Matching**: Keys are matched by public key content, not by name
+- **Automatic Reuse**: Existing SSH keys with matching public key content are reused for new VPS instances
+- **Single Key Source**: All SSH keys derive from the same CSR private key stored in Cloudflare KV
+- **Key Identification**: All keys are labeled with `managed_by: xanthus` for identification
+- **Efficient Management**: Prevents duplicate SSH keys in Hetzner Cloud while maintaining security
+
+#### SSH Key Reuse Logic
+1. **VPS Creation Process**: Each VPS creation generates a new timestamp-based key name
+2. **Existing Key Check**: System searches for existing keys with matching public key content
+3. **Smart Reuse**: If found, the existing key is reused (retaining its original name)
+4. **New Key Creation**: If no match found, a new SSH key is created with the timestamp name
+5. **Consistent Access**: All VPS instances use the same underlying RSA private key for SSH access
 
 ### API Endpoints
 - `GET /vps` - VPS management page
