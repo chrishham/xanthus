@@ -67,6 +67,7 @@ func main() {
 	r.GET("/vps/locations", handleVPSLocations)
 	r.GET("/vps/server-types", handleVPSServerTypes)
 	r.GET("/vps/server-options", handleVPSServerOptions)
+	r.POST("/vps/validate-name", handleVPSValidateName)
 	r.POST("/vps/create", handleVPSCreate)
 	r.POST("/vps/delete", handleVPSDelete)
 	r.POST("/vps/poweroff", handleVPSPowerOff)
@@ -1520,6 +1521,15 @@ func handleVPSCreate(c *gin.Context) {
 	server, err := hetznerService.CreateServer(hetznerKey, name, serverType, location, sshKeyName, sslCert, sslKey)
 	if err != nil {
 		log.Printf("Error creating server: %v", err)
+		
+		// Check for specific error types and provide user-friendly messages
+		errorStr := err.Error()
+		if strings.Contains(errorStr, "server name is already used") || strings.Contains(errorStr, "uniqueness_error") {
+			c.JSON(http.StatusConflict, gin.H{"error": "A server with this name already exists. Please choose a different name."})
+			return
+		}
+		
+		// Generic error for other cases
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create server: %v", err)})
 		return
 	}
@@ -2121,6 +2131,59 @@ func handleVPSLocations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"locations": locations})
+}
+
+func handleVPSValidateName(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	name := c.PostForm("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := getHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Check if name already exists by listing servers
+	hetznerService := services.NewHetznerService()
+	servers, err := hetznerService.ListServers(hetznerKey)
+	if err != nil {
+		log.Printf("Error checking existing servers: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check existing servers"})
+		return
+	}
+
+	// Check if name is already in use
+	for _, server := range servers {
+		if server.Name == name {
+			c.JSON(http.StatusConflict, gin.H{
+				"available": false,
+				"error": "A VPS with this name already exists in your Hetzner account",
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"available": true,
+		"message": "Name is available",
+	})
 }
 
 func handleVPSServerTypes(c *gin.Context) {

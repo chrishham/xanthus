@@ -293,11 +293,31 @@
             <div class="space-y-4 mb-6">
                 <div>
                     <label for="server-name" class="block text-sm font-medium text-gray-700 mb-1">Server Name</label>
-                    <input type="text" 
-                           id="server-name" 
-                           x-model="serverName"
-                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                           :placeholder="'xanthus-k3s-' + Date.now()">
+                    <div class="relative">
+                        <input type="text" 
+                               id="server-name" 
+                               x-model="serverName"
+                               @input="debounceValidateName()"
+                               class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                               :class="nameValidationState === 'checking' ? 'border-yellow-300' : nameValidationState === 'valid' ? 'border-green-300' : nameValidationState === 'invalid' ? 'border-red-300' : 'border-gray-300'"
+                               :placeholder="'xanthus-k3s-' + Date.now()">
+                        
+                        <!-- Validation indicator -->
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+                            <div x-show="nameValidationState === 'checking'" class="animate-spin h-4 w-4 border-2 border-yellow-300 border-t-transparent rounded-full"></div>
+                            <svg x-show="nameValidationState === 'valid'" class="h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            <svg x-show="nameValidationState === 'invalid'" class="h-4 w-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <!-- Validation message -->
+                    <div x-show="nameValidationMessage" class="mt-3 text-sm" :class="nameValidationState === 'valid' ? 'text-green-600' : nameValidationState === 'invalid' ? 'text-red-600' : 'text-gray-600'">
+                        <span x-text="nameValidationMessage"></span>
+                    </div>
                 </div>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -373,6 +393,10 @@
                             <span class="text-blue-900">Total Monthly:</span>
                             <span class="text-blue-900" x-text="'€' + (parseFloat(selectedServerType?.monthlyPrice || 0) + 0.5).toFixed(2) + '/month'"></span>
                         </div>
+                        <div class="mt-2 pt-1 border-t border-blue-200">
+                            <p class="text-xs text-blue-600">* Prices are including VAT</p>
+                            <p class="text-xs text-blue-600">* Final billing may vary based on your tax jurisdiction</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -383,7 +407,7 @@
                     Previous
                 </button>
                 <button @click="createVPS()" 
-                        :disabled="!serverName || creating"
+                        :disabled="!serverName || creating || nameValidationState !== 'valid'"
                         class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
                     <span x-show="!creating">Create VPS</span>
                     <span x-show="creating">Creating...</span>
@@ -418,10 +442,15 @@
                 
                 // Step 4: Review
                 serverName: '',
+                nameValidationState: '', // '', 'checking', 'valid', 'invalid'
+                nameValidationMessage: '',
+                nameValidationTimeout: null,
                 
                 async init() {
                     this.serverName = `xanthus-k3s-${Date.now()}`;
                     await this.checkExistingKey();
+                    // Validate initial name
+                    await this.validateName();
                 },
                 
                 async checkExistingKey() {
@@ -596,8 +625,80 @@
                     }
                 },
                 
+                debounceValidateName() {
+                    if (this.nameValidationTimeout) {
+                        clearTimeout(this.nameValidationTimeout);
+                    }
+                    
+                    this.nameValidationTimeout = setTimeout(() => {
+                        this.validateName();
+                    }, 500); // Wait 500ms after user stops typing
+                },
+                
+                async validateName() {
+                    if (!this.serverName || this.serverName.trim().length === 0) {
+                        this.nameValidationState = '';
+                        this.nameValidationMessage = '';
+                        return;
+                    }
+                    
+                    // Basic validation
+                    if (this.serverName.length < 3) {
+                        this.nameValidationState = 'invalid';
+                        this.nameValidationMessage = 'Name must be at least 3 characters long';
+                        return;
+                    }
+                    
+                    if (this.serverName.length > 63) {
+                        this.nameValidationState = 'invalid';
+                        this.nameValidationMessage = 'Name must be less than 64 characters';
+                        return;
+                    }
+                    
+                    // Check for valid characters (alphanumeric and hyphens)
+                    if (!/^[a-zA-Z0-9-]+$/.test(this.serverName)) {
+                        this.nameValidationState = 'invalid';
+                        this.nameValidationMessage = 'Name can only contain letters, numbers, and hyphens';
+                        return;
+                    }
+                    
+                    // Cannot start or end with hyphen
+                    if (this.serverName.startsWith('-') || this.serverName.endsWith('-')) {
+                        this.nameValidationState = 'invalid';
+                        this.nameValidationMessage = 'Name cannot start or end with a hyphen';
+                        return;
+                    }
+                    
+                    this.nameValidationState = 'checking';
+                    this.nameValidationMessage = 'Checking name availability...';
+                    
+                    try {
+                        const response = await fetch('/vps/validate-name', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `name=${encodeURIComponent(this.serverName)}`
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok && data.available) {
+                            this.nameValidationState = 'valid';
+                            this.nameValidationMessage = 'Name is available';
+                        } else {
+                            this.nameValidationState = 'invalid';
+                            this.nameValidationMessage = data.error || 'Name is not available';
+                        }
+                    } catch (error) {
+                        console.error('Error validating name:', error);
+                        this.nameValidationState = 'invalid';
+                        this.nameValidationMessage = 'Unable to check name availability';
+                    }
+                },
+                
                 async createVPS() {
-                    if (!this.serverName || !this.selectedLocation || !this.selectedServerType) return;
+                    if (!this.serverName || !this.selectedLocation || !this.selectedServerType || this.nameValidationState !== 'valid') return;
                     
                     this.creating = true;
                     try {
