@@ -30,21 +30,14 @@ mkdir -p scripts
 
 ### 2. Initialize Go Module
 ```bash
-go mod init xanthus
+go mod init github.com/chrishham/xanthus
 ```
 
 ### 3. Install Dependencies
 ```bash
 # Core dependencies
 go get github.com/gin-gonic/gin
-go get github.com/spf13/viper
-go get github.com/cloudflare/cloudflare-go
-
-# Hetzner Cloud API
-go get github.com/hetznercloud/hcloud-go/hcloud
-
-# Additional utilities
-go get github.com/joho/godotenv
+go get golang.org/x/crypto
 ```
 
 ### 4. Frontend Dependencies
@@ -69,8 +62,8 @@ npm install
 3. **Cloudflare Integration** (`internal/services/cloudflare.go`) ✅ **IMPLEMENTED**
 4. **KV Storage Service** (`internal/services/kv.go`) ✅ **IMPLEMENTED**
 5. **Hetzner Cloud Integration** (`internal/services/hetzner.go`) ✅ **IMPLEMENTED**
-6. **Web Handlers** (`internal/handlers/`) ✅ **IMPLEMENTED IN MAIN**
-7. **API Routes** (`internal/api/`) ✅ **IMPLEMENTED IN MAIN**
+6. **Web Handlers** ✅ **IMPLEMENTED IN MAIN**
+7. **API Routes** ✅ **IMPLEMENTED IN MAIN**
 8. **Frontend Templates** (`web/templates/`) ✅ **IMPLEMENTED**
 9. **Static Assets** (`web/static/`)
 
@@ -187,19 +180,7 @@ All data is stored in a single KV namespace called **"Xanthus"** within the user
 **Key**: `config:hetzner:api_key`
 **Value**: AES-256-GCM encrypted string (encrypted using Cloudflare token as key)
 
-#### 4. Server Configuration Storage
-**Key**: `config:server:selection`
-
-**Value Structure**:
-```json
-{
-  "location": "nbg1",
-  "server_type": "cpx11",
-  "created_at": "2024-06-23T10:30:00Z"
-}
-```
-
-#### 5. VPS Configuration Storage ✅ **NEW**
+#### 4. VPS Configuration Storage ✅ **NEW**
 **Key Format**: `vps:{server_id}:config`
 **Example**: `vps:123456:config`
 
