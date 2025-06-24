@@ -34,6 +34,16 @@
     </nav>
 
     <div x-data="vpsManagement()" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Loading Modal -->
+        <div x-show="loading" x-transition.opacity class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl p-8 max-w-md mx-4">
+                <div class="text-center">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2" x-text="loadingTitle">Processing...</h3>
+                    <p class="text-gray-600" x-text="loadingMessage">Please wait while the operation completes.</p>
+                </div>
+            </div>
+        </div>
         <!-- Header -->
         <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-2">VPS Management</h2>
@@ -77,14 +87,9 @@
             </div>
         </div>
 
-        <!-- Loading State -->
-        <div x-show="loading" class="text-center py-12">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p class="mt-2 text-gray-600">Loading servers...</p>
-        </div>
 
         <!-- No Servers State -->
-        <div x-show="!loading && servers.length === 0" class="text-center py-12">
+        <div x-show="servers.length === 0 && !loading" class="text-center py-12">
             <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path>
             </svg>
@@ -102,7 +107,7 @@
         </div>
 
         <!-- Servers Grid -->
-        <div x-show="!loading && servers.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div x-show="servers.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <template x-for="server in servers" :key="server.id">
                 <div class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
                     <!-- Server Header -->
@@ -251,6 +256,8 @@
             return {
                 servers: {{.Servers | toJSON}},
                 loading: false,
+                loadingTitle: 'Processing...',
+                loadingMessage: 'Please wait while the operation completes.',
                 autoRefreshEnabled: true,
                 refreshInterval: 10000, // 10 seconds - faster for better UX
                 intervalId: null,
@@ -355,7 +362,7 @@
                 },
 
                 async refreshServers() {
-                    this.loading = true;
+                    this.setLoadingState('Refreshing Servers', 'Loading server list...');
                     try {
                         const response = await fetch('/vps/list', {
                             method: 'GET',
@@ -479,7 +486,7 @@
                 },
 
                 async createServer(name, location, serverType) {
-                    this.loading = true;
+                    this.setLoadingState('Creating VPS', `Creating VPS "${name}"...`);
                     try {
                         const response = await fetch('/vps/create', {
                             method: 'POST',
@@ -527,7 +534,7 @@
                 },
 
                 async deleteServer(serverId, serverName) {
-                    this.loading = true;
+                    this.setLoadingState('Deleting VPS', `Deleting VPS "${serverName}"...`);
                     try {
                         const response = await fetch('/vps/delete', {
                             method: 'POST',
@@ -566,7 +573,12 @@
                 },
 
                 async performServerAction(action, serverId, serverName, actionText) {
-                    this.loading = true;
+                    const actionTitles = {
+                        'poweroff': 'Powering Off VPS',
+                        'poweron': 'Powering On VPS', 
+                        'reboot': 'Rebooting VPS'
+                    };
+                    this.setLoadingState(actionTitles[action] || 'VPS Action', `${actionText.charAt(0).toUpperCase() + actionText.slice(1)} "${serverName}"...`);
                     try {
                         const response = await fetch(`/vps/${action}`, {
                             method: 'POST',
@@ -675,7 +687,7 @@
                 },
 
                 async checkVPSStatus(serverId) {
-                    this.loading = true;
+                    this.setLoadingState('Health Check', 'Checking VPS status and services...');
                     try {
                         const response = await fetch(`/vps/${serverId}/status`);
                         const data = await response.json();
@@ -734,7 +746,7 @@
                 },
 
                 async showVPSLogs(serverId) {
-                    this.loading = true;
+                    this.setLoadingState('Loading Logs', 'Retrieving K3s service logs...');
                     try {
                         const response = await fetch(`/vps/${serverId}/logs?lines=100`);
                         const data = await response.json();
@@ -826,7 +838,7 @@
                 },
 
                 async configureVPS(serverId, domain) {
-                    this.loading = true;
+                    this.setLoadingState('Configuring VPS', `Configuring SSL for domain "${domain}"...`);
                     try {
                         const response = await fetch(`/vps/${serverId}/configure`, {
                             method: 'POST',
@@ -849,6 +861,12 @@
                     } finally {
                         this.loading = false;
                     }
+                },
+
+                setLoadingState(title, message) {
+                    this.loadingTitle = title;
+                    this.loadingMessage = message;
+                    this.loading = true;
                 },
 
                 // Cleanup on component destroy
