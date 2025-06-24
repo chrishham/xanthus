@@ -2,6 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fix CSS compatibility issues */
+button, input:where([type="button"]), input:where([type="reset"]), input:where([type="submit"]) {
+    -webkit-appearance: button;
+    appearance: button;
+}
+
+[type="search"] {
+    -webkit-appearance: textfield;
+    appearance: textfield;
+}
+
+::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+::-webkit-file-upload-button {
+    -webkit-appearance: button;
+    appearance: button;
+}
+
+audio, canvas, embed, iframe, img, object, svg, video {
+    display: block;
+    /* Remove vertical-align: middle for block elements */
+}
+
 /* Custom styles for Xanthus */
 .htmx-indicator {
     display: none;
