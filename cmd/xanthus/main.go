@@ -61,6 +61,11 @@ func main() {
 	r.POST("/dns/remove", handleDNSRemove)
 	r.GET("/vps", handleVPSManagePage)
 	r.GET("/vps/list", handleVPSList)
+	r.GET("/vps/create", handleVPSCreatePage)
+	r.GET("/vps/check-key", handleVPSCheckKey)
+	r.POST("/vps/validate-key", handleVPSValidateKey)
+	r.GET("/vps/locations", handleVPSLocations)
+	r.GET("/vps/server-types", handleVPSServerTypes)
 	r.GET("/vps/server-options", handleVPSServerOptions)
 	r.POST("/vps/create", handleVPSCreate)
 	r.POST("/vps/delete", handleVPSDelete)
@@ -255,8 +260,8 @@ func handleLogin(c *gin.Context) {
 			log.Println("✅ CSR already exists in KV")
 		}
 
-		// Valid token - proceed to main app
-		c.SetCookie("cf_token", token, 3600, "/", "", false, true)
+		// Valid token - proceed to main app (24 hours = 86400 seconds)
+		c.SetCookie("cf_token", token, 86400, "/", "", false, true)
 		c.Header("HX-Redirect", "/main")
 		c.Status(http.StatusOK)
 	} else {
@@ -1050,6 +1055,54 @@ func getServerTypeMonthlyPrice(serverType HetznerServerType) float64 {
 	return priceFloat
 }
 
+// sortServerTypesByCPUDesc sorts server types by CPU cores in descending order
+func sortServerTypesByCPUDesc(serverTypes []HetznerServerType) {
+	n := len(serverTypes)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if serverTypes[j].Cores < serverTypes[j+1].Cores {
+				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
+			}
+		}
+	}
+}
+
+// sortServerTypesByCPUAsc sorts server types by CPU cores in ascending order
+func sortServerTypesByCPUAsc(serverTypes []HetznerServerType) {
+	n := len(serverTypes)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if serverTypes[j].Cores > serverTypes[j+1].Cores {
+				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
+			}
+		}
+	}
+}
+
+// sortServerTypesByMemoryDesc sorts server types by memory in descending order
+func sortServerTypesByMemoryDesc(serverTypes []HetznerServerType) {
+	n := len(serverTypes)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if serverTypes[j].Memory < serverTypes[j+1].Memory {
+				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
+			}
+		}
+	}
+}
+
+// sortServerTypesByMemoryAsc sorts server types by memory in ascending order
+func sortServerTypesByMemoryAsc(serverTypes []HetznerServerType) {
+	n := len(serverTypes)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if serverTypes[j].Memory > serverTypes[j+1].Memory {
+				serverTypes[j], serverTypes[j+1] = serverTypes[j+1], serverTypes[j]
+			}
+		}
+	}
+}
+
 // fetchCloudflareDomains fetches all domain zones from Cloudflare API
 func fetchCloudflareDomains(token string) ([]CloudflareDomain, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -1317,11 +1370,35 @@ func handleVPSServerOptions(c *gin.Context) {
 	// Filter to only shared vCPU servers for cost efficiency
 	sharedServerTypes := filterSharedVCPUServers(serverTypes)
 
-	// Get sort parameter and sort by price
+	// Apply architecture filter if requested
+	architectureFilter := c.Query("architecture")
+	if architectureFilter != "" {
+		var filteredTypes []HetznerServerType
+		for _, serverType := range sharedServerTypes {
+			if serverType.Architecture == architectureFilter {
+				filteredTypes = append(filteredTypes, serverType)
+			}
+		}
+		sharedServerTypes = filteredTypes
+	}
+
+	// Get sort parameter and sort
 	sortBy := c.Query("sort")
-	if sortBy == "price_desc" {
+	switch sortBy {
+	case "price_desc":
 		sortServerTypesByPriceDesc(sharedServerTypes)
-	} else if sortBy == "price_asc" {
+	case "price_asc":
+		sortServerTypesByPriceAsc(sharedServerTypes)
+	case "cpu_desc":
+		sortServerTypesByCPUDesc(sharedServerTypes)
+	case "cpu_asc":
+		sortServerTypesByCPUAsc(sharedServerTypes)
+	case "memory_desc":
+		sortServerTypesByMemoryDesc(sharedServerTypes)
+	case "memory_asc":
+		sortServerTypesByMemoryAsc(sharedServerTypes)
+	default:
+		// Default to price ascending
 		sortServerTypesByPriceAsc(sharedServerTypes)
 	}
 
@@ -1927,4 +2004,189 @@ func handleVPSLogs(c *gin.Context) {
 		"logs":      logs,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+// New VPS Creation Wizard Handlers
+
+func handleVPSCreatePage(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+	c.HTML(http.StatusOK, "vps-create.html", nil)
+}
+
+func handleVPSCheckKey(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"exists": false})
+		return
+	}
+
+	// Check if Hetzner API key exists
+	hetznerKey, err := getHetznerAPIKey(token, accountID)
+	if err != nil || hetznerKey == "" {
+		c.JSON(http.StatusOK, gin.H{"exists": false})
+		return
+	}
+
+	// Mask the key for security (show only first 4 and last 4 characters)
+	maskedKey := ""
+	if len(hetznerKey) > 8 {
+		maskedKey = hetznerKey[:4] + "..." + hetznerKey[len(hetznerKey)-4:]
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"exists":     true,
+		"masked_key": maskedKey,
+	})
+}
+
+func handleVPSValidateKey(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	apiKey := c.PostForm("key")
+	if apiKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "API key is required"})
+		return
+	}
+
+	// Validate the key
+	if !validateHetznerAPIKey(apiKey) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Hetzner API key"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Store the key
+	client := &http.Client{Timeout: 10 * time.Second}
+	encryptedKey, err := encryptData(apiKey, token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encrypt API key"})
+		return
+	}
+
+	if err := putKVValue(client, token, accountID, "config:hetzner:api_key", encryptedKey); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store API key"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func handleVPSLocations(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := getHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Fetch locations
+	locations, err := fetchHetznerLocations(hetznerKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch locations"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"locations": locations})
+}
+
+func handleVPSServerTypes(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	location := c.Query("location")
+	if location == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Location parameter is required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := getHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Fetch server types
+	serverTypes, err := fetchHetznerServerTypes(hetznerKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch server types"})
+		return
+	}
+
+	// Filter to only shared vCPU servers
+	sharedServerTypes := filterSharedVCPUServers(serverTypes)
+
+	// Get availability for the selected location
+	availability, err := fetchServerAvailability(hetznerKey)
+	if err != nil {
+		log.Printf("Warning: Could not fetch availability: %v", err)
+		availability = make(map[string]map[int]bool)
+	}
+
+	// Add availability and pricing information
+	for i := range sharedServerTypes {
+		// Check availability in the selected location
+		if locationAvailability, exists := availability[location]; exists {
+			sharedServerTypes[i].AvailableLocations = map[string]bool{location: locationAvailability[sharedServerTypes[i].ID]}
+		} else {
+			// Default to available if we can't check
+			sharedServerTypes[i].AvailableLocations = map[string]bool{location: true}
+		}
+
+		// Calculate monthly price from hourly
+		monthlyPrice := getServerTypeMonthlyPrice(sharedServerTypes[i])
+		// Add a monthlyPrice field for easy access in frontend
+		sharedServerTypes[i].Prices = append(sharedServerTypes[i].Prices, HetznerPrice{
+			Location: "monthly_calc",
+			PriceMonthly: HetznerPriceDetail{
+				Gross: fmt.Sprintf("%.2f", monthlyPrice),
+			},
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"serverTypes": sharedServerTypes})
 }

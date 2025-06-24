@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xanthus - Create VPS</title>
+    <link rel="icon" type="image/x-icon" href="/static/icons/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/css/output.css">
+    <link rel="stylesheet" href="/static/css/sweetalert2.min.css">
+    <script src="/static/js/vendor/htmx.min.js"></script>
+    <script src="/static/js/vendor/alpine.min.js" defer></script>
+    <script src="/static/js/vendor/sweetalert2.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-md border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <img src="/static/icons/logo.png" alt="Xanthus Logo" class="w-8 h-8 mr-3">
+                    <h1 class="text-xl font-semibold text-gray-900">Xanthus</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/main" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                    <a href="/dns" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">DNS Config</a>
+                    <a href="/vps" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">VPS Management</a>
+                    <a href="/logout" class="text-red-600 hover:text-red-800 px-3 py-2 rounded-md text-sm font-medium">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div x-data="vpsCreationWizard()" class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-3xl font-bold text-gray-900 mb-2">Create New VPS</h2>
+                    <p class="text-gray-600">Step-by-step configuration for your K3s deployment server</p>
+                </div>
+                <a href="/vps" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Back to VPS Management
+                </a>
+            </div>
+        </div>
+
+        <!-- Progress Steps -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <!-- Step 1: Hetzner Key -->
+                    <div class="flex items-center" :class="currentStep >= 1 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 1 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span x-show="currentStep > 1" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 1" class="text-sm">1</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Hetzner API</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+                    
+                    <!-- Step 2: Location -->
+                    <div class="flex items-center" :class="currentStep >= 2 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 2 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span x-show="currentStep > 2" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 2" class="text-sm">2</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Location</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+                    
+                    <!-- Step 3: Server Type -->
+                    <div class="flex items-center" :class="currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 3 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span x-show="currentStep > 3" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 3" class="text-sm">3</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Server Type</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 4 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+                    
+                    <!-- Step 4: Review -->
+                    <div class="flex items-center" :class="currentStep >= 4 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 4 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span class="text-sm">4</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Review</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div x-show="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p class="mt-2 text-gray-600" x-text="loadingMessage">Loading...</p>
+        </div>
+
+        <!-- Step 1: Hetzner API Key -->
+        <div x-show="currentStep === 1 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 1: Hetzner Cloud API Key</h3>
+            
+            <div x-show="!existingKey" class="space-y-4">
+                <p class="text-gray-600">Enter your Hetzner Cloud API key to manage VPS instances. You can create one in your Hetzner Cloud Console under "Security" → "API Tokens".</p>
+                
+                <div>
+                    <label for="hetzner-key" class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                    <input type="password" 
+                           id="hetzner-key" 
+                           x-model="hetznerKey"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Enter your Hetzner Cloud API key">
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="validateHetznerKey()" 
+                            :disabled="!hetznerKey || validatingKey"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                        <span x-show="!validatingKey">Validate & Continue</span>
+                        <span x-show="validatingKey">Validating...</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div x-show="existingKey" class="space-y-4">
+                <div class="p-4 bg-green-50 border border-green-200 rounded-md">
+                    <div class="flex items-center">
+                        <svg class="h-5 w-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span class="text-green-800 font-medium">Existing Hetzner API key found</span>
+                    </div>
+                    <p class="text-green-700 text-sm mt-1" x-text="'Key ending in: ' + existingKey"></p>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="useExistingKey()" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Use Existing Key
+                    </button>
+                    <button @click="showNewKeyInput()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Use Different Key
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Location Selection -->
+        <div x-show="currentStep === 2 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: Select Location</h3>
+            <p class="text-gray-600 mb-6">Choose the datacenter location for your VPS. Select based on your target audience location for optimal performance.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <template x-for="location in locations" :key="location.name">
+                    <div @click="selectLocation(location)" 
+                         class="border-2 rounded-lg p-4 cursor-pointer transition-colors"
+                         :class="selectedLocation?.name === location.name ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-medium text-gray-900" x-text="location.description"></h4>
+                            <div x-show="selectedLocation?.name === location.name" class="text-blue-500">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-500" x-text="location.city + ', ' + location.country"></p>
+                        <p class="text-xs text-gray-400" x-text="location.name"></p>
+                    </div>
+                </template>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="nextStep()" 
+                        :disabled="!selectedLocation"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Continue
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 3: Server Type Selection -->
+        <div x-show="currentStep === 3 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Choose Server Type</h3>
+            <p class="text-gray-600 mb-4">Select the server configuration based on your needs. All servers are shared vCPU instances for cost efficiency.</p>
+            
+            <!-- Filter and Sort Controls -->
+            <div class="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Filter by Architecture</label>
+                    <select x-model="architectureFilter" @change="applyFilters()" 
+                            class="px-3 py-1 border border-gray-300 rounded-md text-sm">
+                        <option value="">All Architectures</option>
+                        <option value="x86">x86</option>
+                        <option value="arm">ARM</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Sort by</label>
+                    <select x-model="sortBy" @change="applySort()" 
+                            class="px-3 py-1 border border-gray-300 rounded-md text-sm">
+                        <option value="price_asc">Price (Low to High)</option>
+                        <option value="price_desc">Price (High to Low)</option>
+                        <option value="cpu_asc">CPU (Low to High)</option>
+                        <option value="cpu_desc">CPU (High to Low)</option>
+                        <option value="memory_asc">RAM (Low to High)</option>
+                        <option value="memory_desc">RAM (High to Low)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                <template x-for="serverType in filteredServerTypes" :key="serverType.name">
+                    <div @click="selectServerType(serverType)" 
+                         class="border-2 rounded-lg p-4 cursor-pointer transition-colors"
+                         :class="selectedServerType?.name === serverType.name ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="font-medium text-gray-900" x-text="serverType.name"></h4>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-lg font-bold text-green-600" x-text="'€' + serverType.monthlyPrice + '/mo'"></span>
+                                        <div x-show="selectedServerType?.name === serverType.name" class="text-blue-500">
+                                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                    <div>
+                                        <span class="text-gray-500">CPU:</span>
+                                        <span class="font-medium ml-1" x-text="serverType.cores + ' vCPU'"></span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-500">RAM:</span>
+                                        <span class="font-medium ml-1" x-text="serverType.memory + ' GB'"></span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-500">Storage:</span>
+                                        <span class="font-medium ml-1" x-text="serverType.disk + ' GB ' + serverType.storage_type.toUpperCase()"></span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-500">Arch:</span>
+                                        <span class="font-medium ml-1" x-text="serverType.architecture"></span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 text-xs text-gray-500" x-text="serverType.description"></div>
+                                <div x-show="!serverType.available" class="mt-2 text-xs text-red-600">
+                                    ⚠️ Not available in selected location
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="nextStep()" 
+                        :disabled="!selectedServerType || !selectedServerType.available"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Continue
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 4: Review and Create -->
+        <div x-show="currentStep === 4 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 4: Review Configuration</h3>
+            <p class="text-gray-600 mb-6">Review your VPS configuration before creation. The server will be automatically configured with K3s and SSL certificates.</p>
+            
+            <div class="space-y-4 mb-6">
+                <div>
+                    <label for="server-name" class="block text-sm font-medium text-gray-700 mb-1">Server Name</label>
+                    <input type="text" 
+                           id="server-name" 
+                           x-model="serverName"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                           :placeholder="'xanthus-k3s-' + Date.now()">
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-900 mb-3">Configuration Summary</h4>
+                        <dl class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Location:</dt>
+                                <dd class="font-medium" x-text="selectedLocation?.description"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Server Type:</dt>
+                                <dd class="font-medium" x-text="selectedServerType?.name"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">CPU:</dt>
+                                <dd class="font-medium" x-text="selectedServerType?.cores + ' vCPU'"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">RAM:</dt>
+                                <dd class="font-medium" x-text="selectedServerType?.memory + ' GB'"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Storage:</dt>
+                                <dd class="font-medium" x-text="selectedServerType?.disk + ' GB SSD'"></dd>
+                            </div>
+                        </dl>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-900 mb-3">Included Features</h4>
+                        <ul class="space-y-2 text-sm">
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Ubuntu 24.04 LTS
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                K3s Kubernetes Cluster
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                SSL/TLS Certificates
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                SSH Key Authentication
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                    <h4 class="font-medium text-blue-900 mb-2">💰 Cost Breakdown</h4>
+                    <div class="space-y-1 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-blue-700">Server Cost:</span>
+                            <span class="font-medium text-blue-900" x-text="'€' + selectedServerType?.monthlyPrice + '/month'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-blue-700">IPv4 Address:</span>
+                            <span class="font-medium text-blue-900">€0.50/month</span>
+                        </div>
+                        <div class="border-t border-blue-200 pt-1 mt-2 flex justify-between font-medium">
+                            <span class="text-blue-900">Total Monthly:</span>
+                            <span class="text-blue-900" x-text="'€' + (parseFloat(selectedServerType?.monthlyPrice || 0) + 0.5).toFixed(2) + '/month'"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-between">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="createVPS()" 
+                        :disabled="!serverName || creating"
+                        class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
+                    <span x-show="!creating">Create VPS</span>
+                    <span x-show="creating">Creating...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function vpsCreationWizard() {
+            return {
+                currentStep: 1,
+                loading: false,
+                loadingMessage: 'Loading...',
+                validatingKey: false,
+                creating: false,
+                
+                // Step 1: Hetzner Key
+                hetznerKey: '',
+                existingKey: '',
+                
+                // Step 2: Location
+                locations: [],
+                selectedLocation: null,
+                
+                // Step 3: Server Type
+                serverTypes: [],
+                filteredServerTypes: [],
+                selectedServerType: null,
+                architectureFilter: '',
+                sortBy: 'price_asc',
+                
+                // Step 4: Review
+                serverName: '',
+                
+                async init() {
+                    this.serverName = `xanthus-k3s-${Date.now()}`;
+                    await this.checkExistingKey();
+                },
+                
+                async checkExistingKey() {
+                    this.loading = true;
+                    this.loadingMessage = 'Checking for existing Hetzner API key...';
+                    
+                    try {
+                        const response = await fetch('/vps/check-key');
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.exists) {
+                                this.existingKey = data.masked_key;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error checking existing key:', error);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                showNewKeyInput() {
+                    this.existingKey = '';
+                },
+                
+                async useExistingKey() {
+                    this.currentStep = 2;
+                    await this.loadLocations();
+                },
+                
+                async validateHetznerKey() {
+                    if (!this.hetznerKey) return;
+                    
+                    this.validatingKey = true;
+                    try {
+                        const response = await fetch('/vps/validate-key', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `key=${encodeURIComponent(this.hetznerKey)}`
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.currentStep = 2;
+                            await this.loadLocations();
+                        } else {
+                            Swal.fire('Invalid Key', data.error || 'The Hetzner API key is invalid', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error validating key:', error);
+                        Swal.fire('Error', 'Failed to validate API key', 'error');
+                    } finally {
+                        this.validatingKey = false;
+                    }
+                },
+                
+                async loadLocations() {
+                    this.loading = true;
+                    this.loadingMessage = 'Loading available locations...';
+                    
+                    try {
+                        const response = await fetch('/vps/locations');
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.locations = data.locations || [];
+                        } else {
+                            throw new Error(data.error || 'Failed to load locations');
+                        }
+                    } catch (error) {
+                        console.error('Error loading locations:', error);
+                        Swal.fire('Error', 'Failed to load locations', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                selectLocation(location) {
+                    this.selectedLocation = location;
+                },
+                
+                async loadServerTypes() {
+                    this.loading = true;
+                    this.loadingMessage = 'Loading server types and checking availability...';
+                    
+                    try {
+                        const response = await fetch(`/vps/server-types?location=${this.selectedLocation.name}`);
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            // Process server types to add computed fields
+                            this.serverTypes = (data.serverTypes || []).map(type => {
+                                // Calculate monthly price from hourly rate
+                                const hourlyPrice = type.prices.find(p => p.location !== 'monthly_calc')?.price_hourly?.gross || '0';
+                                const monthlyPrice = (parseFloat(hourlyPrice) * 24 * 30).toFixed(2);
+                                
+                                // Check availability for selected location
+                                const available = type.available_locations && type.available_locations[this.selectedLocation.name] !== false;
+                                
+                                return {
+                                    ...type,
+                                    monthlyPrice: monthlyPrice,
+                                    available: available
+                                };
+                            });
+                            this.applyFilters();
+                        } else {
+                            throw new Error(data.error || 'Failed to load server types');
+                        }
+                    } catch (error) {
+                        console.error('Error loading server types:', error);
+                        Swal.fire('Error', 'Failed to load server types', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                selectServerType(serverType) {
+                    if (serverType.available) {
+                        this.selectedServerType = serverType;
+                    }
+                },
+                
+                applyFilters() {
+                    let filtered = [...this.serverTypes];
+                    
+                    // Filter by architecture
+                    if (this.architectureFilter) {
+                        filtered = filtered.filter(type => type.architecture === this.architectureFilter);
+                    }
+                    
+                    this.filteredServerTypes = filtered;
+                    this.applySort();
+                },
+                
+                applySort() {
+                    this.filteredServerTypes.sort((a, b) => {
+                        switch (this.sortBy) {
+                            case 'price_asc':
+                                return parseFloat(a.monthlyPrice) - parseFloat(b.monthlyPrice);
+                            case 'price_desc':
+                                return parseFloat(b.monthlyPrice) - parseFloat(a.monthlyPrice);
+                            case 'cpu_asc':
+                                return a.cores - b.cores;
+                            case 'cpu_desc':
+                                return b.cores - a.cores;
+                            case 'memory_asc':
+                                return a.memory - b.memory;
+                            case 'memory_desc':
+                                return b.memory - a.memory;
+                            default:
+                                return 0;
+                        }
+                    });
+                },
+                
+                async nextStep() {
+                    if (this.currentStep === 2 && this.selectedLocation) {
+                        this.currentStep = 3;
+                        await this.loadServerTypes();
+                    } else if (this.currentStep === 3 && this.selectedServerType) {
+                        this.currentStep = 4;
+                    }
+                },
+                
+                previousStep() {
+                    if (this.currentStep > 1) {
+                        this.currentStep--;
+                    }
+                },
+                
+                async createVPS() {
+                    if (!this.serverName || !this.selectedLocation || !this.selectedServerType) return;
+                    
+                    this.creating = true;
+                    try {
+                        const response = await fetch('/vps/create', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `name=${encodeURIComponent(this.serverName)}&location=${encodeURIComponent(this.selectedLocation.name)}&server_type=${encodeURIComponent(this.selectedServerType.name)}`
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            await Swal.fire({
+                                title: 'VPS Created Successfully!',
+                                html: `
+                                    <div class="text-left">
+                                        <p class="mb-2">Your VPS "${this.serverName}" is being created and configured.</p>
+                                        <p class="mb-2">This process may take 5-10 minutes to complete.</p>
+                                        <p class="text-sm text-gray-600">You will be redirected to the VPS management page.</p>
+                                    </div>
+                                `,
+                                icon: 'success',
+                                confirmButtonText: 'Go to VPS Management'
+                            });
+                            
+                            window.location.href = '/vps';
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to create VPS', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error creating VPS:', error);
+                        Swal.fire('Error', 'Failed to create VPS', 'error');
+                    } finally {
+                        this.creating = false;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
