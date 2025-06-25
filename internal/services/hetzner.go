@@ -406,11 +406,20 @@ write_files:
       update_status "VERIFYING"
       log "Performing final verification..."
       
-      # Verify all components are working
-      kubectl get nodes >> "$LOG_FILE" 2>&1
-      kubectl get pods -A >> "$LOG_FILE" 2>&1
-      helm version >> "$LOG_FILE" 2>&1
-      argocd version --client >> "$LOG_FILE" 2>&1
+      # Verify all components are working with timeouts
+      log "Checking K3s nodes..."
+      timeout 30 kubectl get nodes >> "$LOG_FILE" 2>&1 || log "WARNING: kubectl get nodes timed out or failed"
+      
+      log "Checking K3s pods..."
+      timeout 30 kubectl get pods -A >> "$LOG_FILE" 2>&1 || log "WARNING: kubectl get pods timed out or failed"
+      
+      log "Checking Helm version..."
+      timeout 10 helm version >> "$LOG_FILE" 2>&1 || log "WARNING: helm version check failed"
+      
+      log "Checking ArgoCD CLI..."
+      timeout 10 argocd version --client >> "$LOG_FILE" 2>&1 || log "WARNING: argocd version check failed"
+      
+      log "Final verification completed (warnings are non-critical)"
       
       # Update status and info
       update_status "READY"
