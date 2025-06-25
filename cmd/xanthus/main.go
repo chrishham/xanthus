@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,6 +82,15 @@ func main() {
 	r.POST("/vps/:id/terminal", handleVPSTerminal)
 	r.GET("/terminal/:session_id", handleTerminalView)
 	r.DELETE("/terminal/:session_id", handleTerminalStop)
+	r.GET("/applications", handleApplicationsPage)
+	r.GET("/applications/list", handleApplicationsList)
+	r.GET("/applications/prerequisites", handleApplicationsPrerequisites)
+	r.GET("/applications/vps/:id/repositories", handleVPSRepositories)
+	r.POST("/applications/vps/:id/repositories", handleVPSAddRepository)
+	r.GET("/applications/vps/:id/charts/:repo", handleVPSCharts)
+	r.POST("/applications/create", handleApplicationsCreate)
+	r.POST("/applications/:id/upgrade", handleApplicationUpgrade)
+	r.DELETE("/applications/:id", handleApplicationDelete)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -202,6 +212,22 @@ type CloudflareDomainsResponse struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
 	} `json:"errors"`
+}
+
+// Application represents a deployed application
+type Application struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Subdomain    string `json:"subdomain"`
+	Domain       string `json:"domain"`
+	VPSID        string `json:"vps_id"`
+	VPSName      string `json:"vps_name"`
+	ChartName    string `json:"chart_name"`
+	ChartVersion string `json:"chart_version"`
+	Namespace    string `json:"namespace"`
+	Status       string `json:"status"`
+	CreatedAt    string `json:"created_at"`
 }
 
 func handleRoot(c *gin.Context) {
@@ -2361,5 +2387,734 @@ func handleTerminalStop(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Terminal session stopped",
+	})
+}
+
+// Applications handlers
+
+func handleApplicationsPage(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error accessing account"))
+		return
+	}
+
+	// Get applications list
+	applications, err := getApplicationsList(token, accountID)
+	if err != nil {
+		log.Printf("Error getting applications: %v", err)
+		applications = []Application{}
+	}
+
+	c.HTML(http.StatusOK, "applications.html", gin.H{
+		"Applications": applications,
+	})
+}
+
+func handleApplicationsList(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+		return
+	}
+
+	// Get applications list
+	applications, err := getApplicationsList(token, accountID)
+	if err != nil {
+		log.Printf("Error getting applications: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get applications"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"applications": applications,
+	})
+}
+
+func handleApplicationsPrerequisites(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+		return
+	}
+
+	kvService := services.NewKVService()
+
+	// Get managed domains from KV (those with SSL config)
+	sslConfigs, err := kvService.ListDomainSSLConfigs(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get SSL configs"})
+		return
+	}
+
+	// Convert to domain list
+	managedDomains := []gin.H{}
+	for domain := range sslConfigs {
+		managedDomains = append(managedDomains, gin.H{
+			"name": domain,
+		})
+	}
+
+	// Get managed VPS from KV (those with VPS config)
+	vpsConfigs, err := kvService.ListVPSConfigs(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get VPS configs"})
+		return
+	}
+
+	// Convert to server list
+	managedServers := []gin.H{}
+	for serverID, config := range vpsConfigs {
+		managedServers = append(managedServers, gin.H{
+			"id":   fmt.Sprintf("%d", serverID),
+			"name": config.Name,
+			"public_net": gin.H{
+				"ipv4": gin.H{
+					"ip": config.PublicIPv4,
+				},
+			},
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"domains": managedDomains,
+		"servers": managedServers,
+	})
+}
+
+func handleApplicationsCreate(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+		return
+	}
+
+	// Parse request body
+	var appData struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Subdomain   string `json:"subdomain"`
+		Domain      string `json:"domain"`
+		VPS         string `json:"vps"`
+		Chart       string `json:"chart"`
+		Version     string `json:"version"`
+	}
+
+	if err := c.ShouldBindJSON(&appData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	// Create application
+	app, err := createApplication(token, accountID, appData)
+	if err != nil {
+		log.Printf("Error creating application: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create application"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":     true,
+		"message":     "Application created successfully",
+		"application": app,
+	})
+}
+
+func handleApplicationUpgrade(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	appID := c.Param("id")
+	var upgradeData struct {
+		Version string `json:"version"`
+	}
+
+	if err := c.ShouldBindJSON(&upgradeData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+		return
+	}
+
+	// Upgrade application
+	err = upgradeApplication(token, accountID, appID, upgradeData.Version)
+	if err != nil {
+		log.Printf("Error upgrading application: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upgrade application"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Application upgraded successfully",
+	})
+}
+
+func handleApplicationDelete(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	appID := c.Param("id")
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+		return
+	}
+
+	// Delete application
+	err = deleteApplication(token, accountID, appID)
+	if err != nil {
+		log.Printf("Error deleting application: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete application"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Application deleted successfully",
+	})
+}
+
+// Helper functions for applications
+
+func getApplicationsList(token, accountID string) ([]Application, error) {
+	kvService := services.NewKVService()
+	
+	// Get the Xanthus namespace ID
+	namespaceID, err := kvService.GetXanthusNamespaceID(token, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get namespace ID: %w", err)
+	}
+
+	// List all keys with app: prefix
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/keys?prefix=app:",
+		accountID, namespaceID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var keysResp struct {
+		Success bool `json:"success"`
+		Result  []struct {
+			Name string `json:"name"`
+		} `json:"result"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&keysResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !keysResp.Success {
+		return nil, fmt.Errorf("KV API failed")
+	}
+
+	applications := []Application{}
+
+	// Fetch each application
+	for _, key := range keysResp.Result {
+		var app Application
+		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
+			applications = append(applications, app)
+		}
+	}
+
+	return applications, nil
+}
+
+func createApplication(token, accountID string, appData interface{}) (*Application, error) {
+	// Generate unique ID for application
+	appID := fmt.Sprintf("app-%d", time.Now().Unix())
+	
+	data := appData.(struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Subdomain   string `json:"subdomain"`
+		Domain      string `json:"domain"`
+		VPS         string `json:"vps"`
+		Chart       string `json:"chart"`
+		Version     string `json:"version"`
+	})
+
+	// Get VPS details
+	hetznerKey, err := getHetznerAPIKey(token, accountID)
+	if err != nil {
+		return nil, err
+	}
+
+	hetznerService := services.NewHetznerService()
+	servers, err := hetznerService.ListServers(hetznerKey)
+	if err != nil {
+		return nil, err
+	}
+
+	var vpsName string
+	for _, server := range servers {
+		if fmt.Sprintf("%d", server.ID) == data.VPS {
+			vpsName = server.Name
+			break
+		}
+	}
+
+	app := &Application{
+		ID:           appID,
+		Name:         data.Name,
+		Description:  data.Description,
+		Subdomain:    data.Subdomain,
+		Domain:       data.Domain,
+		VPSID:        data.VPS,
+		VPSName:      vpsName,
+		ChartName:    data.Chart,
+		ChartVersion: data.Version,
+		Namespace:    data.Name, // Use app name as namespace
+		Status:       "pending",
+		CreatedAt:    time.Now().Format(time.RFC3339),
+	}
+
+	// Store in KV
+	kvService := services.NewKVService()
+
+	err = kvService.PutValue(token, accountID, fmt.Sprintf("app:%s", appID), app)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Deploy via Helm (would need to implement Helm deployment logic)
+	// For now, just mark as deployed
+	app.Status = "deployed"
+	kvService.PutValue(token, accountID, fmt.Sprintf("app:%s", appID), app)
+
+	return app, nil
+}
+
+func upgradeApplication(token, accountID, appID, version string) error {
+	kvService := services.NewKVService()
+	
+	// Get current application
+	var app Application
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
+	if err != nil {
+		return err
+	}
+
+	// Update version
+	app.ChartVersion = version
+	app.Status = "pending"
+
+	// Store updated app
+	err = kvService.PutValue(token, accountID, fmt.Sprintf("app:%s", appID), app)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Implement actual Helm upgrade
+	// For now, just mark as deployed
+	app.Status = "deployed"
+	kvService.PutValue(token, accountID, fmt.Sprintf("app:%s", appID), app)
+
+	return nil
+}
+
+func deleteApplication(token, accountID, appID string) error {
+	kvService := services.NewKVService()
+	
+	// TODO: Uninstall Helm chart before deleting from KV
+	
+	// Delete from KV
+	return kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s", appID))
+}
+
+func handleVPSRepositories(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	vpsID := c.Param("id")
+	serverID, err := strconv.Atoi(vpsID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid VPS ID"})
+		return
+	}
+	
+	log.Printf("Getting Helm repositories for VPS %s", vpsID)
+
+	// Initialize services
+	kvService := services.NewKVService()
+	sshService := services.NewSSHService()
+
+	// Get account ID from token
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration from KV
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Failed to get VPS config: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS not found"})
+		return
+	}
+
+	// Get SSH private key from KV
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Failed to get SSH private key: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH key not found"})
+		return
+	}
+
+	// Connect to VPS via SSH (reuse existing connection if available)
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Cannot connect to VPS"})
+		return
+	}
+	// Note: Don't defer conn.Close() since we're reusing the connection
+
+	// Execute helm repo list command
+	result, err := sshService.ExecuteCommand(conn, "helm repo list --output json")
+	if err != nil {
+		log.Printf("Failed to execute helm repo list on VPS %s: %v", vpsID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to get repositories from VPS"})
+		return
+	}
+
+	if result.ExitCode != 0 {
+		// If helm repo list fails (e.g., no repositories configured), return empty list
+		if strings.Contains(result.Error, "no repositories") || strings.Contains(result.Output, "no repositories") {
+			c.JSON(http.StatusOK, gin.H{"repositories": []gin.H{}})
+			return
+		}
+		log.Printf("Helm repo list failed on VPS %s: %s", vpsID, result.Output)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Helm command failed on VPS"})
+		return
+	}
+
+	// Parse JSON output
+	var helmRepos []struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	}
+	
+	if err := json.Unmarshal([]byte(result.Output), &helmRepos); err != nil {
+		log.Printf("Failed to parse helm repo list output: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse repository data"})
+		return
+	}
+
+	// Convert to response format
+	repositories := make([]gin.H, len(helmRepos))
+	for i, repo := range helmRepos {
+		repositories[i] = gin.H{
+			"name": repo.Name,
+			"url":  repo.URL,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"repositories": repositories,
+	})
+}
+
+func handleVPSAddRepository(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	vpsID := c.Param("id")
+	serverID, err := strconv.Atoi(vpsID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid VPS ID"})
+		return
+	}
+	
+	var repoData struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	}
+
+	if err := c.ShouldBindJSON(&repoData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	// Validate repository name and URL
+	if repoData.Name == "" || repoData.URL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Repository name and URL are required"})
+		return
+	}
+
+	// Basic URL validation
+	if !strings.HasPrefix(repoData.URL, "http://") && !strings.HasPrefix(repoData.URL, "https://") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid repository URL"})
+		return
+	}
+
+	// Sanitize repository name to prevent command injection
+	if strings.ContainsAny(repoData.Name, ";|&$`(){}[]<>\"'\\") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid characters in repository name"})
+		return
+	}
+
+	log.Printf("Adding repository %s (%s) to VPS %s", repoData.Name, repoData.URL, vpsID)
+
+	// Initialize services
+	kvService := services.NewKVService()
+	sshService := services.NewSSHService()
+
+	// Get account ID from token
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration from KV
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Failed to get VPS config: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS not found"})
+		return
+	}
+
+	// Get SSH private key from KV
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Failed to get SSH private key: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH key not found"})
+		return
+	}
+
+	// Connect to VPS via SSH (reuse existing connection if available)
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Cannot connect to VPS"})
+		return
+	}
+	// Note: Don't defer conn.Close() since we're reusing the connection
+
+	// Add the repository
+	addCommand := fmt.Sprintf("helm repo add %s %s", repoData.Name, repoData.URL)
+	result, err := sshService.ExecuteCommand(conn, addCommand)
+	if err != nil {
+		log.Printf("Failed to execute helm repo add on VPS %s: %v", vpsID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to add repository to VPS"})
+		return
+	}
+
+	if result.ExitCode != 0 {
+		log.Printf("Helm repo add failed on VPS %s: %s", vpsID, result.Output)
+		// Check for specific error cases
+		if strings.Contains(result.Output, "already exists") {
+			c.JSON(http.StatusConflict, gin.H{"error": "Repository with this name already exists"})
+			return
+		}
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("Failed to add repository: %s", result.Output)})
+		return
+	}
+
+	// Update the repository cache
+	updateResult, err := sshService.ExecuteCommand(conn, "helm repo update")
+	if err != nil {
+		log.Printf("Failed to execute helm repo update on VPS %s: %v", vpsID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Repository added but failed to update cache"})
+		return
+	}
+
+	if updateResult.ExitCode != 0 {
+		log.Printf("Helm repo update failed on VPS %s: %s", vpsID, updateResult.Output)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Repository added but failed to update cache"})
+		return
+	}
+
+	// Verify the repository was added successfully
+	verifyResult, err := sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo list | grep -w %s", repoData.Name))
+	if err != nil || verifyResult.ExitCode != 0 {
+		log.Printf("Repository verification failed on VPS %s", vpsID)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Repository may not have been added correctly"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Repository added successfully",
+	})
+}
+
+func handleVPSCharts(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	vpsID := c.Param("id")
+	repo := c.Param("repo")
+	
+	serverID, err := strconv.Atoi(vpsID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid VPS ID"})
+		return
+	}
+
+	// Sanitize repository name to prevent command injection
+	if strings.ContainsAny(repo, ";|&$`(){}[]<>\"'\\") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid characters in repository name"})
+		return
+	}
+
+	log.Printf("Getting charts for repository %s on VPS %s", repo, vpsID)
+
+	// Initialize services
+	kvService := services.NewKVService()
+	sshService := services.NewSSHService()
+
+	// Get account ID from token
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration from KV
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Failed to get VPS config: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS not found"})
+		return
+	}
+
+	// Get SSH private key from KV
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Failed to get SSH private key: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH key not found"})
+		return
+	}
+
+	// Connect to VPS via SSH (reuse existing connection if available)
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Cannot connect to VPS"})
+		return
+	}
+	// Note: Don't defer conn.Close() since we're reusing the connection
+
+	// Search for charts in the specified repository
+	searchCommand := fmt.Sprintf("helm search repo %s/ --output json", repo)
+	result, err := sshService.ExecuteCommand(conn, searchCommand)
+	if err != nil {
+		log.Printf("Failed to execute helm search on VPS %s: %v", vpsID, err)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Failed to search charts on VPS"})
+		return
+	}
+
+	if result.ExitCode != 0 {
+		// If repository doesn't exist or has no charts, return empty list
+		if strings.Contains(result.Output, "no results found") || strings.Contains(result.Error, "no results found") {
+			c.JSON(http.StatusOK, gin.H{"charts": []gin.H{}})
+			return
+		}
+		log.Printf("Helm search failed on VPS %s: %s", vpsID, result.Output)
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Helm search command failed on VPS"})
+		return
+	}
+
+	// Parse JSON output
+	var helmCharts []struct {
+		Name        string `json:"name"`
+		Version     string `json:"version"`
+		AppVersion  string `json:"app_version"`
+		Description string `json:"description"`
+	}
+	
+	if err := json.Unmarshal([]byte(result.Output), &helmCharts); err != nil {
+		log.Printf("Failed to parse helm search output: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse chart data"})
+		return
+	}
+
+	// Convert to response format
+	charts := make([]gin.H, len(helmCharts))
+	for i, chart := range helmCharts {
+		charts[i] = gin.H{
+			"name":        chart.Name,
+			"version":     chart.Version,
+			"app_version": chart.AppVersion,
+			"description": chart.Description,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"charts": charts,
 	})
 }

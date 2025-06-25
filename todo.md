@@ -31,3 +31,7 @@ buy domain, point nameservers to cloudfare, wait for the domain to be active, cr
 
 - Clarify the minimum permissions required for cloudfare api key to work.
 - What happens if the user forgets or revokes the cloudfare api key?
+
+## Essential apps
+
+- 
