@@ -696,10 +696,37 @@
                             const statusColor = data.reachable ? 'success' : 'error';
                             const k3sStatus = data.k3s_status === 'active' ? '✅ Running' : '❌ ' + data.k3s_status;
                             
+                            // Setup status with progress indication
+                            const setupStatusColors = {
+                                'READY': '✅',
+                                'VERIFYING': '🔍',
+                                'INSTALLING_ARGOCD_CLI': '📦',
+                                'WAITING_ARGOCD': '⏳',
+                                'INSTALLING_ARGOCD': '📦', 
+                                'INSTALLING_HELM': '📦',
+                                'WAITING_K3S': '⏳',
+                                'INSTALLING_K3S': '📦',
+                                'INSTALLING': '🚀',
+                                'UNKNOWN': '❓'
+                            };
+                            const setupIcon = setupStatusColors[data.setup_status] || '❓';
+                            const setupStatus = `${setupIcon} ${data.setup_status || 'UNKNOWN'}`;
+                            const setupMessage = data.setup_message || 'No status information available';
+                            
+                            // Show auto-refresh button for non-ready states
+                            const showAutoRefresh = data.setup_status && data.setup_status !== 'READY';
+                            
                             Swal.fire({
-                                title: `VPS Health Status`,
+                                title: `VPS Status & Health`,
                                 html: `
                                     <div class="text-left text-sm">
+                                        <div class="mb-4 p-3 ${data.setup_status === 'READY' ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'} rounded-md">
+                                            <h4 class="font-semibold mb-2">🚀 Setup Status:</h4>
+                                            <div class="font-medium">${setupStatus}</div>
+                                            <div class="text-xs text-gray-600 mt-1">${setupMessage}</div>
+                                            ${showAutoRefresh ? '<div class="text-xs text-blue-600 mt-2">💡 This dialog will auto-refresh every 5 seconds while setup is in progress</div>' : ''}
+                                        </div>
+                                        
                                         <div class="grid grid-cols-2 gap-2 mb-4">
                                             <div><strong>SSH:</strong> ${data.reachable ? '✅ Connected' : '❌ Failed'}</div>
                                             <div><strong>K3s:</strong> ${k3sStatus}</div>
@@ -732,7 +759,54 @@
                                 `,
                                 icon: statusColor,
                                 width: 600,
-                                confirmButtonText: 'Close'
+                                confirmButtonText: 'Close',
+                                didOpen: () => {
+                                    // Auto-refresh for non-ready states
+                                    if (showAutoRefresh) {
+                                        const refreshInterval = setInterval(async () => {
+                                            try {
+                                                const refreshResponse = await fetch(`/vps/${serverId}/status`);
+                                                const refreshData = await refreshResponse.json();
+                                                
+                                                if (refreshResponse.ok) {
+                                                    const newSetupIcon = setupStatusColors[refreshData.setup_status] || '❓';
+                                                    const newSetupStatus = `${newSetupIcon} ${refreshData.setup_status || 'UNKNOWN'}`;
+                                                    const newSetupMessage = refreshData.setup_message || 'No status information available';
+                                                    
+                                                    // Update the setup status section
+                                                    const statusDiv = document.querySelector('.swal2-html-container div div');
+                                                    if (statusDiv) {
+                                                        statusDiv.innerHTML = `
+                                                            <h4 class="font-semibold mb-2">🚀 Setup Status:</h4>
+                                                            <div class="font-medium">${newSetupStatus}</div>
+                                                            <div class="text-xs text-gray-600 mt-1">${newSetupMessage}</div>
+                                                            ${refreshData.setup_status !== 'READY' ? '<div class="text-xs text-blue-600 mt-2">💡 This dialog will auto-refresh every 5 seconds while setup is in progress</div>' : '<div class="text-xs text-green-600 mt-2">🎉 Setup completed! All components are ready.</div>'}
+                                                        `;
+                                                        
+                                                        // Change background color when ready
+                                                        if (refreshData.setup_status === 'READY') {
+                                                            statusDiv.parentElement.className = 'mb-4 p-3 bg-green-50 border border-green-200 rounded-md';
+                                                            clearInterval(refreshInterval);
+                                                        }
+                                                    }
+                                                }
+                                            } catch (error) {
+                                                console.log('Auto-refresh failed:', error);
+                                            }
+                                        }, 5000);
+                                        
+                                        // Clear interval when modal is closed
+                                        const observer = new MutationObserver((mutations) => {
+                                            mutations.forEach((mutation) => {
+                                                if (!document.querySelector('.swal2-container')) {
+                                                    clearInterval(refreshInterval);
+                                                    observer.disconnect();
+                                                }
+                                            });
+                                        });
+                                        observer.observe(document.body, { childList: true, subtree: true });
+                                    }
+                                }
                             });
                         } else {
                             Swal.fire('Error', data.error || 'Failed to check VPS status', 'error');

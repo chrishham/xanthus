@@ -39,15 +39,17 @@ type CommandResult struct {
 
 // VPSStatus represents the health status of a VPS
 type VPSStatus struct {
-	ServerID    int                    `json:"server_id"`
-	IP          string                 `json:"ip"`
-	Reachable   bool                   `json:"reachable"`
-	K3sStatus   string                 `json:"k3s_status"`
-	SystemLoad  map[string]interface{} `json:"system_load"`
-	DiskUsage   map[string]interface{} `json:"disk_usage"`
-	Services    map[string]string      `json:"services"`
-	LastChecked string                 `json:"last_checked"`
-	Error       string                 `json:"error,omitempty"`
+	ServerID     int                    `json:"server_id"`
+	IP           string                 `json:"ip"`
+	Reachable    bool                   `json:"reachable"`
+	SetupStatus  string                 `json:"setup_status"`
+	SetupMessage string                 `json:"setup_message,omitempty"`
+	K3sStatus    string                 `json:"k3s_status"`
+	SystemLoad   map[string]interface{} `json:"system_load"`
+	DiskUsage    map[string]interface{} `json:"disk_usage"`
+	Services     map[string]string      `json:"services"`
+	LastChecked  string                 `json:"last_checked"`
+	Error        string                 `json:"error,omitempty"`
 }
 
 // ConnectToVPS establishes an SSH connection to a VPS using private key authentication
@@ -147,6 +149,41 @@ func (ss *SSHService) CheckVPSHealth(host, user, privateKeyPEM string, serverID 
 
 	status.Reachable = true
 
+	// Check setup status from cloud-init
+	if result, err := ss.ExecuteCommand(conn, "cat /opt/xanthus/status 2>/dev/null || echo 'UNKNOWN'"); err == nil {
+		setupStatus := strings.TrimSpace(result.Output)
+		status.SetupStatus = setupStatus
+
+		// Add user-friendly messages for each status
+		switch setupStatus {
+		case "INSTALLING":
+			status.SetupMessage = "Initializing server setup..."
+		case "INSTALLING_K3S":
+			status.SetupMessage = "Installing K3s Kubernetes cluster..."
+		case "WAITING_K3S":
+			status.SetupMessage = "Waiting for K3s to be ready..."
+		case "INSTALLING_HELM":
+			status.SetupMessage = "Installing Helm package manager..."
+		case "INSTALLING_ARGOCD":
+			status.SetupMessage = "Installing ArgoCD for GitOps..."
+		case "WAITING_ARGOCD":
+			status.SetupMessage = "Waiting for ArgoCD to be ready..."
+		case "INSTALLING_ARGOCD_CLI":
+			status.SetupMessage = "Installing ArgoCD CLI..."
+		case "VERIFYING":
+			status.SetupMessage = "Verifying all components..."
+		case "READY":
+			status.SetupMessage = "Server is ready! All components installed and verified."
+		case "UNKNOWN":
+			status.SetupMessage = "Setup status unknown (server may still be initializing)"
+		default:
+			status.SetupMessage = fmt.Sprintf("Setup in progress: %s", setupStatus)
+		}
+	} else {
+		status.SetupStatus = "UNKNOWN"
+		status.SetupMessage = "Cannot determine setup status"
+	}
+
 	// Check K3s status
 	if result, err := ss.ExecuteCommand(conn, "systemctl is-active k3s"); err == nil {
 		status.K3sStatus = strings.TrimSpace(result.Output)
@@ -170,7 +207,7 @@ func (ss *SSHService) CheckVPSHealth(host, user, privateKeyPEM string, serverID 
 	}
 
 	// Check important services
-	services := []string{"k3s", "sshd", "systemd-resolved"}
+	services := []string{"k3s", "ssh", "systemd-resolved"}
 	for _, service := range services {
 		if result, err := ss.ExecuteCommand(conn, fmt.Sprintf("systemctl is-active %s", service)); err == nil {
 			status.Services[service] = strings.TrimSpace(result.Output)

@@ -1470,25 +1470,8 @@ func handleVPSCreate(c *gin.Context) {
 	sshKeyName = sshKey.Name
 	log.Printf("✅ Using SSH key: %s (ID: %d)", sshKeyName, sshKey.ID)
 
-	// Get SSL certificate (using first available domain's SSL config as template)
-	kvService := services.NewKVService()
-	domainConfigs, err := kvService.ListDomainSSLConfigs(token, accountID)
-	if err != nil || len(domainConfigs) == 0 {
-		log.Printf("No SSL domain configurations found: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "No SSL certificate available. Please configure at least one domain first."})
-		return
-	}
-
-	// Use the first available domain's SSL certificate
-	var sslCert, sslKey string
-	for _, domainConfig := range domainConfigs {
-		sslCert = domainConfig.Certificate
-		sslKey = domainConfig.PrivateKey
-		break
-	}
-
-	// Create server with SSL configuration and SSH key
-	server, err := hetznerService.CreateServer(hetznerKey, name, serverType, location, sshKeyName, sslCert, sslKey)
+	// Create server using cloud-init script
+	server, err := hetznerService.CreateServer(hetznerKey, name, serverType, location, sshKeyName)
 	if err != nil {
 		log.Printf("Error creating server: %v", err)
 
@@ -1504,19 +1487,21 @@ func handleVPSCreate(c *gin.Context) {
 		return
 	}
 
+	// Initialize KV service for storing VPS configuration
+	kvService := services.NewKVService()
+
 	// Store VPS configuration in KV
 	vpsConfig := &services.VPSConfig{
-		ServerID:      server.ID,
-		Name:          server.Name,
-		ServerType:    serverType,
-		Location:      location,
-		PublicIPv4:    server.PublicNet.IPv4.IP,
-		Status:        server.Status,
-		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
-		SSLConfigured: true,
-		SSHKeyName:    sshKeyName,
-		SSHUser:       "root",
-		SSHPort:       22,
+		ServerID:   server.ID,
+		Name:       server.Name,
+		ServerType: serverType,
+		Location:   location,
+		PublicIPv4: server.PublicNet.IPv4.IP,
+		Status:     server.Status,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+		SSHKeyName: sshKeyName,
+		SSHUser:    "root",
+		SSHPort:    22,
 	}
 
 	if err := kvService.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
@@ -1527,7 +1512,7 @@ func handleVPSCreate(c *gin.Context) {
 	log.Printf("✅ Created server: %s (ID: %d) with IPv4: %s", server.Name, server.ID, server.PublicNet.IPv4.IP)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Server created successfully with SSL configuration",
+		"message": "Server created successfully with K3s, Helm, and ArgoCD",
 		"server":  server,
 		"config":  vpsConfig,
 	})
