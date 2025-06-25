@@ -19,16 +19,16 @@ type TerminalService struct {
 
 // TerminalSession represents an active terminal session
 type TerminalSession struct {
-	ID       string    `json:"id"`
-	ServerID int       `json:"server_id"`
-	Host     string    `json:"host"`
-	User     string    `json:"user"`
-	Port     int       `json:"port"`
-	Status   string    `json:"status"`
-	PID      int       `json:"pid"`
+	ID        string    `json:"id"`
+	ServerID  int       `json:"server_id"`
+	Host      string    `json:"host"`
+	User      string    `json:"user"`
+	Port      int       `json:"port"`
+	Status    string    `json:"status"`
+	PID       int       `json:"pid"`
 	StartedAt time.Time `json:"started_at"`
-	process  *exec.Cmd
-	cancel   context.CancelFunc
+	process   *exec.Cmd
+	cancel    context.CancelFunc
 }
 
 // NewTerminalService creates a new terminal service instance
@@ -199,11 +199,11 @@ func findAvailablePort(start, end int) (int, error) {
 // writeSSHKeyToTemp writes the private key to a temporary file
 func writeSSHKeyToTemp(privateKey, sessionID string) (string, error) {
 	keyFile := fmt.Sprintf("/tmp/xanthus-ssh-%s.pem", sessionID)
-	
+
 	cmd := exec.Command("bash", "-c", fmt.Sprintf("echo '%s' > %s && chmod 600 %s", privateKey, keyFile, keyFile))
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to write SSH key file: %v", err)
 	}
-	
+
 	return keyFile, nil
 }
