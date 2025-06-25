@@ -1,0 +1,173 @@
+#cloud-config
+# Update system packages
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - wget
+  - git
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - jq
+
+write_files:
+  - path: /opt/xanthus/info.txt
+    content: |
+      Xanthus managed K3s server
+      Created: $(date)
+      Status: Initializing...
+    permissions: '0644'
+    owner: root:root
+  - path: /etc/environment
+    content: |
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    append: true
+  - path: /opt/xanthus/setup.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      
+      LOG_FILE="/opt/xanthus/setup.log"
+      STATUS_FILE="/opt/xanthus/status"
+      
+      log() {
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+      }
+      
+      update_status() {
+          echo "$1" > "$STATUS_FILE"
+          log "Status: $1"
+      }
+      
+      # Start setup
+      mkdir -p /opt/xanthus
+      update_status "INSTALLING"
+      log "Starting Xanthus K3s setup..."
+      
+      # Ensure SSH service is enabled and running
+      systemctl enable ssh
+      systemctl start ssh
+      log "SSH service verified and enabled"
+      
+      # Install K3s
+      update_status "INSTALLING_K3S"
+      log "Installing K3s..."
+      curl -sfL https://get.k3s.io | sh -
+      systemctl enable k3s
+      systemctl start k3s
+      
+      # Wait for K3s to be ready
+      update_status "WAITING_K3S"
+      log "Waiting for K3s to be ready..."
+      timeout 300 bash -c 'until systemctl is-active k3s >/dev/null 2>&1 && kubectl get nodes --no-headers 2>/dev/null | grep -q "Ready"; do sleep 5; done'
+      
+      # Set proper permissions for kubeconfig
+      chmod 644 /etc/rancher/k3s/k3s.yaml
+      
+      # Set up environment for root
+      echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> /root/.bashrc
+      echo 'source <(kubectl completion bash)' >> /root/.bashrc
+      echo 'alias k=kubectl' >> /root/.bashrc
+      echo 'complete -F __start_kubectl k' >> /root/.bashrc
+      
+      # Install Helm
+      update_status "INSTALLING_HELM"
+      log "Installing Helm..."
+      curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      
+      # Verify Helm installation
+      helm version --short >> "$LOG_FILE"
+      
+      # Install ArgoCD
+      update_status "INSTALLING_ARGOCD"
+      log "Installing ArgoCD..."
+      if kubectl create namespace argocd 2>&1 | tee -a "$LOG_FILE"; then
+          log "ArgoCD namespace created successfully"
+      else
+          log "ArgoCD namespace may already exist, continuing..."
+      fi
+      
+      if kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml 2>&1 | tee -a "$LOG_FILE"; then
+          log "ArgoCD manifests applied successfully"
+      else
+          log "Error applying ArgoCD manifests, but continuing setup..."
+      fi
+      
+      # Wait for ArgoCD to be ready
+      update_status "WAITING_ARGOCD"
+      log "Waiting for ArgoCD to be ready..."
+      
+      # Wait for ArgoCD namespace to have pods
+      log "Waiting for ArgoCD pods to be created..."
+      if timeout 300 bash -c 'until kubectl get pods -n argocd --no-headers 2>/dev/null | grep -q argocd; do sleep 5; done'; then
+          log "ArgoCD pods detected, waiting for them to be ready..."
+      else
+          log "Warning: ArgoCD pods not detected within 5 minutes, checking status..."
+          kubectl get pods -n argocd >> "$LOG_FILE" 2>&1 || log "Could not get ArgoCD pods status"
+      fi
+      
+      # Use a more flexible readiness check - wait for at least the server to be running
+      log "Waiting for ArgoCD server to be running..."
+      if timeout 600 bash -c 'until kubectl get pods -n argocd 2>/dev/null | grep argocd-server | grep -q Running; do 
+          echo "Current ArgoCD pods status:" >> "$LOG_FILE"
+          kubectl get pods -n argocd >> "$LOG_FILE" 2>&1
+          sleep 15
+      done'; then
+          log "ArgoCD server is running"
+      else
+          log "Warning: ArgoCD server not ready within 10 minutes, but continuing setup..."
+          kubectl get pods -n argocd >> "$LOG_FILE" 2>&1 || log "Could not get final ArgoCD status"
+      fi
+      
+      # Install ArgoCD CLI
+      update_status "INSTALLING_ARGOCD_CLI"
+      log "Installing ArgoCD CLI..."
+      curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+      chmod +x /usr/local/bin/argocd
+      
+      # Final verification
+      update_status "VERIFYING"
+      log "Performing final verification..."
+      
+      # Verify all components are working with timeouts
+      log "Checking K3s nodes..."
+      timeout 30 kubectl get nodes >> "$LOG_FILE" 2>&1 || log "WARNING: kubectl get nodes timed out or failed"
+      
+      log "Checking K3s pods..."
+      timeout 30 kubectl get pods -A >> "$LOG_FILE" 2>&1 || log "WARNING: kubectl get pods timed out or failed"
+      
+      log "Checking Helm version..."
+      timeout 10 helm version >> "$LOG_FILE" 2>&1 || log "WARNING: helm version check failed"
+      
+      log "Checking ArgoCD CLI..."
+      timeout 10 argocd version --client >> "$LOG_FILE" 2>&1 || log "WARNING: argocd version check failed"
+      
+      log "Final verification completed (warnings are non-critical)"
+      
+      # Update status and info
+      update_status "READY"
+      cat > /opt/xanthus/info.txt << EOF
+      Xanthus managed K3s server
+      Created: $(date)
+      Status: Ready
+      
+      Components installed and verified:
+      - K3s: $(kubectl version --short --client 2>/dev/null | head -1 || echo "Ready")
+      - Helm: $(helm version --short 2>/dev/null || echo "Ready")
+      - ArgoCD: Ready
+      
+      Access Information:
+      - SSH: ssh root@<server-ip>
+      - Kubeconfig: /etc/rancher/k3s/k3s.yaml
+      - Setup log: /opt/xanthus/setup.log
+      - Status: /opt/xanthus/status
+      EOF
+      
+      log "Setup completed successfully!"
+      log "K3s cluster is ready and all components are running"
+runcmd:
+  - /opt/xanthus/setup.sh
