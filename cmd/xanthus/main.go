@@ -1267,6 +1267,22 @@ func handleVPSManagePage(c *gin.Context) {
 		servers = []services.HetznerServer{}
 	}
 
+	// Enhance servers with cost information for initial page load
+	kvService := services.NewKVService()
+	for i := range servers {
+		if vpsConfig, err := kvService.GetVPSConfig(token, accountID, servers[i].ID); err == nil {
+			// Calculate accumulated cost
+			if accumulatedCost, err := kvService.CalculateVPSCosts(vpsConfig); err == nil {
+				if servers[i].Labels == nil {
+					servers[i].Labels = make(map[string]string)
+				}
+				servers[i].Labels["accumulated_cost"] = fmt.Sprintf("%.2f", accumulatedCost)
+				servers[i].Labels["monthly_cost"] = fmt.Sprintf("%.2f", vpsConfig.MonthlyRate)
+				servers[i].Labels["hourly_cost"] = fmt.Sprintf("%.4f", vpsConfig.HourlyRate)
+			}
+		}
+	}
+
 	c.HTML(http.StatusOK, "vps-manage.html", gin.H{
 		"Servers": servers,
 	})
@@ -1300,6 +1316,19 @@ func handleVPSList(c *gin.Context) {
 		log.Printf("Error listing servers: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list servers"})
 		return
+	}
+
+	// Enhance servers with cost information
+	kvService := services.NewKVService()
+	for i := range servers {
+		if vpsConfig, err := kvService.GetVPSConfig(token, accountID, servers[i].ID); err == nil {
+			// Calculate accumulated cost
+			if accumulatedCost, err := kvService.CalculateVPSCosts(vpsConfig); err == nil {
+				servers[i].Labels["accumulated_cost"] = fmt.Sprintf("%.2f", accumulatedCost)
+				servers[i].Labels["monthly_cost"] = fmt.Sprintf("%.2f", vpsConfig.MonthlyRate)
+				servers[i].Labels["hourly_cost"] = fmt.Sprintf("%.4f", vpsConfig.HourlyRate)
+			}
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"servers": servers})
@@ -1490,21 +1519,51 @@ func handleVPSCreate(c *gin.Context) {
 		return
 	}
 
+	// Get server type pricing information
+	serverTypes, err := fetchHetznerServerTypes(hetznerKey)
+	if err != nil {
+		log.Printf("Warning: Could not fetch server types for pricing: %v", err)
+	}
+
+	var hourlyRate, monthlyRate float64
+	for _, st := range serverTypes {
+		if st.Name == serverType {
+			if len(st.Prices) > 0 {
+				// Use gross prices (including VAT)
+				if hourlyGross := st.Prices[0].PriceHourly.Gross; hourlyGross != "" {
+					if _, err := fmt.Sscanf(hourlyGross, "%f", &hourlyRate); err == nil {
+						// Add IPv4 cost: €0.50/month = €0.00069444/hour (30.41 days avg per month)
+						hourlyRate += 0.50 / (30.41 * 24)
+					}
+				}
+				if monthlyGross := st.Prices[0].PriceMonthly.Gross; monthlyGross != "" {
+					if _, err := fmt.Sscanf(monthlyGross, "%f", &monthlyRate); err == nil {
+						// Add IPv4 cost
+						monthlyRate += 0.50
+					}
+				}
+			}
+			break
+		}
+	}
+
 	// Initialize KV service for storing VPS configuration
 	kvService := services.NewKVService()
 
 	// Store VPS configuration in KV
 	vpsConfig := &services.VPSConfig{
-		ServerID:   server.ID,
-		Name:       server.Name,
-		ServerType: serverType,
-		Location:   location,
-		PublicIPv4: server.PublicNet.IPv4.IP,
-		Status:     server.Status,
-		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
-		SSHKeyName: sshKeyName,
-		SSHUser:    "root",
-		SSHPort:    22,
+		ServerID:    server.ID,
+		Name:        server.Name,
+		ServerType:  serverType,
+		Location:    location,
+		PublicIPv4:  server.PublicNet.IPv4.IP,
+		Status:      server.Status,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+		SSHKeyName:  sshKeyName,
+		SSHUser:     "root",
+		SSHPort:     22,
+		HourlyRate:  hourlyRate,
+		MonthlyRate: monthlyRate,
 	}
 
 	if err := kvService.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
@@ -2273,7 +2332,7 @@ func handleVPSTerminal(c *gin.Context) {
 
 func handleTerminalView(c *gin.Context) {
 	sessionID := c.Param("session_id")
-	
+
 	session, err := terminalService.GetSession(sessionID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Terminal session not found"})
@@ -2293,7 +2352,7 @@ func handleTerminalView(c *gin.Context) {
 
 func handleTerminalStop(c *gin.Context) {
 	sessionID := c.Param("session_id")
-	
+
 	if err := terminalService.StopSession(sessionID); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Terminal session not found"})
 		return

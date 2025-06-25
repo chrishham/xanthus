@@ -268,17 +268,19 @@ func (kvs *KVService) DeleteDomainSSLConfig(token, accountID, domain string) err
 
 // VPSConfig represents VPS configuration stored in KV
 type VPSConfig struct {
-	ServerID      int    `json:"server_id"`
-	Name          string `json:"name"`
-	ServerType    string `json:"server_type"`
-	Location      string `json:"location"`
-	PublicIPv4    string `json:"public_ipv4"`
-	Status        string `json:"status"`
-	CreatedAt     string `json:"created_at"`
-	SSLConfigured bool   `json:"ssl_configured"`
-	SSHKeyName    string `json:"ssh_key_name"`
-	SSHUser       string `json:"ssh_user"`
-	SSHPort       int    `json:"ssh_port"`
+	ServerID      int     `json:"server_id"`
+	Name          string  `json:"name"`
+	ServerType    string  `json:"server_type"`
+	Location      string  `json:"location"`
+	PublicIPv4    string  `json:"public_ipv4"`
+	Status        string  `json:"status"`
+	CreatedAt     string  `json:"created_at"`
+	SSLConfigured bool    `json:"ssl_configured"`
+	SSHKeyName    string  `json:"ssh_key_name"`
+	SSHUser       string  `json:"ssh_user"`
+	SSHPort       int     `json:"ssh_port"`
+	HourlyRate    float64 `json:"hourly_rate"`  // EUR per hour
+	MonthlyRate   float64 `json:"monthly_rate"` // EUR per month (including IPv4)
 }
 
 // StoreVPSConfig stores VPS configuration in KV
@@ -399,4 +401,26 @@ func (kvs *KVService) UpdateVPSConfig(token, accountID string, serverID int, upd
 
 	// Store updated config
 	return kvs.StoreVPSConfig(token, accountID, config)
+}
+
+// CalculateVPSCosts calculates accumulated cost for a VPS based on creation time and current time
+func (kvs *KVService) CalculateVPSCosts(config *VPSConfig) (float64, error) {
+	if config.HourlyRate <= 0 {
+		return 0, fmt.Errorf("hourly rate not set for VPS %d", config.ServerID)
+	}
+
+	// Parse creation time
+	createdAt, err := time.Parse(time.RFC3339, config.CreatedAt)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse creation time: %w", err)
+	}
+
+	// Calculate hours since creation
+	now := time.Now().UTC()
+	hoursSinceCreation := now.Sub(createdAt).Hours()
+
+	// Calculate accumulated cost (hourly rate includes IPv4 cost)
+	accumulatedCost := hoursSinceCreation * config.HourlyRate
+
+	return accumulatedCost, nil
 }
