@@ -216,6 +216,16 @@
                                     ⚙️ Configure
                                 </button>
                             </div>
+                            <div class="flex space-x-2 mb-2">
+                                <button @click="openTerminal(server.id, server.name)" 
+                                        class="flex-1 text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none focus:ring-1 focus:ring-green-500">
+                                    🖥️ Terminal
+                                </button>
+                                <button @click="openTerminalNewTab(server.id, server.name)" 
+                                        class="flex-1 text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none focus:ring-1 focus:ring-green-500">
+                                    📱 New Tab
+                                </button>
+                            </div>
                         </div>
 
                         <div class="flex space-x-2">
@@ -941,6 +951,107 @@
                     this.loadingTitle = title;
                     this.loadingMessage = message;
                     this.loading = true;
+                },
+
+                async openTerminal(serverId, serverName) {
+                    this.setLoadingState('Opening Terminal', `Creating SSH terminal for "${serverName}"...`);
+                    try {
+                        const response = await fetch(`/vps/${serverId}/terminal`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            // Open terminal in a modal
+                            Swal.fire({
+                                title: `SSH Terminal - ${serverName}`,
+                                html: `
+                                    <div class="text-left">
+                                        <div class="mb-4 text-sm text-gray-600">
+                                            Server: ${serverName} | Session: ${data.session_id}
+                                        </div>
+                                        <iframe 
+                                            src="http://localhost:${data.port}" 
+                                            width="100%" 
+                                            height="500" 
+                                            frameborder="0"
+                                            style="border-radius: 4px; background: #000;">
+                                        </iframe>
+                                        <div class="mt-2 text-xs text-gray-500">
+                                            Terminal session will auto-close when this dialog is closed.
+                                        </div>
+                                    </div>
+                                `,
+                                width: 900,
+                                showCloseButton: true,
+                                showConfirmButton: false,
+                                willClose: () => {
+                                    // Clean up terminal session when modal closes
+                                    fetch(`/terminal/${data.session_id}`, {
+                                        method: 'DELETE'
+                                    }).catch(err => console.log('Failed to cleanup terminal session:', err));
+                                }
+                            });
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to create terminal session', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error opening terminal:', error);
+                        Swal.fire('Error', 'Failed to open terminal', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async openTerminalNewTab(serverId, serverName) {
+                    this.setLoadingState('Opening Terminal', `Creating SSH terminal for "${serverName}"...`);
+                    try {
+                        const response = await fetch(`/vps/${serverId}/terminal`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            // Open terminal in new tab
+                            const terminalUrl = `http://localhost:${data.port}`;
+                            const newTab = window.open(terminalUrl, '_blank');
+                            
+                            if (newTab) {
+                                Swal.fire({
+                                    title: 'Terminal Opened',
+                                    html: `
+                                        <div class="text-left text-sm">
+                                            <p class="mb-2">SSH terminal opened in new tab for <strong>${serverName}</strong></p>
+                                            <div class="bg-gray-100 p-2 rounded mb-2">
+                                                <strong>Session ID:</strong> ${data.session_id}<br>
+                                                <strong>URL:</strong> <a href="${terminalUrl}" target="_blank" class="text-blue-600">${terminalUrl}</a>
+                                            </div>
+                                            <p class="text-gray-600">Close the tab when done to free up resources.</p>
+                                        </div>
+                                    `,
+                                    icon: 'success',
+                                    confirmButtonText: 'OK'
+                                });
+                            } else {
+                                Swal.fire('Popup Blocked', 'Please allow popups for this site to open terminal in new tab', 'warning');
+                            }
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to create terminal session', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error opening terminal:', error);
+                        Swal.fire('Error', 'Failed to open terminal', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
                 },
 
                 // Cleanup on component destroy

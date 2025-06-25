@@ -78,6 +78,9 @@ func main() {
 	r.POST("/vps/:id/configure", handleVPSConfigure)
 	r.POST("/vps/:id/deploy", handleVPSDeploy)
 	r.GET("/vps/:id/logs", handleVPSLogs)
+	r.POST("/vps/:id/terminal", handleVPSTerminal)
+	r.GET("/terminal/:session_id", handleTerminalView)
+	r.DELETE("/terminal/:session_id", handleTerminalStop)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -2207,4 +2210,97 @@ func handleVPSServerTypes(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"serverTypes": sharedServerTypes})
+}
+
+// Terminal Management Handlers
+
+// Global terminal service instance
+var terminalService = services.NewTerminalService()
+
+func handleVPSTerminal(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !verifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := checkKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS configuration not found"})
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := getKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
+		return
+	}
+
+	// Create terminal session
+	session, err := terminalService.CreateSession(serverID, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create terminal session: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"session_id": session.ID,
+		"url":        fmt.Sprintf("/terminal/%s", session.ID),
+		"port":       session.Port,
+	})
+}
+
+func handleTerminalView(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	
+	session, err := terminalService.GetSession(sessionID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Terminal session not found"})
+		return
+	}
+
+	// Return terminal proxy URL
+	terminalURL := fmt.Sprintf("http://localhost:%d", session.Port)
+	c.JSON(http.StatusOK, gin.H{
+		"session_id":   session.ID,
+		"terminal_url": terminalURL,
+		"status":       session.Status,
+		"server_id":    session.ServerID,
+		"host":         session.Host,
+	})
+}
+
+func handleTerminalStop(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	
+	if err := terminalService.StopSession(sessionID); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Terminal session not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Terminal session stopped",
+	})
 }
