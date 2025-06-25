@@ -445,14 +445,20 @@
                                 </div>
                                 
                                 <script>
-                                    document.getElementById('wizard-repo').addEventListener('change', function() {
+                                    setTimeout(() => {
+                                        const repoSelect = document.getElementById('wizard-repo');
                                         const newRepoFields = document.getElementById('new-repo-fields');
-                                        if (this.value === '__add_new__') {
-                                            newRepoFields.style.display = 'block';
-                                        } else {
-                                            newRepoFields.style.display = 'none';
+                                        
+                                        if (repoSelect && newRepoFields) {
+                                            repoSelect.addEventListener('change', function() {
+                                                if (this.value === '__add_new__') {
+                                                    newRepoFields.style.display = 'block';
+                                                } else {
+                                                    newRepoFields.style.display = 'none';
+                                                }
+                                            });
                                         }
-                                    });
+                                    }, 100);
                                 </script>
                             `,
                             showCancelButton: true,
