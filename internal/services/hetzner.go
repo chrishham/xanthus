@@ -109,6 +109,34 @@ type HetznerLocation struct {
 	Longitude   float64 `json:"longitude"`
 }
 
+// HetznerServerType represents a Hetzner server type configuration
+type HetznerServerType struct {
+	ID                 int             `json:"id"`
+	Name               string          `json:"name"`
+	Description        string          `json:"description"`
+	Cores              int             `json:"cores"`
+	Memory             float64         `json:"memory"`
+	Disk               int             `json:"disk"`
+	Prices             []HetznerPrice  `json:"prices"`
+	StorageType        string          `json:"storage_type"`
+	CPUType            string          `json:"cpu_type"`
+	Architecture       string          `json:"architecture"`
+	AvailableLocations map[string]bool `json:"available_locations,omitempty"`
+}
+
+// HetznerPrice represents pricing information for a server type
+type HetznerPrice struct {
+	Location     string             `json:"location"`
+	PriceHourly  HetznerPriceDetail `json:"price_hourly"`
+	PriceMonthly HetznerPriceDetail `json:"price_monthly"`
+}
+
+// HetznerPriceDetail represents price details
+type HetznerPriceDetail struct {
+	Net   string `json:"net"`
+	Gross string `json:"gross"`
+}
+
 // HetznerImageInfo represents image information
 type HetznerImageInfo struct {
 	ID          int    `json:"id"`

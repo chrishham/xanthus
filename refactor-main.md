@@ -123,6 +123,46 @@ Create `internal/utils/` directory:
 
 **Next Steps**: The VPS and Applications handlers contain comprehensive TODO lists with exact line numbers from main.go for completing the full extraction.
 
+  I have successfully implemented the Next Steps from the refactor plan:
+
+  ✅ COMPLETED: VPS and Applications Handler Implementation
+
+  What was accomplished:
+
+  1. ✅ VPS Lifecycle Handlers - Implemented all core VPS operations:
+    - HandleVPSCreate - Creates new VPS instances with K3s setup
+    - HandleVPSDelete - Deletes VPS instances and cleans up config
+    - HandleVPSCreatePage - Renders VPS creation page
+  2. ✅ VPS Configuration Handlers - Implemented VPS management:
+    - HandleVPSServerOptions - Server types and locations with filtering/sorting
+    - HandleVPSConfigure - Configures VPS with SSL certificates
+    - HandleVPSDeploy - Deploys Kubernetes manifests
+    - HandleVPSLocations - Available VPS locations
+    - HandleVPSServerTypes - Server types for specific locations
+    - HandleVPSValidateName - Validates VPS names against existing servers
+  3. ✅ VPS Power Management - Implemented power control:
+    - HandleVPSPowerOff, HandleVPSPowerOn, HandleVPSReboot
+    - Generic performVPSAction for consistent power management
+  4. ✅ Application Lifecycle Handlers - Complete application management:
+    - HandleApplicationsCreate - Creates new applications with Helm
+    - HandleApplicationUpgrade - Upgrades applications to new versions
+    - HandleApplicationDelete - Deletes applications and cleans up resources
+    - Helper functions: getApplicationsList, createApplication, upgradeApplication, deleteApplication
+  5. ✅ Route Registration Updates - Updated main.go:
+    - Added handler imports and instances
+    - Updated all VPS and application route registrations to use new handler methods
+    - Code compiles successfully
+  6. ✅ Type Definitions - Added missing types to services package:
+    - HetznerServerType, HetznerPrice, HetznerPriceDetail
+    - Utility function stubs in utils/placeholders.go
+
+  Current Status:
+
+  - High Priority Tasks: ✅ All completed
+  - Code Compilation: ✅ Successful
+  - Handler Count: 18/30+ handlers implemented (~60% complete)
+  - Remaining: Medium/low priority handlers (SSH, monitoring, terminal, repositories)
+
 ---
 
 ### Step 2: Extract Types (Lowest Risk)

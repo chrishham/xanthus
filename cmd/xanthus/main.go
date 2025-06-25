@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chrishham/xanthus/internal/handlers"
 	"github.com/chrishham/xanthus/internal/services"
 	"github.com/gin-gonic/gin"
 )
@@ -34,6 +35,12 @@ func main() {
 	// Set Gin to release mode for production use
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+
+	// Initialize handlers
+	authHandler := handlers.NewAuthHandler()
+	dnsHandler := handlers.NewDNSHandler()
+	vpsHandler := handlers.NewVPSHandler()
+	appsHandler := handlers.NewApplicationsHandler()
 
 	// Configure trusted proxies for security
 	r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
@@ -60,37 +67,37 @@ func main() {
 	r.GET("/dns/list", handleDNSList)
 	r.POST("/dns/configure", handleDNSConfigure)
 	r.POST("/dns/remove", handleDNSRemove)
-	r.GET("/vps", handleVPSManagePage)
-	r.GET("/vps/list", handleVPSList)
-	r.GET("/vps/create", handleVPSCreatePage)
+	r.GET("/vps", vpsHandler.HandleVPSManagePage)
+	r.GET("/vps/list", vpsHandler.HandleVPSList)
+	r.GET("/vps/create", vpsHandler.HandleVPSCreatePage)
 	r.GET("/vps/check-key", handleVPSCheckKey)
 	r.POST("/vps/validate-key", handleVPSValidateKey)
-	r.GET("/vps/locations", handleVPSLocations)
-	r.GET("/vps/server-types", handleVPSServerTypes)
-	r.GET("/vps/server-options", handleVPSServerOptions)
-	r.POST("/vps/validate-name", handleVPSValidateName)
-	r.POST("/vps/create", handleVPSCreate)
-	r.POST("/vps/delete", handleVPSDelete)
-	r.POST("/vps/poweroff", handleVPSPowerOff)
-	r.POST("/vps/poweron", handleVPSPowerOn)
-	r.POST("/vps/reboot", handleVPSReboot)
+	r.GET("/vps/locations", vpsHandler.HandleVPSLocations)
+	r.GET("/vps/server-types", vpsHandler.HandleVPSServerTypes)
+	r.GET("/vps/server-options", vpsHandler.HandleVPSServerOptions)
+	r.POST("/vps/validate-name", vpsHandler.HandleVPSValidateName)
+	r.POST("/vps/create", vpsHandler.HandleVPSCreate)
+	r.POST("/vps/delete", vpsHandler.HandleVPSDelete)
+	r.POST("/vps/poweroff", vpsHandler.HandleVPSPowerOff)
+	r.POST("/vps/poweron", vpsHandler.HandleVPSPowerOn)
+	r.POST("/vps/reboot", vpsHandler.HandleVPSReboot)
 	r.GET("/vps/ssh-key", handleVPSSSHKey)
 	r.GET("/vps/:id/status", handleVPSStatus)
-	r.POST("/vps/:id/configure", handleVPSConfigure)
-	r.POST("/vps/:id/deploy", handleVPSDeploy)
+	r.POST("/vps/:id/configure", vpsHandler.HandleVPSConfigure)
+	r.POST("/vps/:id/deploy", vpsHandler.HandleVPSDeploy)
 	r.GET("/vps/:id/logs", handleVPSLogs)
 	r.POST("/vps/:id/terminal", handleVPSTerminal)
 	r.GET("/terminal/:session_id", handleTerminalView)
 	r.DELETE("/terminal/:session_id", handleTerminalStop)
-	r.GET("/applications", handleApplicationsPage)
-	r.GET("/applications/list", handleApplicationsList)
-	r.GET("/applications/prerequisites", handleApplicationsPrerequisites)
+	r.GET("/applications", appsHandler.HandleApplicationsPage)
+	r.GET("/applications/list", appsHandler.HandleApplicationsList)
+	r.GET("/applications/prerequisites", appsHandler.HandleApplicationsPrerequisites)
 	r.GET("/applications/vps/:id/repositories", handleVPSRepositories)
 	r.POST("/applications/vps/:id/repositories", handleVPSAddRepository)
 	r.GET("/applications/vps/:id/charts/:repo", handleVPSCharts)
-	r.POST("/applications/create", handleApplicationsCreate)
-	r.POST("/applications/:id/upgrade", handleApplicationUpgrade)
-	r.DELETE("/applications/:id", handleApplicationDelete)
+	r.POST("/applications/create", appsHandler.HandleApplicationsCreate)
+	r.POST("/applications/:id/upgrade", appsHandler.HandleApplicationUpgrade)
+	r.DELETE("/applications/:id", appsHandler.HandleApplicationDelete)
 	r.GET("/logout", handleLogout)
 	r.GET("/health", handleHealth)
 
@@ -2620,7 +2627,7 @@ func handleApplicationDelete(c *gin.Context) {
 
 func getApplicationsList(token, accountID string) ([]Application, error) {
 	kvService := services.NewKVService()
-	
+
 	// Get the Xanthus namespace ID
 	namespaceID, err := kvService.GetXanthusNamespaceID(token, accountID)
 	if err != nil {
@@ -2676,7 +2683,7 @@ func getApplicationsList(token, accountID string) ([]Application, error) {
 func createApplication(token, accountID string, appData interface{}) (*Application, error) {
 	// Generate unique ID for application
 	appID := fmt.Sprintf("app-%d", time.Now().Unix())
-	
+
 	data := appData.(struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
@@ -2740,7 +2747,7 @@ func createApplication(token, accountID string, appData interface{}) (*Applicati
 
 func upgradeApplication(token, accountID, appID, version string) error {
 	kvService := services.NewKVService()
-	
+
 	// Get current application
 	var app Application
 	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
@@ -2768,9 +2775,9 @@ func upgradeApplication(token, accountID, appID, version string) error {
 
 func deleteApplication(token, accountID, appID string) error {
 	kvService := services.NewKVService()
-	
+
 	// TODO: Uninstall Helm chart before deleting from KV
-	
+
 	// Delete from KV
 	return kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s", appID))
 }
@@ -2788,7 +2795,7 @@ func handleVPSRepositories(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid VPS ID"})
 		return
 	}
-	
+
 	log.Printf("Getting Helm repositories for VPS %s", vpsID)
 
 	// Initialize services
@@ -2854,7 +2861,7 @@ func handleVPSRepositories(c *gin.Context) {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	}
-	
+
 	if err := json.Unmarshal([]byte(result.Output), &helmRepos); err != nil {
 		log.Printf("Failed to parse helm repo list output: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse repository data"})
@@ -2888,7 +2895,7 @@ func handleVPSAddRepository(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid VPS ID"})
 		return
 	}
-	
+
 	var repoData struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
@@ -3015,7 +3022,7 @@ func handleVPSCharts(c *gin.Context) {
 
 	vpsID := c.Param("id")
 	repo := c.Param("repo")
-	
+
 	serverID, err := strconv.Atoi(vpsID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid VPS ID"})
@@ -3096,7 +3103,7 @@ func handleVPSCharts(c *gin.Context) {
 		AppVersion  string `json:"app_version"`
 		Description string `json:"description"`
 	}
-	
+
 	if err := json.Unmarshal([]byte(result.Output), &helmCharts); err != nil {
 		log.Printf("Failed to parse helm search output: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse chart data"})

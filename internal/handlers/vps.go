@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/chrishham/xanthus/internal/services"
 	"github.com/chrishham/xanthus/internal/utils"
@@ -119,27 +121,704 @@ func (h *VPSHandler) HandleVPSList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"servers": servers})
 }
 
-// TODO: Complete VPS handler implementations
-// The following handlers need to be extracted from main.go and implemented:
+// HandleVPSCreate creates a new VPS instance on Hetzner Cloud with K3s setup
+func (h *VPSHandler) HandleVPSCreate(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
 
-// Core VPS Lifecycle Management:
-// - HandleVPSCreate (line 1440) - Create new VPS instance
-// - HandleVPSDelete (line 1609) - Delete VPS instance  
-// - HandleVPSCreatePage (line 2064) - VPS creation page
+	name := c.PostForm("name")
+	location := c.PostForm("location")
+	serverType := c.PostForm("server_type")
 
-// VPS Configuration and Setup:
-// - HandleVPSServerOptions (line 1363) - Server configuration options
-// - HandleVPSConfigure (line 1847) - Configure VPS settings
-// - HandleVPSDeploy (line 1921) - Deploy applications to VPS
-// - HandleVPSLocations (line 2148) - Available VPS locations
-// - HandleVPSServerTypes (line 2232) - Available server types
-// - HandleVPSValidateName (line 2179) - Validate VPS name
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server name is required"})
+		return
+	}
+	if location == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server location is required"})
+		return
+	}
+	if serverType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server type is required"})
+		return
+	}
 
-// VPS Power Management:
-// - HandleVPSPowerOff (line 1676) - Power off VPS
-// - HandleVPSPowerOn (line 1680) - Power on VPS
-// - HandleVPSReboot (line 1684) - Reboot VPS
-// - performVPSAction (line 1688) - Generic VPS action handler
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Check if Hetzner API key exists - if not, guide user to setup
+	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":          "Hetzner API key not configured",
+			"setup_required": true,
+			"setup_step":     "hetzner_api",
+			"message":        "Please configure your Hetzner API key first in the setup section"})
+		return
+	}
+
+	// Get SSL CSR configuration
+	var csrConfig struct {
+		CSR        string `json:"csr"`
+		PrivateKey string `json:"private_key"`
+		CreatedAt  string `json:"created_at"`
+	}
+	if err := utils.GetKVValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Error getting CSR from KV: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSL CSR configuration not found. Please logout and login again."})
+		return
+	}
+
+	// Convert CSR private key to SSH public key
+	cfService := services.NewCloudflareService()
+	sshPublicKey, err := cfService.ConvertPrivateKeyToSSH(csrConfig.PrivateKey)
+	if err != nil {
+		log.Printf("Error converting private key to SSH: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate SSH key from CSR"})
+		return
+	}
+
+	// Validate SSH public key format
+	if !strings.HasPrefix(sshPublicKey, "ssh-rsa ") {
+		keyPreview := sshPublicKey
+		if len(keyPreview) > 50 {
+			keyPreview = keyPreview[:50] + "..."
+		}
+		log.Printf("Invalid SSH public key format: %s", keyPreview)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Generated SSH key has invalid format"})
+		return
+	}
+	log.Printf("✅ Generated SSH public key (length: %d)", len(sshPublicKey))
+
+	// Create or find SSH key in Hetzner Cloud
+	hetznerService := services.NewHetznerService()
+	sshKeyName := fmt.Sprintf("xanthus-key-%d", time.Now().Unix())
+	sshKey, err := hetznerService.CreateOrFindSSHKey(hetznerKey, sshKeyName, sshPublicKey)
+	if err != nil {
+		log.Printf("Error creating/finding SSH key in Hetzner: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create SSH key in Hetzner Cloud: %v", err)})
+		return
+	}
+
+	// Use the actual key name from the found/created key
+	sshKeyName = sshKey.Name
+	log.Printf("✅ Using SSH key: %s (ID: %d)", sshKeyName, sshKey.ID)
+
+	// Create server using cloud-init script
+	server, err := hetznerService.CreateServer(hetznerKey, name, serverType, location, sshKeyName)
+	if err != nil {
+		log.Printf("Error creating server: %v", err)
+
+		// Check for specific error types and provide user-friendly messages
+		errorStr := err.Error()
+		if strings.Contains(errorStr, "server name is already used") || strings.Contains(errorStr, "uniqueness_error") {
+			c.JSON(http.StatusConflict, gin.H{"error": "A server with this name already exists. Please choose a different name."})
+			return
+		}
+
+		// Generic error for other cases
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create server: %v", err)})
+		return
+	}
+
+	// Get server type pricing information
+	serverTypes, err := utils.FetchHetznerServerTypes(hetznerKey)
+	if err != nil {
+		log.Printf("Warning: Could not fetch server types for pricing: %v", err)
+	}
+
+	var hourlyRate, monthlyRate float64
+	for _, st := range serverTypes {
+		if st.Name == serverType {
+			if len(st.Prices) > 0 {
+				// Use gross prices (including VAT)
+				if hourlyGross := st.Prices[0].PriceHourly.Gross; hourlyGross != "" {
+					if _, err := fmt.Sscanf(hourlyGross, "%f", &hourlyRate); err == nil {
+						// Add IPv4 cost: €0.50/month = €0.00069444/hour (30.41 days avg per month)
+						hourlyRate += 0.50 / (30.41 * 24)
+					}
+				}
+				if monthlyGross := st.Prices[0].PriceMonthly.Gross; monthlyGross != "" {
+					if _, err := fmt.Sscanf(monthlyGross, "%f", &monthlyRate); err == nil {
+						// Add IPv4 cost
+						monthlyRate += 0.50
+					}
+				}
+			}
+			break
+		}
+	}
+
+	// Initialize KV service for storing VPS configuration
+	kvService := services.NewKVService()
+
+	// Store VPS configuration in KV
+	vpsConfig := &services.VPSConfig{
+		ServerID:    server.ID,
+		Name:        server.Name,
+		ServerType:  serverType,
+		Location:    location,
+		PublicIPv4:  server.PublicNet.IPv4.IP,
+		Status:      server.Status,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+		SSHKeyName:  sshKeyName,
+		SSHUser:     "root",
+		SSHPort:     22,
+		HourlyRate:  hourlyRate,
+		MonthlyRate: monthlyRate,
+	}
+
+	if err := kvService.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
+		log.Printf("Error storing VPS config: %v", err)
+		// Don't fail the creation, just log the error
+	}
+
+	log.Printf("✅ Created server: %s (ID: %d) with IPv4: %s", server.Name, server.ID, server.PublicNet.IPv4.IP)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Server created successfully with K3s, Helm, and ArgoCD",
+		"server":  server,
+		"config":  vpsConfig,
+	})
+}
+
+// HandleVPSDelete deletes a VPS instance and cleans up configuration
+func (h *VPSHandler) HandleVPSDelete(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverID := c.PostForm("server_id")
+	if serverID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server ID is required"})
+		return
+	}
+
+	// Convert serverID to int
+	var id int
+	if _, err := fmt.Sscanf(serverID, "%d", &id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Get VPS configuration before deletion (for logging)
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, id)
+	if err != nil {
+		log.Printf("Warning: Could not get VPS config for server %d: %v", id, err)
+	}
+
+	// Delete server from Hetzner
+	hetznerService := services.NewHetznerService()
+	if err := hetznerService.DeleteServer(hetznerKey, id); err != nil {
+		log.Printf("Error deleting server %d: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to delete server: %v", err)})
+		return
+	}
+
+	// Clean up VPS configuration from KV
+	if err := kvService.DeleteVPSConfig(token, accountID, id); err != nil {
+		log.Printf("Warning: Could not delete VPS config for server %d: %v", id, err)
+		// Don't fail the deletion, just log the warning
+	}
+
+	serverName := fmt.Sprintf("Server %d", id)
+	if vpsConfig != nil {
+		serverName = vpsConfig.Name
+	}
+
+	log.Printf("✅ Deleted server: %s (ID: %d) and cleaned up configuration", serverName, id)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Server deleted successfully and configuration cleaned up",
+	})
+}
+
+// HandleVPSCreatePage renders the VPS creation page
+func (h *VPSHandler) HandleVPSCreatePage(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+	c.HTML(http.StatusOK, "vps-create.html", nil)
+}
+
+// HandleVPSServerOptions fetches available server types and locations with filtering/sorting
+func (h *VPSHandler) HandleVPSServerOptions(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Fetch locations and server types
+	locations, err := utils.FetchHetznerLocations(hetznerKey)
+	if err != nil {
+		log.Printf("Error fetching locations: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch locations"})
+		return
+	}
+
+	serverTypes, err := utils.FetchHetznerServerTypes(hetznerKey)
+	if err != nil {
+		log.Printf("Error fetching server types: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch server types"})
+		return
+	}
+
+	// Filter to only shared vCPU servers for cost efficiency
+	sharedServerTypes := utils.FilterSharedVCPUServers(serverTypes)
+
+	// Apply architecture filter if requested
+	architectureFilter := c.Query("architecture")
+	if architectureFilter != "" {
+		var filteredTypes []services.HetznerServerType
+		for _, serverType := range sharedServerTypes {
+			if serverType.Architecture == architectureFilter {
+				filteredTypes = append(filteredTypes, serverType)
+			}
+		}
+		sharedServerTypes = filteredTypes
+	}
+
+	// Get sort parameter and sort
+	sortBy := c.Query("sort")
+	switch sortBy {
+	case "price_desc":
+		utils.SortServerTypesByPriceDesc(sharedServerTypes)
+	case "price_asc":
+		utils.SortServerTypesByPriceAsc(sharedServerTypes)
+	case "cpu_desc":
+		utils.SortServerTypesByCPUDesc(sharedServerTypes)
+	case "cpu_asc":
+		utils.SortServerTypesByCPUAsc(sharedServerTypes)
+	case "memory_desc":
+		utils.SortServerTypesByMemoryDesc(sharedServerTypes)
+	case "memory_asc":
+		utils.SortServerTypesByMemoryAsc(sharedServerTypes)
+	default:
+		// Default to price ascending
+		utils.SortServerTypesByPriceAsc(sharedServerTypes)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"locations":   locations,
+		"serverTypes": sharedServerTypes,
+	})
+}
+
+// HandleVPSConfigure configures VPS with SSL certificates for a specific domain
+func (h *VPSHandler) HandleVPSConfigure(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	domain := c.PostForm("domain")
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Domain is required for SSL configuration"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS configuration not found"})
+		return
+	}
+
+	// Get SSL configuration for the domain
+	domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "SSL configuration not found for domain"})
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
+		return
+	}
+
+	// Connect to VPS and configure SSL
+	sshService := services.NewSSHService()
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("SSH connection failed: %v", err)})
+		return
+	}
+	defer conn.Close()
+
+	// Configure K3s with new SSL certificates
+	if err := sshService.ConfigureK3s(conn, domainConfig.Certificate, domainConfig.PrivateKey); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to configure K3s: %v", err)})
+		return
+	}
+
+	log.Printf("✅ Successfully configured VPS %d with SSL for domain %s", serverID, domain)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("VPS successfully configured with SSL certificates for %s", domain),
+	})
+}
+
+// HandleVPSDeploy deploys Kubernetes manifests to a VPS
+func (h *VPSHandler) HandleVPSDeploy(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	manifest := c.PostForm("manifest")
+	name := c.PostForm("name")
+	if manifest == "" || name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Manifest and name are required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "VPS configuration not found"})
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
+		return
+	}
+
+	// Connect to VPS and deploy manifest
+	sshService := services.NewSSHService()
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("SSH connection failed: %v", err)})
+		return
+	}
+	defer conn.Close()
+
+	// Deploy the Kubernetes manifest
+	if err := sshService.DeployManifest(conn, manifest, name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to deploy manifest: %v", err)})
+		return
+	}
+
+	log.Printf("✅ Successfully deployed %s to VPS %d", name, serverID)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Successfully deployed %s to VPS", name),
+	})
+}
+
+// HandleVPSLocations fetches available VPS locations from Hetzner
+func (h *VPSHandler) HandleVPSLocations(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Fetch locations
+	locations, err := utils.FetchHetznerLocations(hetznerKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch locations"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"locations": locations})
+}
+
+// HandleVPSServerTypes fetches available server types for a specific location
+func (h *VPSHandler) HandleVPSServerTypes(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	location := c.Query("location")
+	if location == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Location parameter is required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Fetch server types
+	serverTypes, err := utils.FetchHetznerServerTypes(hetznerKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch server types"})
+		return
+	}
+
+	// Filter to only shared vCPU servers
+	sharedServerTypes := utils.FilterSharedVCPUServers(serverTypes)
+
+	// Get availability for the selected location
+	availability, err := utils.FetchServerAvailability(hetznerKey)
+	if err != nil {
+		log.Printf("Warning: Could not fetch availability: %v", err)
+		availability = make(map[string]map[int]bool)
+	}
+
+	// Add availability and pricing information
+	for i := range sharedServerTypes {
+		// Check availability in the selected location
+		if locationAvailability, exists := availability[location]; exists {
+			sharedServerTypes[i].AvailableLocations = map[string]bool{location: locationAvailability[sharedServerTypes[i].ID]}
+		} else {
+			// Default to available if we can't check
+			sharedServerTypes[i].AvailableLocations = map[string]bool{location: true}
+		}
+
+		// Calculate monthly price from hourly
+		monthlyPrice := utils.GetServerTypeMonthlyPrice(sharedServerTypes[i])
+		// Add a monthlyPrice field for easy access in frontend
+		sharedServerTypes[i].Prices = append(sharedServerTypes[i].Prices, services.HetznerPrice{
+			Location: "monthly_calc",
+			PriceMonthly: services.HetznerPriceDetail{
+				Gross: fmt.Sprintf("%.2f", monthlyPrice),
+			},
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"serverTypes": sharedServerTypes})
+}
+
+// HandleVPSValidateName validates VPS names against existing servers
+func (h *VPSHandler) HandleVPSValidateName(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	name := c.PostForm("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Name is required"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Check if name already exists by listing servers
+	hetznerService := services.NewHetznerService()
+	servers, err := hetznerService.ListServers(hetznerKey)
+	if err != nil {
+		log.Printf("Error checking existing servers: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check existing servers"})
+		return
+	}
+
+	// Check if name is already in use
+	for _, server := range servers {
+		if server.Name == name {
+			c.JSON(http.StatusConflict, gin.H{
+				"available": false,
+				"error":     "A VPS with this name already exists in your Hetzner account",
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"available": true,
+		"message":   "Name is available",
+	})
+}
+
+// HandleVPSPowerOff powers off a VPS instance
+func (h *VPSHandler) HandleVPSPowerOff(c *gin.Context) {
+	h.performVPSAction(c, "poweroff", "powered off")
+}
+
+// HandleVPSPowerOn powers on a VPS instance
+func (h *VPSHandler) HandleVPSPowerOn(c *gin.Context) {
+	h.performVPSAction(c, "poweron", "powered on")
+}
+
+// HandleVPSReboot reboots a VPS instance
+func (h *VPSHandler) HandleVPSReboot(c *gin.Context) {
+	h.performVPSAction(c, "reboot", "rebooted")
+}
+
+// performVPSAction is a generic function that performs power management actions on VPS servers
+func (h *VPSHandler) performVPSAction(c *gin.Context, action, actionText string) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+		return
+	}
+
+	serverID := c.PostForm("server_id")
+	if serverID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Server ID is required"})
+		return
+	}
+
+	// Convert serverID to int
+	var id int
+	if _, err := fmt.Sscanf(serverID, "%d", &id); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid server ID"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get account ID"})
+		return
+	}
+
+	// Get Hetzner API key
+	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get Hetzner API key"})
+		return
+	}
+
+	// Perform action
+	hetznerService := services.NewHetznerService()
+	var actionErr error
+	switch action {
+	case "poweroff":
+		actionErr = hetznerService.PowerOffServer(hetznerKey, id)
+	case "poweron":
+		actionErr = hetznerService.PowerOnServer(hetznerKey, id)
+	case "reboot":
+		actionErr = hetznerService.RebootServer(hetznerKey, id)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action"})
+		return
+	}
+
+	if actionErr != nil {
+		log.Printf("Error performing %s on server %d: %v", action, id, actionErr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to perform %s: %v", action, actionErr)})
+		return
+	}
+
+	log.Printf("✅ Server %d %s successfully", id, actionText)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Server %s successfully", actionText),
+	})
+}
 
 // VPS SSH and Access:
 // - HandleVPSSSHKey (line 1750) - SSH key management
