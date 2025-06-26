@@ -83,49 +83,86 @@ tests/
   - Domain validation
   - Cloudflare integration
 
-### 1.2 Service Tests (`internal/services/`)
+### 1.2 Service Tests (`internal/services/`) ✅ COMPLETED
 
-#### Hetzner Service (`hetzner.go`)
+#### Hetzner Service (`hetzner.go`) ✅ COMPLETED
 - **Priority**: High (External API integration)
+- **Implementation**: `/tests/unit/services/hetzner_test.go`
 - **Test Cases**:
-  - `TestMakeRequest` - HTTP request building and error handling
-  - `TestListServers` - Response parsing and filtering
-  - `TestCreateServer` - Server creation with cloud-init
-  - `TestCreateOrFindSSHKey` - SSH key management logic
-  - `TestDeleteServer` - Server cleanup
-  - **Mock Strategy**: Mock HTTP client, test against fixtures
+  - ✅ `TestHetznerService_MakeRequest` - HTTP request building and error handling
+  - ✅ `TestHetznerService_ListServers` - Response parsing and filtering
+  - ✅ `TestHetznerService_CreateServer` - Server creation with cloud-init
+  - ✅ `TestHetznerService_SSHKeyOperations` - SSH key management logic (create, find, list)
+  - ✅ `TestHetznerService_DeleteServer` - Server cleanup
+  - ✅ `TestHetznerService_PowerOperations` - Power management (on/off/reboot)
+  - ✅ `TestHetznerService_ErrorHandling` - API errors and network failures
+  - **Mock Strategy**: Mock HTTP client with httptest servers, test against fixtures
+- **Additional**: Benchmark tests and helper functions for performance measurement
 
-#### Cloudflare Service (`cloudflare.go`)
+#### Cloudflare Service (`cloudflare.go`) ✅ COMPLETED
 - **Priority**: High (Complex SSL operations)
+- **Implementation**: `/tests/unit/services/cloudflare_test.go`
 - **Test Cases**:
-  - `TestGenerateCSR` - CSR and private key generation
-  - `TestConfigureDomainSSL` - Complete SSL setup flow:
-    - Zone ID retrieval
-    - SSL mode configuration
-    - Certificate creation
-    - Root certificate appending
-    - Page rule creation
-  - `TestRemoveDomainFromXanthus` - SSL cleanup
-  - `TestConvertPrivateKeyToSSH` - Key conversion logic
-  - **Mock Strategy**: Mock HTTP responses for API calls
+  - ✅ `TestCloudflareService_GenerateCSR` - CSR and private key generation with validation
+  - ✅ `TestCloudflareService_MakeRequest` - HTTP request handling and error responses
+  - ✅ `TestCloudflareService_GetZoneID` - Zone retrieval and domain validation
+  - ✅ `TestCloudflareService_SSLModeOperations` - SSL mode configuration (strict/flexible)
+  - ✅ `TestCloudflareService_AlwaysHTTPSOperations` - HTTPS enforcement settings
+  - ✅ `TestCloudflareService_CreateOriginCertificate` - Certificate creation with CSR
+  - ✅ `TestCloudflareService_AppendRootCertificate` - Root certificate chain building
+  - ✅ `TestCloudflareService_PageRuleOperations` - Page rule creation and management
+  - ✅ `TestCloudflareService_ConvertPrivateKeyToSSH` - Key format conversion
+  - ✅ `TestCloudflareService_ConfigureDomainSSL` - Complete SSL setup flow
+  - ✅ `TestCloudflareService_RemoveDomainFromXanthus` - SSL cleanup and rollback
+  - **Mock Strategy**: Mock HTTP responses for API calls with httptest servers
+- **Additional**: Benchmark tests for CSR generation and key conversion performance
 
-#### Helm Service (`helm.go`)
+#### Helm Service (`helm.go`) ✅ COMPLETED
 - **Priority**: Medium
+- **Implementation**: `/tests/unit/services/helm_test.go`
 - **Test Cases**:
-  - `TestInstallChart` - Chart installation with custom values
-  - `TestUpgradeChart` - Release upgrade logic
-  - `TestUninstallChart` - Chart removal
-  - `TestGetReleaseStatus` - Status parsing
-  - **Mock Strategy**: Mock SSH service
+  - ✅ `TestHelmService_InstallChart` - Chart installation with custom values and validation
+  - ✅ `TestHelmService_UpgradeChart` - Release upgrade logic and version management
+  - ✅ `TestHelmService_UninstallChart` - Chart removal and cleanup
+  - ✅ `TestHelmService_GetReleaseStatus` - Status parsing (deployed/failed/pending/unknown)
+  - ✅ `TestHelmService_CommandConstruction` - Helm command building with parameters
+  - ✅ `TestHelmService_ParameterValidation` - Input validation and error handling
+  - ✅ `TestHelmService_ErrorScenarios` - Network, auth, and cluster access failures
+  - **Mock Strategy**: Mock SSH service for command execution testing
+- **Additional**: Benchmark tests for command construction and chart operations
 
-#### SSH Service (`ssh.go`)
+#### SSH Service (`ssh.go`) ✅ COMPLETED
 - **Priority**: High (Security critical)
+- **Implementation**: `/tests/unit/services/ssh_test.go`
 - **Test Cases**:
-  - Connection establishment
-  - Command execution
-  - File transfer operations
-  - Connection cleanup
-  - **Mock Strategy**: Mock SSH client
+  - ✅ `TestSSHService_ConnectionCaching` - Connection establishment and reuse
+  - ✅ `TestSSHService_ExecuteCommand` - Command execution and result handling
+  - ✅ `TestSSHService_PrivateKeyParsing` - PEM key validation and error handling
+  - ✅ `TestSSHService_CheckVPSHealth` - Comprehensive health checks with status parsing
+  - ✅ `TestSSHService_ConfigureK3s` - SSL certificate configuration and K3s management
+  - ✅ `TestSSHService_DeployManifest` - Kubernetes manifest deployment
+  - ✅ `TestSSHService_GetK3sLogs` - Log retrieval and parsing
+  - ✅ `TestSSHService_HelmOperations` - Helm repository and chart management
+  - ✅ `TestSSHService_ConnectionLifecycle` - Connection cleanup and management
+  - ✅ `TestSSHService_ErrorHandling` - Timeout, authentication, and network failures
+  - **Mock Strategy**: Mock SSH client and connection for testing
+- **Additional**: Benchmark tests for command execution and connection caching
+
+#### KV Service (`kv.go`) ✅ COMPLETED
+- **Priority**: Medium (Data persistence)
+- **Implementation**: `/tests/unit/services/kv_test.go`
+- **Test Cases**:
+  - ✅ `TestKVService_GetXanthusNamespaceID` - Namespace discovery and validation
+  - ✅ `TestKVService_PutValue` - Key-value storage with JSON marshaling
+  - ✅ `TestKVService_GetValue` - Data retrieval and unmarshaling
+  - ✅ `TestKVService_DeleteValue` - Key deletion and cleanup
+  - ✅ `TestKVService_DomainSSLOperations` - SSL configuration storage and management
+  - ✅ `TestKVService_VPSConfigOperations` - VPS configuration CRUD operations
+  - ✅ `TestKVService_CalculateVPSCosts` - Cost calculation with time-based billing
+  - ✅ `TestKVService_KeyParsing` - Key format validation and domain extraction
+  - ✅ `TestKVService_ErrorHandling` - Network, auth, and data format errors
+  - **Mock Strategy**: Mock HTTP responses for Cloudflare KV API calls
+- **Additional**: Benchmark tests for cost calculations and key operations
 
 ### 1.3 Utility Tests (`internal/utils/`)
 

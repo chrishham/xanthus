@@ -1,6 +1,10 @@
 # VPS Management
 - make the navbar that appears at applications.html the default across all the pages of the app. declare it at one place and make it available everywhere. 
-- ensure that login without ssh is completely disabled
+- at application creation is the same ssh session reused across all steps?
+
+- add new repo doesn't show an input box for user to type
+- when typing into input box in helm chart creation, nothing happens.
+- at vps creation ensure that login without ssh is completely disabled
 
 - is there a way to determine the degree of utilisation of the vps ? so that the user will know if he needs to provision another vps
 
