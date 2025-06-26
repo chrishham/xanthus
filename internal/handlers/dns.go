@@ -271,4 +271,3 @@ func (h *DNSHandler) fetchCloudflareDomains(token string) ([]CloudflareDomain, e
 
 	return domainsResp.Result, nil
 }
-

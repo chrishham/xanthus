@@ -105,4 +105,3 @@ func (h *AuthHandler) HandleHealth(c *gin.Context) {
 		"status": "healthy",
 	})
 }
-

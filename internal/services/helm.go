@@ -33,7 +33,7 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 	}
 
 	// Build Helm install command
-	helmCmd := fmt.Sprintf("helm install %s %s --version %s --namespace %s --create-namespace", 
+	helmCmd := fmt.Sprintf("helm install %s %s --version %s --namespace %s --create-namespace",
 		releaseName, chartName, chartVersion, namespace)
 
 	// Add custom values if provided
@@ -63,7 +63,7 @@ func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, char
 	defer conn.Close()
 
 	// Build Helm upgrade command
-	helmCmd := fmt.Sprintf("helm upgrade %s %s --version %s --namespace %s", 
+	helmCmd := fmt.Sprintf("helm upgrade %s %s --version %s --namespace %s",
 		releaseName, chartName, chartVersion, namespace)
 
 	// Add custom values if provided

@@ -842,4 +842,3 @@ func (h *VPSHandler) performVPSAction(c *gin.Context, action, actionText string)
 // - HandleVPSRepositories (line 2778) - Manage Helm repositories
 // - HandleVPSAddRepository (line 2878) - Add new repository
 // - HandleVPSCharts (line 3009) - List available Helm charts
-

@@ -20,11 +20,11 @@ type SSHService struct {
 
 // CachedSSHConnection represents a cached SSH connection with metadata
 type CachedSSHConnection struct {
-	conn      *SSHConnection
-	lastUsed  time.Time
-	serverID  int
-	host      string
-	user      string
+	conn     *SSHConnection
+	lastUsed time.Time
+	serverID int
+	host     string
+	user     string
 }
 
 // NewSSHService creates a new SSH service instance
@@ -33,10 +33,10 @@ func NewSSHService() *SSHService {
 		timeout:     30 * time.Second,
 		connections: make(map[string]*CachedSSHConnection),
 	}
-	
+
 	// Start cleanup goroutine for stale connections
 	go service.cleanupStaleConnections()
-	
+
 	return service
 }
 
@@ -78,10 +78,10 @@ func (ss *SSHService) getConnectionKey(host, user string) string {
 // GetOrCreateConnection gets an existing connection or creates a new one
 func (ss *SSHService) GetOrCreateConnection(host, user, privateKeyPEM string, serverID int) (*SSHConnection, error) {
 	connectionKey := ss.getConnectionKey(host, user)
-	
+
 	ss.mutex.Lock()
 	defer ss.mutex.Unlock()
-	
+
 	// Check if we have a cached connection
 	if cached, exists := ss.connections[connectionKey]; exists {
 		// Test if the connection is still alive
@@ -93,13 +93,13 @@ func (ss *SSHService) GetOrCreateConnection(host, user, privateKeyPEM string, se
 			delete(ss.connections, connectionKey)
 		}
 	}
-	
+
 	// Create new connection
 	conn, err := ss.connectToVPS(host, user, privateKeyPEM)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Cache the connection
 	ss.connections[connectionKey] = &CachedSSHConnection{
 		conn:     conn,
@@ -108,7 +108,7 @@ func (ss *SSHService) GetOrCreateConnection(host, user, privateKeyPEM string, se
 		host:     host,
 		user:     user,
 	}
-	
+
 	return conn, nil
 }
 
@@ -117,7 +117,7 @@ func (ss *SSHService) isConnectionAlive(conn *SSHConnection) bool {
 	if conn == nil || conn.client == nil {
 		return false
 	}
-	
+
 	// Try to create a session to test the connection
 	session, err := conn.client.NewSession()
 	if err != nil {
@@ -131,7 +131,7 @@ func (ss *SSHService) isConnectionAlive(conn *SSHConnection) bool {
 func (ss *SSHService) cleanupStaleConnections() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		ss.mutex.Lock()
 		now := time.Now()
@@ -152,7 +152,7 @@ func (ss *SSHService) cleanupStaleConnections() {
 func (ss *SSHService) CloseAllConnections() {
 	ss.mutex.Lock()
 	defer ss.mutex.Unlock()
-	
+
 	for key, cached := range ss.connections {
 		if cached.conn != nil {
 			cached.conn.Close()
