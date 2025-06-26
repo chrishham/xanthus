@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yourusername/xanthus/internal/services"
+	"github.com/chrishham/xanthus/internal/services"
 )
 
 func TestKVService_NewKVService(t *testing.T) {
@@ -664,7 +664,7 @@ func TestKVService_KeyParsing(t *testing.T) {
 		
 		for _, tc := range testCases {
 			t.Run(tc.key, func(t *testing.T) {
-				matches := len(tc.key) > 8 && tc.key[len(tc.key)-7:] == ":config"
+				matches := strings.HasPrefix(tc.key, "vps:") && strings.HasSuffix(tc.key, ":config") && len(tc.key) > len("vps::config")
 				assert.Equal(t, tc.shouldMatch, matches)
 			})
 		}

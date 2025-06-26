@@ -5,14 +5,13 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yourusername/xanthus/internal/services"
+	"github.com/chrishham/xanthus/internal/services"
 )
 
 // Mock SSH connection for testing

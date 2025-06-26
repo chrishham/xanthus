@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
-	"github.com/yourusername/xanthus/internal/services"
+	"github.com/chrishham/xanthus/internal/services"
 )
 
 // MockSSHServiceForHelm provides a mock SSH service for testing Helm operations
@@ -173,6 +172,7 @@ func TestHelmService_UpgradeChart(t *testing.T) {
 		assert.Contains(t, expectedHelmCmd, chartName)
 		assert.Contains(t, expectedHelmCmd, chartVersion)
 		assert.Contains(t, expectedHelmCmd, namespace)
+		assert.Len(t, values, 2)
 		assert.Contains(t, expectedHelmCmd, "replicas=3")
 		assert.Contains(t, expectedHelmCmd, "service.port=8080")
 	})
@@ -187,8 +187,10 @@ func TestHelmService_UpgradeChart(t *testing.T) {
 		
 		// Command should not contain --set when no values are provided
 		assert.NotContains(t, expectedHelmCmd, "--set")
-		assert.Contains(t, expectedHelmCmd, "helm upgrade")
 		assert.Contains(t, expectedHelmCmd, releaseName)
+		assert.Contains(t, expectedHelmCmd, chartName)
+		assert.Contains(t, expectedHelmCmd, chartVersion)
+		assert.Contains(t, expectedHelmCmd, namespace)
 	})
 
 	t.Run("SSH connection failure", func(t *testing.T) {

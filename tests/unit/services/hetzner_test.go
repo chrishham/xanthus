@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yourusername/xanthus/internal/services"
+	"github.com/chrishham/xanthus/internal/services"
 )
 
 func TestHetznerService_MakeRequest(t *testing.T) {

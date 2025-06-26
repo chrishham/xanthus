@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/yourusername/xanthus/internal/services"
+	"github.com/chrishham/xanthus/internal/services"
 )
 
 func TestCloudflareService_GenerateCSR(t *testing.T) {
@@ -295,10 +295,9 @@ func TestCloudflareService_AppendRootCertificate(t *testing.T) {
 
 		service := services.NewCloudflareService()
 		
-		// Test certificate
-		originalCert := "-----BEGIN CERTIFICATE-----\nORIGINAL_CERT\n-----END CERTIFICATE-----"
-		
 		// In practice, we'd need to mock the HTTP client or provide a way to override the URL
+		// Test certificate would be:
+		// originalCert := "-----BEGIN CERTIFICATE-----\nORIGINAL_CERT\n-----END CERTIFICATE-----"
 		// result, err := service.AppendRootCertificate(originalCert)
 		// require.NoError(t, err)
 		// assert.Contains(t, result, "ORIGINAL_CERT")
@@ -472,7 +471,7 @@ invalid base64 data
 		
 		_, err := service.ConvertPrivateKeyToSSH(invalidPEM)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to parse private key")
+		assert.Contains(t, err.Error(), "failed to parse PEM block containing the private key")
 	})
 }
 
