@@ -61,7 +61,7 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 		// Check and create CSR if not exists
 		client := &http.Client{Timeout: 10 * time.Second}
 		var existingCSR map[string]interface{}
-		if err := utils.GetKVValue(token, accountID, "config:ssl:csr", &existingCSR); err != nil {
+		if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &existingCSR); err != nil {
 			log.Println("🔧 Generating new CSR for SSL certificates")
 
 			cfService := services.NewCloudflareService()
@@ -106,5 +106,3 @@ func (h *AuthHandler) HandleHealth(c *gin.Context) {
 	})
 }
 
-// TODO: These utility functions have been moved to internal/utils/placeholders.go
-// They need to be properly implemented and moved to domain-specific utils files

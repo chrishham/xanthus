@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chrishham/xanthus/internal/models"
 	"github.com/chrishham/xanthus/internal/services"
 	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -165,12 +166,13 @@ func (h *VPSHandler) HandleVPSCreate(c *gin.Context) {
 	}
 
 	// Get SSL CSR configuration
+	client := &http.Client{Timeout: 10 * time.Second}
 	var csrConfig struct {
 		CSR        string `json:"csr"`
 		PrivateKey string `json:"private_key"`
 		CreatedAt  string `json:"created_at"`
 	}
-	if err := utils.GetKVValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
 		log.Printf("Error getting CSR from KV: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSL CSR configuration not found. Please logout and login again."})
 		return
@@ -410,7 +412,7 @@ func (h *VPSHandler) HandleVPSServerOptions(c *gin.Context) {
 	// Apply architecture filter if requested
 	architectureFilter := c.Query("architecture")
 	if architectureFilter != "" {
-		var filteredTypes []services.HetznerServerType
+		var filteredTypes []models.HetznerServerType
 		for _, serverType := range sharedServerTypes {
 			if serverType.Architecture == architectureFilter {
 				filteredTypes = append(filteredTypes, serverType)
@@ -489,10 +491,11 @@ func (h *VPSHandler) HandleVPSConfigure(c *gin.Context) {
 	}
 
 	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
 	var csrConfig struct {
 		PrivateKey string `json:"private_key"`
 	}
-	if err := utils.GetKVValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
 		return
 	}
@@ -557,10 +560,11 @@ func (h *VPSHandler) HandleVPSDeploy(c *gin.Context) {
 	}
 
 	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
 	var csrConfig struct {
 		PrivateKey string `json:"private_key"`
 	}
-	if err := utils.GetKVValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH private key not found"})
 		return
 	}
@@ -677,9 +681,9 @@ func (h *VPSHandler) HandleVPSServerTypes(c *gin.Context) {
 		// Calculate monthly price from hourly
 		monthlyPrice := utils.GetServerTypeMonthlyPrice(sharedServerTypes[i])
 		// Add a monthlyPrice field for easy access in frontend
-		sharedServerTypes[i].Prices = append(sharedServerTypes[i].Prices, services.HetznerPrice{
+		sharedServerTypes[i].Prices = append(sharedServerTypes[i].Prices, models.HetznerPrice{
 			Location: "monthly_calc",
-			PriceMonthly: services.HetznerPriceDetail{
+			PriceMonthly: models.HetznerPriceDetail{
 				Gross: fmt.Sprintf("%.2f", monthlyPrice),
 			},
 		})
@@ -839,5 +843,3 @@ func (h *VPSHandler) performVPSAction(c *gin.Context, action, actionText string)
 // - HandleVPSAddRepository (line 2878) - Add new repository
 // - HandleVPSCharts (line 3009) - List available Helm charts
 
-// TODO: These utility functions have been moved to internal/utils/placeholders.go
-// They need to be properly implemented and moved to domain-specific utils files

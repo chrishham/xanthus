@@ -12,20 +12,21 @@ import (
 	"html/template"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/chrishham/xanthus/internal/handlers"
+	"github.com/chrishham/xanthus/internal/models"
 	"github.com/chrishham/xanthus/internal/services"
+	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 
-	port := findAvailablePort()
+	port := utils.FindAvailablePort()
 	if port == "" {
 		log.Fatal("Could not find an available port")
 	}
@@ -57,16 +58,16 @@ func main() {
 	r.Static("/static", "web/static")
 
 	// Routes
-	r.GET("/", handleRoot)
-	r.GET("/login", handleLoginPage)
-	r.POST("/login", handleLogin)
+	r.GET("/", authHandler.HandleRoot)
+	r.GET("/login", authHandler.HandleLoginPage)
+	r.POST("/login", authHandler.HandleLogin)
 	r.GET("/main", handleMainPage)
 	r.GET("/setup", handleSetupPage)
 	r.POST("/setup/hetzner", handleSetupHetzner)
-	r.GET("/dns", handleDNSConfigPage)
-	r.GET("/dns/list", handleDNSList)
-	r.POST("/dns/configure", handleDNSConfigure)
-	r.POST("/dns/remove", handleDNSRemove)
+	r.GET("/dns", dnsHandler.HandleDNSConfigPage)
+	r.GET("/dns/list", dnsHandler.HandleDNSList)
+	r.POST("/dns/configure", dnsHandler.HandleDNSConfigure)
+	r.POST("/dns/remove", dnsHandler.HandleDNSRemove)
 	r.GET("/vps", vpsHandler.HandleVPSManagePage)
 	r.GET("/vps/list", vpsHandler.HandleVPSList)
 	r.GET("/vps/create", vpsHandler.HandleVPSCreatePage)
@@ -98,213 +99,14 @@ func main() {
 	r.POST("/applications/create", appsHandler.HandleApplicationsCreate)
 	r.POST("/applications/:id/upgrade", appsHandler.HandleApplicationUpgrade)
 	r.DELETE("/applications/:id", appsHandler.HandleApplicationDelete)
-	r.GET("/logout", handleLogout)
-	r.GET("/health", handleHealth)
+	r.GET("/logout", authHandler.HandleLogout)
+	r.GET("/health", authHandler.HandleHealth)
 
 	log.Fatal(r.Run(":" + port))
 }
 
-// CloudflareResponse represents the API response structure
-type CloudflareResponse struct {
-	Success bool `json:"success"`
-	Errors  []struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"errors"`
-}
 
-// KVNamespace represents a Cloudflare KV namespace
-type KVNamespace struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-}
 
-// KVNamespaceResponse represents the API response for KV namespaces
-type KVNamespaceResponse struct {
-	Success bool          `json:"success"`
-	Result  []KVNamespace `json:"result"`
-	Errors  []struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
-// HetznerLocation represents a Hetzner datacenter location
-type HetznerLocation struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	Country     string  `json:"country"`
-	City        string  `json:"city"`
-	Latitude    float64 `json:"latitude"`
-	Longitude   float64 `json:"longitude"`
-}
-
-// HetznerServerType represents a Hetzner server type/instance
-type HetznerServerType struct {
-	ID                 int             `json:"id"`
-	Name               string          `json:"name"`
-	Description        string          `json:"description"`
-	Cores              int             `json:"cores"`
-	Memory             float64         `json:"memory"`
-	Disk               int             `json:"disk"`
-	Prices             []HetznerPrice  `json:"prices"`
-	StorageType        string          `json:"storage_type"`
-	CPUType            string          `json:"cpu_type"`
-	Architecture       string          `json:"architecture"`
-	AvailableLocations map[string]bool `json:"available_locations,omitempty"`
-}
-
-// HetznerPrice represents pricing information for a server type
-type HetznerPrice struct {
-	Location     string             `json:"location"`
-	PriceHourly  HetznerPriceDetail `json:"price_hourly"`
-	PriceMonthly HetznerPriceDetail `json:"price_monthly"`
-}
-
-// HetznerPriceDetail represents price details
-type HetznerPriceDetail struct {
-	Net   string `json:"net"`
-	Gross string `json:"gross"`
-}
-
-// HetznerLocationsResponse represents the API response for locations
-type HetznerLocationsResponse struct {
-	Locations []HetznerLocation `json:"locations"`
-}
-
-// HetznerServerTypesResponse represents the API response for server types
-type HetznerServerTypesResponse struct {
-	ServerTypes []HetznerServerType `json:"server_types"`
-}
-
-// HetznerDatacenter represents a Hetzner datacenter with availability info
-type HetznerDatacenter struct {
-	ID          int                          `json:"id"`
-	Name        string                       `json:"name"`
-	Description string                       `json:"description"`
-	Location    HetznerLocation              `json:"location"`
-	ServerTypes HetznerDatacenterServerTypes `json:"server_types"`
-}
-
-// HetznerDatacenterServerTypes represents server type availability in a datacenter
-type HetznerDatacenterServerTypes struct {
-	Supported             []int `json:"supported"`
-	Available             []int `json:"available"`
-	AvailableForMigration []int `json:"available_for_migration"`
-}
-
-// HetznerDatacentersResponse represents the API response for datacenters
-type HetznerDatacentersResponse struct {
-	Datacenters []HetznerDatacenter `json:"datacenters"`
-}
-
-// CloudflareDomain represents a domain zone in Cloudflare
-type CloudflareDomain struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Status     string `json:"status"`
-	Paused     bool   `json:"paused"`
-	Type       string `json:"type"`
-	Managed    bool   `json:"managed"`
-	CreatedOn  string `json:"created_on"`
-	ModifiedOn string `json:"modified_on"`
-}
-
-// CloudflareDomainsResponse represents the API response for domain zones
-type CloudflareDomainsResponse struct {
-	Success bool               `json:"success"`
-	Result  []CloudflareDomain `json:"result"`
-	Errors  []struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-	} `json:"errors"`
-}
-
-// Application represents a deployed application
-type Application struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Subdomain    string `json:"subdomain"`
-	Domain       string `json:"domain"`
-	VPSID        string `json:"vps_id"`
-	VPSName      string `json:"vps_name"`
-	ChartName    string `json:"chart_name"`
-	ChartVersion string `json:"chart_version"`
-	Namespace    string `json:"namespace"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"created_at"`
-}
-
-func handleRoot(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/login")
-}
-
-func handleLoginPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "login.html", nil)
-}
-
-func handleLogin(c *gin.Context) {
-	token := c.PostForm("cf_token")
-	if token == "" {
-		c.Data(http.StatusBadRequest, "text/html", []byte("API token is required"))
-		return
-	}
-
-	if verifyCloudflareToken(token) {
-		// Check if Xanthus KV namespace exists, create if not
-		exists, accountID, err := checkKVNamespaceExists(token)
-		if err != nil {
-			log.Printf("Error checking KV namespace: %v", err)
-			c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error checking KV namespace: %s", err.Error())))
-			return
-		}
-
-		if !exists {
-			if err := createKVNamespace(token, accountID); err != nil {
-				log.Printf("Error creating KV namespace: %v", err)
-				c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error creating KV namespace: %s", err.Error())))
-				return
-			}
-		} else {
-			log.Println("✅ Xanthus KV namespace already exists")
-		}
-
-		// Check and create CSR if not exists
-		client := &http.Client{Timeout: 10 * time.Second}
-		var existingCSR map[string]interface{}
-		if err := getKVValue(client, token, accountID, "config:ssl:csr", &existingCSR); err != nil {
-			log.Println("🔧 Generating new CSR for SSL certificates")
-
-			cfService := services.NewCloudflareService()
-			csrConfig, err := cfService.GenerateCSR()
-			if err != nil {
-				log.Printf("Error generating CSR: %v", err)
-				c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error generating CSR: %s", err.Error())))
-				return
-			}
-
-			// Store CSR in KV
-			if err := putKVValue(client, token, accountID, "config:ssl:csr", csrConfig); err != nil {
-				log.Printf("Error storing CSR: %v", err)
-				c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error storing CSR: %s", err.Error())))
-				return
-			}
-
-			log.Println("✅ CSR generated and stored successfully")
-		} else {
-			log.Println("✅ CSR already exists in KV")
-		}
-
-		// Valid token - proceed to main app (24 hours = 86400 seconds)
-		c.SetCookie("cf_token", token, 86400, "/", "", false, true)
-		c.Header("HX-Redirect", "/main")
-		c.Status(http.StatusOK)
-	} else {
-		c.Data(http.StatusOK, "text/html", []byte("❌ Invalid Cloudflare API token. Please check your token and try again."))
-	}
-}
 
 func handleMainPage(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
@@ -381,7 +183,7 @@ func handleSetupHetzner(c *gin.Context) {
 
 	// Store encrypted Hetzner API key in KV
 	client := &http.Client{Timeout: 10 * time.Second}
-	encryptedKey, err := encryptData(hetznerKey, token)
+	encryptedKey, err := utils.EncryptData(hetznerKey, token)
 	if err != nil {
 		log.Printf("Error encrypting Hetzner key: %v", err)
 		c.Data(http.StatusOK, "text/html", []byte("❌ Error storing API key"))
@@ -467,16 +269,6 @@ func handleDNSList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"domains": domains})
 }
 
-func handleLogout(c *gin.Context) {
-	c.SetCookie("cf_token", "", -1, "/", "", false, true)
-	c.Redirect(http.StatusTemporaryRedirect, "/login")
-}
-
-func handleHealth(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"status": "healthy",
-	})
-}
 
 func verifyCloudflareToken(token string) bool {
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -497,7 +289,7 @@ func verifyCloudflareToken(token string) bool {
 	}
 	defer resp.Body.Close()
 
-	var cfResp CloudflareResponse
+	var cfResp models.CloudflareResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cfResp); err != nil {
 		log.Printf("Error decoding response: %v", err)
 		return false
@@ -568,7 +360,7 @@ func checkKVNamespaceExists(token string) (bool, string, error) {
 	}
 	defer kvResp.Body.Close()
 
-	var kvNamespaceResp KVNamespaceResponse
+	var kvNamespaceResp models.KVNamespaceResponse
 	if err := json.NewDecoder(kvResp.Body).Decode(&kvNamespaceResp); err != nil {
 		return false, "", fmt.Errorf("error decoding KV response: %v", err)
 	}
@@ -614,7 +406,7 @@ func createKVNamespace(token, accountID string) error {
 	}
 	defer resp.Body.Close()
 
-	var createResp CloudflareResponse
+	var createResp models.CloudflareResponse
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
 		return fmt.Errorf("error decoding response: %v", err)
 	}
@@ -629,17 +421,6 @@ func createKVNamespace(token, accountID string) error {
 	return nil
 }
 
-func findAvailablePort() string {
-	for port := 8080; port <= 8090; port++ {
-		address := fmt.Sprintf(":%d", port)
-		listener, err := net.Listen("tcp", address)
-		if err == nil {
-			listener.Close()
-			return fmt.Sprintf("%d", port)
-		}
-	}
-	return ""
-}
 
 // encryptData encrypts data using AES-256-GCM with a key derived from the CF token
 func encryptData(data, token string) (string, error) {
@@ -743,7 +524,7 @@ func putKVValue(client *http.Client, token, accountID, key string, value interfa
 	}
 	defer resp.Body.Close()
 
-	var kvResp CloudflareResponse
+	var kvResp models.CloudflareResponse
 	if err := json.NewDecoder(resp.Body).Decode(&kvResp); err != nil {
 		return fmt.Errorf("failed to decode response: %v", err)
 	}
@@ -771,7 +552,7 @@ func getXanthusNamespaceID(client *http.Client, token, accountID string) (string
 	}
 	defer resp.Body.Close()
 
-	var kvResp KVNamespaceResponse
+	var kvResp models.KVNamespaceResponse
 	if err := json.NewDecoder(resp.Body).Decode(&kvResp); err != nil {
 		return "", fmt.Errorf("error decoding response: %v", err)
 	}
@@ -870,7 +651,7 @@ func getHetznerAPIKey(token, accountID string) (string, error) {
 		return "", fmt.Errorf("failed to get Hetzner API key: %v", err)
 	}
 
-	decryptedKey, err := decryptData(encryptedKey, token)
+	decryptedKey, err := utils.DecryptData(encryptedKey, token)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt Hetzner API key: %v", err)
 	}
@@ -879,7 +660,7 @@ func getHetznerAPIKey(token, accountID string) (string, error) {
 }
 
 // fetchHetznerLocations fetches available datacenter locations from Hetzner API
-func fetchHetznerLocations(apiKey string) ([]HetznerLocation, error) {
+func fetchHetznerLocations(apiKey string) ([]models.HetznerLocation, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 
 	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/locations", nil)
@@ -900,7 +681,7 @@ func fetchHetznerLocations(apiKey string) ([]HetznerLocation, error) {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	var locationsResp HetznerLocationsResponse
+	var locationsResp models.HetznerLocationsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&locationsResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
@@ -909,7 +690,7 @@ func fetchHetznerLocations(apiKey string) ([]HetznerLocation, error) {
 }
 
 // fetchHetznerServerTypes fetches available server types from Hetzner API
-func fetchHetznerServerTypes(apiKey string) ([]HetznerServerType, error) {
+func fetchHetznerServerTypes(apiKey string) ([]models.HetznerServerType, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 
 	req, err := http.NewRequest("GET", "https://api.hetzner.cloud/v1/server_types", nil)
@@ -930,7 +711,7 @@ func fetchHetznerServerTypes(apiKey string) ([]HetznerServerType, error) {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	var serverTypesResp HetznerServerTypesResponse
+	var serverTypesResp models.HetznerServerTypesResponse
 	if err := json.NewDecoder(resp.Body).Decode(&serverTypesResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
@@ -961,7 +742,7 @@ func fetchServerAvailability(apiKey string) (map[string]map[int]bool, error) {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	var datacentersResp HetznerDatacentersResponse
+	var datacentersResp models.HetznerDatacentersResponse
 	if err := json.NewDecoder(resp.Body).Decode(&datacentersResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
@@ -983,8 +764,8 @@ func fetchServerAvailability(apiKey string) (map[string]map[int]bool, error) {
 }
 
 // filterSharedVCPUServers filters server types to only include shared vCPU instances
-func filterSharedVCPUServers(serverTypes []HetznerServerType) []HetznerServerType {
-	var sharedServers []HetznerServerType
+func filterSharedVCPUServers(serverTypes []models.HetznerServerType) []models.HetznerServerType {
+	var sharedServers []models.HetznerServerType
 
 	for _, server := range serverTypes {
 		// Filter for shared vCPU types (typically start with "cpx" or "cx")
@@ -997,7 +778,7 @@ func filterSharedVCPUServers(serverTypes []HetznerServerType) []HetznerServerTyp
 }
 
 // sortServerTypesByPriceDesc sorts server types by price in descending order (highest first)
-func sortServerTypesByPriceDesc(serverTypes []HetznerServerType) {
+func sortServerTypesByPriceDesc(serverTypes []models.HetznerServerType) {
 	n := len(serverTypes)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -1013,7 +794,7 @@ func sortServerTypesByPriceDesc(serverTypes []HetznerServerType) {
 }
 
 // sortServerTypesByPriceAsc sorts server types by price in ascending order (lowest first)
-func sortServerTypesByPriceAsc(serverTypes []HetznerServerType) {
+func sortServerTypesByPriceAsc(serverTypes []models.HetznerServerType) {
 	n := len(serverTypes)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -1029,7 +810,7 @@ func sortServerTypesByPriceAsc(serverTypes []HetznerServerType) {
 }
 
 // getServerTypeMonthlyPrice gets the monthly price for a server type (uses first available location)
-func getServerTypeMonthlyPrice(serverType HetznerServerType) float64 {
+func getServerTypeMonthlyPrice(serverType models.HetznerServerType) float64 {
 	if len(serverType.Prices) == 0 {
 		return 0.0
 	}
@@ -1063,7 +844,7 @@ func getServerTypeMonthlyPrice(serverType HetznerServerType) float64 {
 }
 
 // sortServerTypesByCPUDesc sorts server types by CPU cores in descending order
-func sortServerTypesByCPUDesc(serverTypes []HetznerServerType) {
+func sortServerTypesByCPUDesc(serverTypes []models.HetznerServerType) {
 	n := len(serverTypes)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -1075,7 +856,7 @@ func sortServerTypesByCPUDesc(serverTypes []HetznerServerType) {
 }
 
 // sortServerTypesByCPUAsc sorts server types by CPU cores in ascending order
-func sortServerTypesByCPUAsc(serverTypes []HetznerServerType) {
+func sortServerTypesByCPUAsc(serverTypes []models.HetznerServerType) {
 	n := len(serverTypes)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -1087,7 +868,7 @@ func sortServerTypesByCPUAsc(serverTypes []HetznerServerType) {
 }
 
 // sortServerTypesByMemoryDesc sorts server types by memory in descending order
-func sortServerTypesByMemoryDesc(serverTypes []HetznerServerType) {
+func sortServerTypesByMemoryDesc(serverTypes []models.HetznerServerType) {
 	n := len(serverTypes)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -1099,7 +880,7 @@ func sortServerTypesByMemoryDesc(serverTypes []HetznerServerType) {
 }
 
 // sortServerTypesByMemoryAsc sorts server types by memory in ascending order
-func sortServerTypesByMemoryAsc(serverTypes []HetznerServerType) {
+func sortServerTypesByMemoryAsc(serverTypes []models.HetznerServerType) {
 	n := len(serverTypes)
 	for i := 0; i < n-1; i++ {
 		for j := 0; j < n-i-1; j++ {
@@ -1111,7 +892,7 @@ func sortServerTypesByMemoryAsc(serverTypes []HetznerServerType) {
 }
 
 // fetchCloudflareDomains fetches all domain zones from Cloudflare API
-func fetchCloudflareDomains(token string) ([]CloudflareDomain, error) {
+func fetchCloudflareDomains(token string) ([]models.CloudflareDomain, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 
 	req, err := http.NewRequest("GET", "https://api.cloudflare.com/client/v4/zones", nil)
@@ -1132,7 +913,7 @@ func fetchCloudflareDomains(token string) ([]CloudflareDomain, error) {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
 	}
 
-	var domainsResp CloudflareDomainsResponse
+	var domainsResp models.CloudflareDomainsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&domainsResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
@@ -1409,7 +1190,7 @@ func handleVPSServerOptions(c *gin.Context) {
 	// Apply architecture filter if requested
 	architectureFilter := c.Query("architecture")
 	if architectureFilter != "" {
-		var filteredTypes []HetznerServerType
+		var filteredTypes []models.HetznerServerType
 		for _, serverType := range sharedServerTypes {
 			if serverType.Architecture == architectureFilter {
 				filteredTypes = append(filteredTypes, serverType)
@@ -2138,7 +1919,7 @@ func handleVPSValidateKey(c *gin.Context) {
 
 	// Store the key
 	client := &http.Client{Timeout: 10 * time.Second}
-	encryptedKey, err := encryptData(apiKey, token)
+	encryptedKey, err := utils.EncryptData(apiKey, token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encrypt API key"})
 		return
@@ -2293,9 +2074,9 @@ func handleVPSServerTypes(c *gin.Context) {
 		// Calculate monthly price from hourly
 		monthlyPrice := getServerTypeMonthlyPrice(sharedServerTypes[i])
 		// Add a monthlyPrice field for easy access in frontend
-		sharedServerTypes[i].Prices = append(sharedServerTypes[i].Prices, HetznerPrice{
+		sharedServerTypes[i].Prices = append(sharedServerTypes[i].Prices, models.HetznerPrice{
 			Location: "monthly_calc",
-			PriceMonthly: HetznerPriceDetail{
+			PriceMonthly: models.HetznerPriceDetail{
 				Gross: fmt.Sprintf("%.2f", monthlyPrice),
 			},
 		})
@@ -2417,7 +2198,7 @@ func handleApplicationsPage(c *gin.Context) {
 	applications, err := getApplicationsList(token, accountID)
 	if err != nil {
 		log.Printf("Error getting applications: %v", err)
-		applications = []Application{}
+		applications = []models.Application{}
 	}
 
 	c.HTML(http.StatusOK, "applications.html", gin.H{
@@ -2625,7 +2406,7 @@ func handleApplicationDelete(c *gin.Context) {
 
 // Helper functions for applications
 
-func getApplicationsList(token, accountID string) ([]Application, error) {
+func getApplicationsList(token, accountID string) ([]models.Application, error) {
 	kvService := services.NewKVService()
 
 	// Get the Xanthus namespace ID
@@ -2667,11 +2448,11 @@ func getApplicationsList(token, accountID string) ([]Application, error) {
 		return nil, fmt.Errorf("KV API failed")
 	}
 
-	applications := []Application{}
+	applications := []models.Application{}
 
 	// Fetch each application
 	for _, key := range keysResp.Result {
-		var app Application
+		var app models.Application
 		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
 			applications = append(applications, app)
 		}
@@ -2680,7 +2461,7 @@ func getApplicationsList(token, accountID string) ([]Application, error) {
 	return applications, nil
 }
 
-func createApplication(token, accountID string, appData interface{}) (*Application, error) {
+func createApplication(token, accountID string, appData interface{}) (*models.Application, error) {
 	// Generate unique ID for application
 	appID := fmt.Sprintf("app-%d", time.Now().Unix())
 
@@ -2714,7 +2495,7 @@ func createApplication(token, accountID string, appData interface{}) (*Applicati
 		}
 	}
 
-	app := &Application{
+	app := &models.Application{
 		ID:           appID,
 		Name:         data.Name,
 		Description:  data.Description,
@@ -2749,7 +2530,7 @@ func upgradeApplication(token, accountID, appID, version string) error {
 	kvService := services.NewKVService()
 
 	// Get current application
-	var app Application
+	var app models.Application
 	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
 	if err != nil {
 		return err

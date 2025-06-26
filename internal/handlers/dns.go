@@ -150,12 +150,13 @@ func (h *DNSHandler) HandleDNSConfigure(c *gin.Context) {
 	}
 
 	// Get CSR from KV
+	client := &http.Client{Timeout: 10 * time.Second}
 	var csrConfig struct {
 		CSR        string `json:"csr"`
 		PrivateKey string `json:"private_key"`
 		CreatedAt  string `json:"created_at"`
 	}
-	if err := utils.GetKVValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
 		log.Printf("Error getting CSR from KV: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "CSR not found. Please logout and login again."})
 		return
@@ -271,5 +272,3 @@ func (h *DNSHandler) fetchCloudflareDomains(token string) ([]CloudflareDomain, e
 	return domainsResp.Result, nil
 }
 
-// TODO: These utility functions have been moved to internal/utils/placeholders.go
-// They need to be properly implemented and moved to domain-specific utils files

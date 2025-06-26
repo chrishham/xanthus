@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/chrishham/xanthus/internal/models"
 	"github.com/chrishham/xanthus/internal/services"
 	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -22,21 +23,6 @@ func NewApplicationsHandler() *ApplicationsHandler {
 	return &ApplicationsHandler{}
 }
 
-// Application represents a deployed application
-type Application struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Subdomain    string `json:"subdomain"`
-	Domain       string `json:"domain"`
-	VPSID        string `json:"vps_id"`
-	VPSName      string `json:"vps_name"`
-	ChartName    string `json:"chart_name"`
-	ChartVersion string `json:"chart_version"`
-	Namespace    string `json:"namespace"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"created_at"`
-}
 
 // HandleApplicationsPage renders the applications management page
 func (h *ApplicationsHandler) HandleApplicationsPage(c *gin.Context) {
@@ -57,7 +43,7 @@ func (h *ApplicationsHandler) HandleApplicationsPage(c *gin.Context) {
 	applications, err := h.getApplicationsList(token, accountID)
 	if err != nil {
 		log.Printf("Error getting applications: %v", err)
-		applications = []Application{}
+		applications = []models.Application{}
 	}
 
 	c.HTML(http.StatusOK, "applications.html", gin.H{
@@ -269,7 +255,7 @@ func (h *ApplicationsHandler) HandleApplicationDelete(c *gin.Context) {
 }
 
 // getApplicationsList retrieves all applications from Cloudflare KV
-func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]Application, error) {
+func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]models.Application, error) {
 	kvService := services.NewKVService()
 	
 	// Get the Xanthus namespace ID
@@ -311,11 +297,11 @@ func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]Ap
 		return nil, fmt.Errorf("KV API failed")
 	}
 
-	applications := []Application{}
+	applications := []models.Application{}
 
 	// Fetch each application
 	for _, key := range keysResp.Result {
-		var app Application
+		var app models.Application
 		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
 			applications = append(applications, app)
 		}
@@ -325,7 +311,7 @@ func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]Ap
 }
 
 // createApplication implements core application creation logic with VPS integration
-func (h *ApplicationsHandler) createApplication(token, accountID string, appData interface{}) (*Application, error) {
+func (h *ApplicationsHandler) createApplication(token, accountID string, appData interface{}) (*models.Application, error) {
 	// Generate unique ID for application
 	appID := fmt.Sprintf("app-%d", time.Now().Unix())
 	
@@ -359,7 +345,7 @@ func (h *ApplicationsHandler) createApplication(token, accountID string, appData
 		}
 	}
 
-	app := &Application{
+	app := &models.Application{
 		ID:           appID,
 		Name:         data.Name,
 		Description:  data.Description,
@@ -382,9 +368,56 @@ func (h *ApplicationsHandler) createApplication(token, accountID string, appData
 		return nil, err
 	}
 
-	// TODO: Deploy via Helm (would need to implement Helm deployment logic)
-	// For now, just mark as deployed
-	app.Status = "deployed"
+	// Deploy via Helm
+	helmService := services.NewHelmService()
+	
+	// Get VPS configuration for SSH details
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err = kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", data.VPS), &vpsConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+	
+	// Get SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return nil, fmt.Errorf("failed to get SSH private key: %v", err)
+	}
+	
+	// Install Helm chart
+	releaseName := fmt.Sprintf("%s-%s", data.Subdomain, app.ID)
+	values := map[string]string{
+		"ingress.enabled": "true",
+		"ingress.hosts[0].host": fmt.Sprintf("%s.%s", data.Subdomain, data.Domain),
+		"ingress.hosts[0].paths[0].path": "/",
+		"ingress.hosts[0].paths[0].pathType": "Prefix",
+	}
+	
+	err = helmService.InstallChart(
+		vpsConfig.PublicIPv4,
+		vpsConfig.SSHUser,
+		csrConfig.PrivateKey,
+		releaseName,
+		data.Chart,
+		data.Version,
+		app.Namespace,
+		values,
+	)
+	
+	if err != nil {
+		app.Status = "failed"
+		log.Printf("Helm deployment failed: %v", err)
+	} else {
+		app.Status = "deployed"
+	}
+	
+	// Update application status
 	kvService.PutValue(token, accountID, fmt.Sprintf("app:%s", appID), app)
 
 	return app, nil
@@ -395,7 +428,7 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 	kvService := services.NewKVService()
 	
 	// Get current application
-	var app Application
+	var app models.Application
 	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
 	if err != nil {
 		return err
@@ -411,9 +444,56 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 		return err
 	}
 
-	// TODO: Implement actual Helm upgrade
-	// For now, just mark as deployed
-	app.Status = "deployed"
+	// Perform Helm upgrade
+	helmService := services.NewHelmService()
+	
+	// Get VPS configuration for SSH details
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err = kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", app.VPSID), &vpsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+	
+	// Get SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return fmt.Errorf("failed to get SSH private key: %v", err)
+	}
+	
+	// Upgrade Helm chart
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.ID)
+	values := map[string]string{
+		"ingress.enabled": "true",
+		"ingress.hosts[0].host": fmt.Sprintf("%s.%s", app.Subdomain, app.Domain),
+		"ingress.hosts[0].paths[0].path": "/",
+		"ingress.hosts[0].paths[0].pathType": "Prefix",
+	}
+	
+	err = helmService.UpgradeChart(
+		vpsConfig.PublicIPv4,
+		vpsConfig.SSHUser,
+		csrConfig.PrivateKey,
+		releaseName,
+		app.ChartName,
+		version,
+		app.Namespace,
+		values,
+	)
+	
+	if err != nil {
+		app.Status = "failed"
+		log.Printf("Helm upgrade failed: %v", err)
+	} else {
+		app.Status = "deployed"
+	}
+	
+	// Update application status
 	kvService.PutValue(token, accountID, fmt.Sprintf("app:%s", appID), app)
 
 	return nil
@@ -423,11 +503,51 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 func (h *ApplicationsHandler) deleteApplication(token, accountID, appID string) error {
 	kvService := services.NewKVService()
 	
-	// TODO: Uninstall Helm chart before deleting from KV
+	// Get application details before deletion
+	var app models.Application
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
+	if err != nil {
+		return fmt.Errorf("failed to get application: %v", err)
+	}
+	
+	// Uninstall Helm chart before deleting from KV
+	helmService := services.NewHelmService()
+	
+	// Get VPS configuration for SSH details
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err = kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", app.VPSID), &vpsConfig)
+	if err != nil {
+		log.Printf("Warning: Failed to get VPS configuration for cleanup: %v", err)
+	} else {
+		// Get SSH private key
+		client := &http.Client{Timeout: 10 * time.Second}
+		var csrConfig struct {
+			PrivateKey string `json:"private_key"`
+		}
+		if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+			log.Printf("Warning: Failed to get SSH private key for cleanup: %v", err)
+		} else {
+			// Uninstall Helm chart
+			releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.ID)
+			err = helmService.UninstallChart(
+				vpsConfig.PublicIPv4,
+				vpsConfig.SSHUser,
+				csrConfig.PrivateKey,
+				releaseName,
+				app.Namespace,
+			)
+			
+			if err != nil {
+				log.Printf("Warning: Failed to uninstall Helm chart: %v", err)
+				// Continue with KV deletion even if Helm uninstall fails
+			}
+		}
+	}
 	
 	// Delete from KV
 	return kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s", appID))
 }
 
-// TODO: These utility functions have been moved to internal/utils/placeholders.go
-// They need to be properly implemented and moved to domain-specific utils files
