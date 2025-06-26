@@ -292,9 +292,428 @@ tests/
 - **SSH connections** (with test VPS)
 
 ### 2.3 End-to-End Tests
-- **Complete VPS lifecycle**: Create → Configure → Deploy → Delete
-- **SSL certificate management**: Configure → Validate → Remove
-- **Application deployment**: Install → Upgrade → Uninstall
+
+#### Overview
+End-to-end tests validate complete user workflows by testing the entire system from frontend to backend, including external service integrations. These tests ensure that all components work together correctly in real-world scenarios.
+
+#### Test Environment Requirements
+- **Test Hetzner Account**: Dedicated testing account with limited resources
+- **Test Cloudflare Zone**: Sandbox domain for DNS/SSL testing (e.g., `test.example.com`)
+- **Test Infrastructure**: Isolated K3s cluster for safe deployment testing
+- **Mock External Services**: Fallback mocks for rate-limited APIs
+
+#### 2.3.1 Complete VPS Lifecycle Tests
+**Priority**: High  
+**Duration**: ~15 minutes per test  
+**Resource Requirements**: Test Hetzner account, test domain
+
+##### Test Case: E2E_VPS_001 - Full VPS Deployment Flow
+```go
+func TestE2E_CompleteVPSLifecycle(t *testing.T) {
+    // Test Steps:
+    // 1. Login with valid Cloudflare token
+    // 2. Configure Hetzner API key
+    // 3. Create new VPS with custom configuration
+    // 4. Wait for VPS provisioning (up to 5 minutes)
+    // 5. Verify K3s cluster health
+    // 6. Configure SSL for test domain
+    // 7. Deploy test application
+    // 8. Verify application accessibility
+    // 9. Clean up: Delete VPS and DNS records
+}
+```
+
+**Validation Points**:
+- ✅ VPS creation with cloud-init script
+- ✅ SSH connectivity establishment
+- ✅ K3s cluster installation and health
+- ✅ SSL certificate generation and installation
+- ✅ DNS record creation and propagation
+- ✅ Application deployment and accessibility
+- ✅ Resource cleanup and cost tracking
+
+##### Test Case: E2E_VPS_002 - VPS Configuration Management
+```go
+func TestE2E_VPSConfigurationUpdates(t *testing.T) {
+    // Test Steps:
+    // 1. Create base VPS with minimal configuration
+    // 2. Update VPS configuration (add SSL domains)
+    // 3. Deploy multiple applications
+    // 4. Modify application configurations
+    // 5. Verify configuration persistence
+    // 6. Test VPS power operations (reboot)
+    // 7. Verify configurations survive reboot
+}
+```
+
+##### Test Case: E2E_VPS_003 - VPS Scaling and Management
+```go
+func TestE2E_VPSScalingOperations(t *testing.T) {
+    // Test Steps:
+    // 1. Create VPS with small server type
+    // 2. Deploy resource-intensive application
+    // 3. Monitor resource usage
+    // 4. Scale VPS to larger server type (resize)
+    // 5. Verify application continues running
+    // 6. Test backup/restore operations
+    // 7. Validate data persistence
+}
+```
+
+#### 2.3.2 SSL Certificate Management Tests
+**Priority**: High  
+**Duration**: ~10 minutes per test  
+**Resource Requirements**: Test Cloudflare zone with API access
+
+##### Test Case: E2E_SSL_001 - Complete SSL Configuration Flow
+```go
+func TestE2E_SSLCertificateLifecycle(t *testing.T) {
+    // Test Steps:
+    // 1. Create VPS with basic configuration
+    // 2. Configure SSL for test subdomain (ssl-test.example.com)
+    // 3. Generate CSR and private key
+    // 4. Create Cloudflare Origin Certificate
+    // 5. Install certificates on VPS
+    // 6. Configure Cloudflare SSL settings (Strict mode)
+    // 7. Verify HTTPS connectivity
+    // 8. Test SSL certificate validation
+    // 9. Clean up SSL configuration
+}
+```
+
+**Validation Points**:
+- ✅ CSR generation with correct domain information
+- ✅ Cloudflare Origin Certificate creation
+- ✅ Certificate installation on VPS
+- ✅ SSL mode configuration (Flexible → Strict)
+- ✅ HTTPS redirect functionality
+- ✅ Certificate chain validation
+- ✅ SSL cleanup and rollback
+
+##### Test Case: E2E_SSL_002 - Multi-Domain SSL Configuration
+```go
+func TestE2E_MultiDomainSSL(t *testing.T) {
+    // Test Steps:
+    // 1. Configure SSL for primary domain
+    // 2. Add secondary domain to same VPS
+    // 3. Configure wildcard SSL certificate
+    // 4. Verify all domains use HTTPS
+    // 5. Test domain-specific routing
+    // 6. Remove one domain configuration
+    // 7. Verify other domains unaffected
+}
+```
+
+##### Test Case: E2E_SSL_003 - SSL Certificate Renewal
+```go
+func TestE2E_SSLCertificateRenewal(t *testing.T) {
+    // Test Steps:
+    // 1. Create SSL configuration with short-lived cert
+    // 2. Wait for certificate expiration warning
+    // 3. Trigger certificate renewal process
+    // 4. Verify new certificate installation
+    // 5. Test zero-downtime renewal
+    // 6. Validate certificate chain continuity
+}
+```
+
+#### 2.3.3 Application Deployment Tests
+**Priority**: Medium  
+**Duration**: ~8 minutes per test  
+**Resource Requirements**: K3s cluster with Helm
+
+##### Test Case: E2E_APP_001 - Complete Application Lifecycle
+```go
+func TestE2E_ApplicationDeployment(t *testing.T) {
+    // Test Steps:
+    // 1. Create VPS with K3s cluster
+    // 2. Install Helm chart (nginx-ingress)
+    // 3. Verify application deployment status
+    // 4. Test application accessibility via ingress
+    // 5. Upgrade application to newer version
+    // 6. Verify upgrade success and zero downtime
+    // 7. Roll back to previous version
+    // 8. Uninstall application completely
+    // 9. Verify cleanup of all resources
+}
+```
+
+**Validation Points**:
+- ✅ Helm repository addition and update
+- ✅ Chart installation with custom values
+- ✅ Pod and service deployment verification
+- ✅ Ingress configuration and routing
+- ✅ Application health checks
+- ✅ Upgrade/rollback functionality
+- ✅ Complete resource cleanup
+
+##### Test Case: E2E_APP_002 - Multi-Application Deployment
+```go
+func TestE2E_MultiApplicationDeployment(t *testing.T) {
+    // Test Steps:
+    // 1. Deploy web application (nginx)
+    // 2. Deploy database (postgresql)
+    // 3. Deploy monitoring (prometheus)
+    // 4. Configure inter-service communication
+    // 5. Verify all applications running
+    // 6. Test resource sharing and isolation
+    // 7. Simulate application failure
+    // 8. Verify automatic recovery
+}
+```
+
+##### Test Case: E2E_APP_003 - Custom Manifest Deployment
+```go
+func TestE2E_CustomManifestDeployment(t *testing.T) {
+    // Test Steps:
+    // 1. Create custom Kubernetes manifest
+    // 2. Deploy via VPS terminal interface
+    // 3. Verify deployment success
+    // 4. Test manifest updates and patches
+    // 5. Monitor resource consumption
+    // 6. Test scaling operations
+    // 7. Clean up custom resources
+}
+```
+
+#### 2.3.4 User Interface End-to-End Tests
+**Priority**: Medium  
+**Duration**: ~12 minutes per test  
+**Resource Requirements**: Headless browser (if UI automation)
+
+##### Test Case: E2E_UI_001 - Complete User Journey
+```go
+func TestE2E_UserInterfaceFlow(t *testing.T) {
+    // Test Steps:
+    // 1. Access login page
+    // 2. Submit valid Cloudflare token
+    // 3. Navigate to VPS creation page
+    // 4. Fill VPS creation form
+    // 5. Submit VPS creation request
+    // 6. Monitor VPS creation progress
+    // 7. Access VPS management page
+    // 8. Configure SSL through UI
+    // 9. Deploy application via UI
+    // 10. Verify all UI elements update correctly
+}
+```
+
+##### Test Case: E2E_UI_002 - Error Handling and Recovery
+```go
+func TestE2E_UIErrorHandling(t *testing.T) {
+    // Test Steps:
+    // 1. Submit invalid API credentials
+    // 2. Verify error message display
+    // 3. Attempt VPS creation with insufficient quota
+    // 4. Test network timeout scenarios
+    // 5. Verify graceful error handling
+    // 6. Test recovery after temporary failures
+}
+```
+
+#### 2.3.5 Performance and Load Tests
+**Priority**: Low  
+**Duration**: ~20 minutes per test  
+**Resource Requirements**: Load testing tools, multiple test accounts
+
+##### Test Case: E2E_PERF_001 - Concurrent Operations
+```go
+func TestE2E_ConcurrentVPSOperations(t *testing.T) {
+    // Test Steps:
+    // 1. Create multiple VPS instances simultaneously
+    // 2. Configure SSL for multiple domains concurrently
+    // 3. Deploy applications to multiple VPS
+    // 4. Monitor system performance and resources
+    // 5. Verify no resource conflicts or deadlocks
+    // 6. Clean up all created resources
+}
+```
+
+##### Test Case: E2E_PERF_002 - API Rate Limit Handling
+```go
+func TestE2E_APIRateLimitHandling(t *testing.T) {
+    // Test Steps:
+    // 1. Generate high-frequency API requests
+    // 2. Trigger Hetzner/Cloudflare rate limits
+    // 3. Verify graceful backoff and retry logic
+    // 4. Test queue management for pending operations
+    // 5. Verify operation completion after rate limit recovery
+}
+```
+
+#### 2.3.6 Security End-to-End Tests
+**Priority**: High  
+**Duration**: ~15 minutes per test  
+**Resource Requirements**: Security testing tools
+
+##### Test Case: E2E_SEC_001 - Authentication Security
+```go
+func TestE2E_AuthenticationSecurity(t *testing.T) {
+    // Test Steps:
+    // 1. Test session management and timeout
+    // 2. Verify secure cookie handling
+    // 3. Test concurrent session limits
+    // 4. Attempt token manipulation attacks
+    // 5. Verify proper session cleanup on logout
+    // 6. Test cross-site request forgery protection
+}
+```
+
+##### Test Case: E2E_SEC_002 - Data Encryption Security
+```go
+func TestE2E_DataEncryptionSecurity(t *testing.T) {
+    // Test Steps:
+    // 1. Store sensitive data (API keys, SSH keys)
+    // 2. Verify encryption at rest in Cloudflare KV
+    // 3. Test encrypted data transmission
+    // 4. Attempt data decryption with wrong tokens
+    // 5. Verify secure key rotation procedures
+}
+```
+
+#### 2.3.7 Disaster Recovery Tests
+**Priority**: Medium  
+**Duration**: ~25 minutes per test  
+**Resource Requirements**: Backup/restore infrastructure
+
+##### Test Case: E2E_DR_001 - VPS Recovery Scenarios
+```go
+func TestE2E_VPSDisasterRecovery(t *testing.T) {
+    // Test Steps:
+    // 1. Create VPS with applications and data
+    // 2. Simulate VPS failure (force shutdown)
+    // 3. Attempt VPS recovery procedures
+    // 4. Verify data persistence and application recovery
+    // 5. Test backup restoration processes
+    // 6. Validate recovery time objectives (RTO)
+}
+```
+
+##### Test Case: E2E_DR_002 - Service Dependency Failures
+```go
+func TestE2E_ServiceDependencyFailures(t *testing.T) {
+    // Test Steps:
+    // 1. Simulate Hetzner API outage
+    // 2. Test graceful degradation of VPS operations
+    // 3. Simulate Cloudflare API outage
+    // 4. Verify SSL operations fallback behavior
+    // 5. Test service recovery after outage resolution
+}
+```
+
+#### 2.3.8 Test Implementation Framework
+
+##### Test Structure
+```
+tests/integration/e2e/
+├── vps_lifecycle_test.go
+├── ssl_management_test.go
+├── application_deployment_test.go
+├── ui_integration_test.go
+├── performance_test.go
+├── security_test.go
+├── disaster_recovery_test.go
+├── helpers/
+│   ├── test_setup.go
+│   ├── cleanup.go
+│   └── validation.go
+└── fixtures/
+    ├── test_configs/
+    ├── sample_manifests/
+    └── mock_responses/
+```
+
+##### Test Configuration
+```go
+type E2ETestConfig struct {
+    HetznerAPIKey    string
+    CloudflareToken  string
+    TestDomain       string
+    TestAccountID    string
+    MaxTestDuration  time.Duration
+    CleanupTimeout   time.Duration
+    RetryAttempts    int
+    ResourceLimits   ResourceLimits
+}
+```
+
+##### Common Test Utilities
+```go
+// Helper functions for E2E tests
+func SetupTestEnvironment() (*E2ETestConfig, error)
+func CreateTestVPS(config *E2ETestConfig) (*VPSInstance, error)
+func ValidateVPSHealth(vps *VPSInstance) error
+func CleanupTestResources(config *E2ETestConfig) error
+func WaitForCondition(condition func() bool, timeout time.Duration) error
+```
+
+#### 2.3.9 Test Execution Strategy
+
+##### Parallel Execution
+- **Resource Isolation**: Each test uses unique resource names
+- **Account Separation**: Different tests use different test accounts
+- **Cleanup Coordination**: Shared cleanup routines with resource locking
+
+##### Test Data Management
+- **Dynamic Resource Names**: Include timestamp and test ID
+- **Cleanup Verification**: Verify all resources cleaned up after test
+- **Cost Monitoring**: Track test costs and resource usage
+
+##### Failure Handling
+- **Automatic Cleanup**: Clean up resources even on test failure
+- **Retry Logic**: Retry transient failures (network, API limits)
+- **Detailed Logging**: Comprehensive logs for debugging failures
+
+##### Test Reporting
+```go
+type E2ETestReport struct {
+    TestName        string
+    Duration        time.Duration
+    ResourcesUsed   []string
+    CostIncurred    float64
+    FailureReasons  []string
+    CleanupStatus   string
+}
+```
+
+#### 2.3.10 Continuous Integration Integration
+
+##### GitHub Actions Workflow
+```yaml
+name: E2E Tests
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Run nightly
+  workflow_dispatch:    # Manual trigger
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-suite: [vps, ssl, apps, security]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-go@v3
+      - name: Run E2E Tests
+        env:
+          HETZNER_API_KEY: ${{ secrets.TEST_HETZNER_API_KEY }}
+          CLOUDFLARE_TOKEN: ${{ secrets.TEST_CLOUDFLARE_TOKEN }}
+        run: |
+          make test-e2e-${{ matrix.test-suite }}
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: e2e-results-${{ matrix.test-suite }}
+          path: test-results/
+```
+
+##### Test Environment Management
+- **Dedicated Test Accounts**: Separate accounts for CI/CD testing
+- **Resource Quotas**: Limited quotas to prevent runaway costs
+- **Automated Cleanup**: Scheduled cleanup of orphaned test resources
+- **Cost Alerts**: Monitoring and alerts for unexpected test costs
+
+This comprehensive end-to-end testing strategy ensures that Xanthus works correctly in real-world scenarios while maintaining cost control and resource management.
 
 ## 3. Test Implementation Strategy
 
