@@ -19,7 +19,11 @@ Xanthus is a K3s deployment tool built with Go (Gin framework) and HTMX/Alpine.j
 - `make assets` - Build all assets (CSS + JS vendor files)
 
 ### Testing and Code Quality
-- `make test` - Run Go tests
+- `make test` - Run all structured tests (`./tests/...`)
+- `make test-unit` - Run unit tests only (`./tests/unit/...`)
+- `make test-integration` - Run integration tests only (`./tests/integration/...`)
+- `make test-coverage` - Run tests with coverage report (generates `coverage.html`)
+- `make test-all` - Run ALL tests including any legacy tests (`./...`)
 - `make lint` - Format and vet Go code (`go fmt` + `go vet`)
 
 ### Cleaning

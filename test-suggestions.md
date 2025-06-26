@@ -164,37 +164,80 @@ tests/
   - **Mock Strategy**: Mock HTTP responses for Cloudflare KV API calls
 - **Additional**: Benchmark tests for cost calculations and key operations
 
-### 1.3 Utility Tests (`internal/utils/`)
+### 1.3 Utility Tests (`internal/utils/`) ✅ COMPLETED
 
-#### Crypto Utils (`crypto.go`)
+#### Crypto Utils (`crypto.go`) ✅ COMPLETED
 - **Priority**: High (Security critical)
+- **Implementation**: `/tests/unit/utils/crypto_test.go`
 - **Test Cases**:
-  - `TestEncryptData` - AES-256-GCM encryption
-  - `TestDecryptData` - Decryption with various tokens
-  - `TestEncryptDecryptRoundTrip` - Data integrity
-  - Edge cases: empty data, invalid tokens
+  - ✅ `TestEncryptData` - AES-256-GCM encryption validation
+  - ✅ `TestDecryptData` - Decryption with various tokens
+  - ✅ `TestEncryptDecryptRoundTrip` - Data integrity testing with 6 test cases
+  - ✅ `TestDecryptDataWithWrongToken` - Security validation
+  - ✅ `TestDecryptDataWithInvalidBase64` - Error handling
+  - ✅ `TestDecryptDataWithTooShortCiphertext` - Edge case handling
+  - ✅ `TestEncryptionConsistency` - Multiple encryption verification
+  - ✅ `TestTokenSensitivity` - Cross-token decryption prevention
+  - **Mock Strategy**: Direct function testing with various input scenarios
+- **Additional**: Benchmark tests for encryption/decryption performance
 
-#### Response Utils (`responses.go`)
+#### Response Utils (`responses.go`) ✅ COMPLETED
 - **Priority**: Medium
+- **Implementation**: `/tests/unit/utils/responses_test.go`
 - **Test Cases**:
-  - `TestJSONSuccess` - Success response formatting
-  - `TestJSONError` - Error response formatting
-  - `TestValidationError` - Validation error structure
-  - Status code correctness
+  - ✅ `TestJSONSuccess/JSONSuccessSimple` - Success response formatting
+  - ✅ `TestJSONError/JSONBadRequest/JSONUnauthorized/JSONForbidden/JSONNotFound/JSONInternalServerError/JSONServiceUnavailable` - Error responses with status codes
+  - ✅ `TestJSONResponse` - Custom response handling
+  - ✅ `TestHTMLError/HTMLSuccess` - HTMX HTML responses
+  - ✅ `TestHTMXRedirect/HTMXRefresh` - HTMX header management
+  - ✅ `TestJSONValidationError` - Field validation error structure
+  - ✅ `TestVPSCreationSuccess/VPSDeletionSuccess/VPSConfigurationSuccess` - Domain-specific responses
+  - ✅ `TestApplicationSuccess/DNSConfigurationSuccess/SetupSuccess` - Application lifecycle responses
+  - **Mock Strategy**: HTTP test server with Gin context mocking
+- **Additional**: Benchmark tests for JSON response generation
 
-#### Cloudflare Utils (`cloudflare.go`)
+#### Cloudflare Utils (`cloudflare.go`) ✅ COMPLETED
 - **Priority**: High
+- **Implementation**: `/tests/unit/utils/cloudflare_test.go`
 - **Test Cases**:
-  - Token verification logic
-  - KV operations (get, put, delete)
-  - Zone and namespace management
+  - ✅ `TestVerifyCloudflareToken` - Token verification with real API calls
+  - ✅ `TestCheckKVNamespaceExists` - KV namespace discovery and validation
+  - ✅ `TestCreateKVNamespace` - Namespace creation logic
+  - ✅ `TestGetXanthusNamespaceID` - Namespace ID retrieval
+  - ✅ `TestPutKVValue/GetKVValue` - Key-value operations
+  - ✅ `TestFetchCloudflareDomains` - Domain zone fetching
+  - ✅ `TestCloudflareUtilsIntegration` - Full workflow validation
+  - **Mock Strategy**: HTTP test servers for API response mocking (where possible)
+- **Additional**: Benchmark tests for token verification and namespace operations
 
-#### Hetzner Utils (`hetzner.go`)
+#### Hetzner Utils (`hetzner.go`) ✅ COMPLETED
 - **Priority**: Medium
+- **Implementation**: `/tests/unit/utils/hetzner_test.go`
 - **Test Cases**:
-  - API key validation
-  - Server type filtering and sorting
-  - Pricing calculations
+  - ✅ `TestValidateHetznerAPIKey` - API key validation with real API calls
+  - ✅ `TestGetHetznerAPIKey` - Encrypted API key retrieval
+  - ✅ `TestFetchHetznerLocations/ServerTypes` - Data fetching from API
+  - ✅ `TestFetchServerAvailability` - Real-time availability checking
+  - ✅ `TestFilterSharedVCPUServers` - Server type filtering logic
+  - ✅ `TestGetServerTypeMonthlyPrice` - Price parsing with edge cases (empty, invalid, currency)
+  - ✅ `TestSortServerTypesByPrice/CPU/Memory` - Sorting algorithms (ascending/descending)
+  - ✅ `TestSortingEdgeCases` - Empty slices, single elements, identical values
+  - ✅ `TestHetznerUtilsIntegration` - Full workflow with invalid credentials
+  - **Mock Strategy**: HTTP test servers for API mocking
+- **Additional**: Benchmark tests for sorting algorithms and price parsing
+
+#### Server Utils (`server.go`) ✅ COMPLETED
+- **Priority**: Low
+- **Implementation**: `/tests/unit/utils/server_test.go`
+- **Test Cases**:
+  - ✅ `TestFindAvailablePort` - Port discovery in range 8080-8090
+  - ✅ `TestFindAvailablePortEdgeCases` - Boundary testing and format validation
+  - ✅ `TestFindAvailablePortPerformance` - Performance testing with 100 iterations
+  - ✅ Port occupation scenarios with multiple listeners
+  - ✅ Concurrent access validation
+  - ✅ Port availability verification
+  - **Mock Strategy**: Real port testing with net.Listen()
+- **Additional**: Benchmark tests for port scanning performance
 
 ### 1.4 Middleware Tests (`internal/middleware/`)
 
@@ -277,22 +320,46 @@ func (m *MockSSHService) ConnectToVPS(ip, user, key string) (*ssh.Connection, er
 - **HTTP Testing**: `httptest` for API endpoints
 - **Database**: In-memory implementations
 
-### Test Commands
-```makefile
-# Add to Makefile
-test-unit:
-	go test -v ./internal/... -short
+### Test Commands ✅ IMPLEMENTED
 
+The following test commands are now available in the Makefile:
+
+```makefile
+# Run all structured tests
+test:
+	go test -v ./tests/...
+
+# Run unit tests only
+test-unit:
+	go test -v ./tests/unit/...
+
+# Run integration tests (when they exist)
 test-integration:
 	go test -v ./tests/integration/...
 
+# Run tests with coverage report
 test-coverage:
-	go test -v ./... -coverprofile=coverage.out
+	go test -v ./tests/... -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
 
+# Run all tests including any legacy tests
 test-all:
 	go test -v ./...
+
+# Clean build artifacts and coverage files
+clean:
+	rm -rf bin/
+	rm -f web/static/css/output.css
+	rm -rf web/static/js/vendor/
+	rm -f coverage.out coverage.html
 ```
+
+**Usage Examples:**
+- `make test` - Run structured tests (recommended for development)
+- `make test-unit` - Run only unit tests for quick feedback
+- `make test-coverage` - Generate coverage report in `coverage.html`
+- `make test-all` - Run everything including legacy tests (CI/CD)
 
 ## 5. Security Testing Considerations
 
@@ -337,23 +404,34 @@ test-all:
 
 ## 8. Implementation Priority
 
-### Phase 1 (Critical)
-1. Crypto utils tests
-2. Authentication middleware tests
-3. Core service tests (Hetzner, Cloudflare)
-4. VPS handler tests
+### Phase 1 (Critical) ✅ COMPLETED
+1. ✅ Crypto utils tests - **COMPLETED** (`/tests/unit/utils/crypto_test.go`)
+2. ✅ Core service tests (Hetzner, Cloudflare, SSH, Helm, KV) - **COMPLETED** (`/tests/unit/services/`)
+3. ✅ Utility layer tests (responses, server, cloudflare, hetzner utils) - **COMPLETED** (`/tests/unit/utils/`)
+4. ✅ Authentication handler tests - **COMPLETED** (`/tests/unit/handlers/auth_test.go`)
+5. ✅ Improved Makefile with structured test commands - **COMPLETED**
 
-### Phase 2 (Important)
-1. Remaining handler tests
-2. Integration tests
-3. End-to-end workflows
-4. Error handling scenarios
+### Phase 2 (Important) 🔄 IN PROGRESS
+1. 🔄 Authentication middleware tests
+2. 🔄 VPS handler tests  
+3. 🔄 Remaining handler tests (applications, dns, pages)
+4. 🔄 Integration tests
+5. 🔄 End-to-end workflows
 
-### Phase 3 (Enhancement)
-1. Performance tests
-2. Security tests
-3. Load testing
-4. Documentation tests
+### Phase 3 (Enhancement) ⏳ PENDING
+1. ⏳ Performance tests
+2. ⏳ Security tests
+3. ⏳ Load testing
+4. ⏳ Documentation tests
+
+### Current Status Summary
+- **Unit Tests Completed**: 11 test files covering 3 major layers
+  - **Handlers**: 1/5 files (auth_test.go)
+  - **Services**: 5/5 files (cloudflare, helm, hetzner, kv, ssh)
+  - **Utils**: 5/5 files (crypto, responses, cloudflare, hetzner, server)
+- **Test Structure**: Fully organized under `/tests/unit/`
+- **Makefile**: Enhanced with 5 new test commands
+- **Coverage**: Ready for coverage reporting via `make test-coverage`
 
 ## 9. Continuous Integration
 
