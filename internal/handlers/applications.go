@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chrishham/xanthus/internal/models"
@@ -548,4 +550,248 @@ func (h *ApplicationsHandler) deleteApplication(token, accountID, appID string) 
 
 	// Delete from KV
 	return kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s", appID))
+}
+
+// HandleVPSRepositories lists Helm repositories on a VPS
+func (h *ApplicationsHandler) HandleVPSRepositories(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Unauthorized")
+		return
+	}
+
+	vpsID := c.Param("id")
+	serverID, err := strconv.Atoi(vpsID)
+	if err != nil {
+		utils.JSONBadRequest(c, "Invalid VPS ID")
+		return
+	}
+
+	log.Printf("Getting Helm repositories for VPS %s", vpsID)
+
+	// Initialize services
+	kvService := services.NewKVService()
+	sshService := services.NewSSHService()
+
+	// Get account ID from token
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration from KV
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Failed to get VPS config: %v", err)
+		utils.JSONNotFound(c, "VPS not found")
+		return
+	}
+
+	// Get SSH private key from KV
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Failed to get SSH private key: %v", err)
+		utils.JSONInternalServerError(c, "SSH key not found")
+		return
+	}
+
+	// Connect to VPS via SSH
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+		utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
+		return
+	}
+
+	// Get list of Helm repositories
+	repositories, err := sshService.ListHelmRepositories(conn)
+	if err != nil {
+		log.Printf("Failed to list repositories: %v", err)
+		utils.JSONInternalServerError(c, "Failed to list Helm repositories")
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"repositories": repositories,
+		"vps_id":       vpsID,
+	})
+}
+
+// HandleVPSAddRepository adds a new Helm repository to a VPS
+func (h *ApplicationsHandler) HandleVPSAddRepository(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Unauthorized")
+		return
+	}
+
+	vpsID := c.Param("id")
+	serverID, err := strconv.Atoi(vpsID)
+	if err != nil {
+		utils.JSONBadRequest(c, "Invalid VPS ID")
+		return
+	}
+
+	var repoData struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	}
+
+	if err := c.ShouldBindJSON(&repoData); err != nil {
+		utils.JSONBadRequest(c, "Invalid request data")
+		return
+	}
+
+	// Validate repository name and URL
+	if repoData.Name == "" || repoData.URL == "" {
+		utils.JSONBadRequest(c, "Repository name and URL are required")
+		return
+	}
+
+	// Basic URL validation
+	if !strings.HasPrefix(repoData.URL, "http://") && !strings.HasPrefix(repoData.URL, "https://") {
+		utils.JSONBadRequest(c, "Invalid repository URL")
+		return
+	}
+
+	// Sanitize repository name to prevent command injection
+	if strings.ContainsAny(repoData.Name, ";|&$`(){}[]<>\"'\\") {
+		utils.JSONBadRequest(c, "Invalid characters in repository name")
+		return
+	}
+
+	log.Printf("Adding repository %s (%s) to VPS %s", repoData.Name, repoData.URL, vpsID)
+
+	// Initialize services
+	kvService := services.NewKVService()
+	sshService := services.NewSSHService()
+
+	// Get account ID from token
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration from KV
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Failed to get VPS config: %v", err)
+		utils.JSONNotFound(c, "VPS not found")
+		return
+	}
+
+	// Get SSH private key from KV
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Failed to get SSH private key: %v", err)
+		utils.JSONInternalServerError(c, "SSH key not found")
+		return
+	}
+
+	// Connect to VPS via SSH
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+		utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
+		return
+	}
+
+	// Add the repository
+	if err := sshService.AddHelmRepository(conn, repoData.Name, repoData.URL); err != nil {
+		log.Printf("Failed to add repository: %v", err)
+		utils.JSONInternalServerError(c, "Failed to add Helm repository")
+		return
+	}
+
+	log.Printf("Successfully added repository %s to VPS %s", repoData.Name, vpsID)
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Repository %s added successfully", repoData.Name),
+	})
+}
+
+// HandleVPSCharts lists Helm charts from a repository
+func (h *ApplicationsHandler) HandleVPSCharts(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Unauthorized")
+		return
+	}
+
+	vpsID := c.Param("id")
+	repo := c.Param("repo")
+
+	serverID, err := strconv.Atoi(vpsID)
+	if err != nil {
+		utils.JSONBadRequest(c, "Invalid VPS ID")
+		return
+	}
+
+	// Sanitize repository name to prevent command injection
+	if strings.ContainsAny(repo, ";|&$`(){}[]<>\"'\\") {
+		utils.JSONBadRequest(c, "Invalid characters in repository name")
+		return
+	}
+
+	log.Printf("Getting charts for repository %s on VPS %s", repo, vpsID)
+
+	// Initialize services
+	kvService := services.NewKVService()
+	sshService := services.NewSSHService()
+
+	// Get account ID from token
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration from KV
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Failed to get VPS config: %v", err)
+		utils.JSONNotFound(c, "VPS not found")
+		return
+	}
+
+	// Get SSH private key from KV
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Failed to get SSH private key: %v", err)
+		utils.JSONInternalServerError(c, "SSH key not found")
+		return
+	}
+
+	// Connect to VPS via SSH
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+		utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
+		return
+	}
+
+	// List charts from the repository
+	charts, err := sshService.ListHelmCharts(conn, repo)
+	if err != nil {
+		log.Printf("Failed to list charts: %v", err)
+		utils.JSONInternalServerError(c, "Failed to list Helm charts")
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"charts":     charts,
+		"repository": repo,
+		"vps_id":     vpsID,
+	})
 }

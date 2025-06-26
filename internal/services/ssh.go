@@ -2,6 +2,7 @@ package services
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"golang.org/x/crypto/ssh"
@@ -415,4 +416,99 @@ func (conn *SSHConnection) Close() error {
 		conn.session.Close()
 	}
 	return conn.client.Close()
+}
+
+// GetVPSLogs fetches VPS system logs via SSH
+func (ss *SSHService) GetVPSLogs(host, user, privateKeyPEM string, lines int) (string, error) {
+	conn, err := ss.GetOrCreateConnection(host, user, privateKeyPEM, 0)
+	if err != nil {
+		return "", err
+	}
+
+	// Fetch various system logs
+	command := fmt.Sprintf(`
+		echo "=== System Logs (last %d lines) ==="
+		sudo journalctl --no-pager -n %d
+		echo ""
+		echo "=== K3s Service Status ==="
+		sudo systemctl status k3s || true
+		echo ""
+		echo "=== Docker Containers ==="
+		sudo docker ps -a || true
+	`, lines, lines)
+
+	result, err := ss.ExecuteCommand(conn, command)
+	if err != nil {
+		return "", err
+	}
+
+	return result.Output, nil
+}
+
+// ListHelmRepositories lists all Helm repositories on the VPS
+func (ss *SSHService) ListHelmRepositories(conn *SSHConnection) ([]map[string]interface{}, error) {
+	command := "helm repo list -o json"
+	result, err := ss.ExecuteCommand(conn, command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list repositories: %v", err)
+	}
+
+	var repositories []map[string]interface{}
+	if result.Output != "" {
+		if err := json.Unmarshal([]byte(result.Output), &repositories); err != nil {
+			return nil, fmt.Errorf("failed to parse repository list: %v", err)
+		}
+	}
+
+	return repositories, nil
+}
+
+// AddHelmRepository adds a new Helm repository to the VPS
+func (ss *SSHService) AddHelmRepository(conn *SSHConnection, name, url string) error {
+	// Sanitize inputs to prevent command injection
+	if name == "" || url == "" {
+		return fmt.Errorf("repository name and URL cannot be empty")
+	}
+
+	// Add the repository
+	command := fmt.Sprintf("helm repo add %s %s", name, url)
+	result, err := ss.ExecuteCommand(conn, command)
+	if err != nil {
+		return fmt.Errorf("failed to add repository: %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		return fmt.Errorf("failed to add repository: %s", result.Output)
+	}
+
+	// Update repository index
+	updateCommand := "helm repo update"
+	updateResult, err := ss.ExecuteCommand(conn, updateCommand)
+	if err != nil {
+		return fmt.Errorf("failed to update repository index: %v", err)
+	}
+
+	if updateResult.ExitCode != 0 {
+		return fmt.Errorf("failed to update repository index: %s", updateResult.Output)
+	}
+
+	return nil
+}
+
+// ListHelmCharts lists charts from a specific repository
+func (ss *SSHService) ListHelmCharts(conn *SSHConnection, repositoryName string) ([]map[string]interface{}, error) {
+	command := fmt.Sprintf("helm search repo %s -o json", repositoryName)
+	result, err := ss.ExecuteCommand(conn, command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list charts: %v", err)
+	}
+
+	var charts []map[string]interface{}
+	if result.Output != "" {
+		if err := json.Unmarshal([]byte(result.Output), &charts); err != nil {
+			return nil, fmt.Errorf("failed to parse charts list: %v", err)
+		}
+	}
+
+	return charts, nil
 }

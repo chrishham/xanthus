@@ -3,16 +3,17 @@ package router
 import (
 	"github.com/chrishham/xanthus/internal/handlers"
 	"github.com/chrishham/xanthus/internal/middleware"
-	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
 // RouteConfig holds all the handler instances
 type RouteConfig struct {
-	AuthHandler *handlers.AuthHandler
-	DNSHandler  *handlers.DNSHandler
-	VPSHandler  *handlers.VPSHandler
-	AppsHandler *handlers.ApplicationsHandler
+	AuthHandler     *handlers.AuthHandler
+	DNSHandler      *handlers.DNSHandler
+	VPSHandler      *handlers.VPSHandler
+	AppsHandler     *handlers.ApplicationsHandler
+	TerminalHandler *handlers.TerminalHandler
+	PagesHandler    *handlers.PagesHandler
 }
 
 // SetupRoutes configures all application routes
@@ -38,9 +39,9 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	protected.Use(middleware.AuthMiddleware())
 
 	// Main application pages
-	protected.GET("/main", handleMainPage)
-	protected.GET("/setup", handleSetupPage)
-	protected.POST("/setup/hetzner", handleSetupHetzner)
+	protected.GET("/main", config.PagesHandler.HandleMainPage)
+	protected.GET("/setup", config.PagesHandler.HandleSetupPage)
+	protected.POST("/setup/hetzner", config.VPSHandler.HandleSetupHetzner)
 	protected.GET("/logout", config.AuthHandler.HandleLogout)
 
 	// DNS management routes
@@ -58,8 +59,8 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.GET("", config.VPSHandler.HandleVPSManagePage)
 		vps.GET("/list", config.VPSHandler.HandleVPSList)
 		vps.GET("/create", config.VPSHandler.HandleVPSCreatePage)
-		vps.GET("/check-key", handleVPSCheckKey)
-		vps.POST("/validate-key", handleVPSValidateKey)
+		vps.GET("/check-key", config.VPSHandler.HandleVPSCheckKey)
+		vps.POST("/validate-key", config.VPSHandler.HandleVPSValidateKey)
 		vps.GET("/locations", config.VPSHandler.HandleVPSLocations)
 		vps.GET("/server-types", config.VPSHandler.HandleVPSServerTypes)
 		vps.GET("/server-options", config.VPSHandler.HandleVPSServerOptions)
@@ -69,19 +70,19 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.POST("/poweroff", config.VPSHandler.HandleVPSPowerOff)
 		vps.POST("/poweron", config.VPSHandler.HandleVPSPowerOn)
 		vps.POST("/reboot", config.VPSHandler.HandleVPSReboot)
-		vps.GET("/ssh-key", handleVPSSSHKey)
-		vps.GET("/:id/status", handleVPSStatus)
+		vps.GET("/ssh-key", config.VPSHandler.HandleVPSSSHKey)
+		vps.GET("/:id/status", config.VPSHandler.HandleVPSStatus)
 		vps.POST("/:id/configure", config.VPSHandler.HandleVPSConfigure)
 		vps.POST("/:id/deploy", config.VPSHandler.HandleVPSDeploy)
-		vps.GET("/:id/logs", handleVPSLogs)
-		vps.POST("/:id/terminal", handleVPSTerminal)
+		vps.GET("/:id/logs", config.VPSHandler.HandleVPSLogs)
+		vps.POST("/:id/terminal", config.VPSHandler.HandleVPSTerminal)
 	}
 
 	// Terminal management routes
 	terminal := protected.Group("/terminal")
 	{
-		terminal.GET("/:session_id", handleTerminalView)
-		terminal.DELETE("/:session_id", handleTerminalStop)
+		terminal.GET("/:session_id", config.TerminalHandler.HandleTerminalView)
+		terminal.DELETE("/:session_id", config.TerminalHandler.HandleTerminalStop)
 	}
 
 	// Applications management routes
@@ -90,9 +91,9 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		apps.GET("", config.AppsHandler.HandleApplicationsPage)
 		apps.GET("/list", config.AppsHandler.HandleApplicationsList)
 		apps.GET("/prerequisites", config.AppsHandler.HandleApplicationsPrerequisites)
-		apps.GET("/vps/:id/repositories", handleVPSRepositories)
-		apps.POST("/vps/:id/repositories", handleVPSAddRepository)
-		apps.GET("/vps/:id/charts/:repo", handleVPSCharts)
+		apps.GET("/vps/:id/repositories", config.AppsHandler.HandleVPSRepositories)
+		apps.POST("/vps/:id/repositories", config.AppsHandler.HandleVPSAddRepository)
+		apps.GET("/vps/:id/charts/:repo", config.AppsHandler.HandleVPSCharts)
 		apps.POST("/create", config.AppsHandler.HandleApplicationsCreate)
 		apps.POST("/:id/upgrade", config.AppsHandler.HandleApplicationUpgrade)
 		apps.DELETE("/:id", config.AppsHandler.HandleApplicationDelete)
@@ -106,81 +107,4 @@ func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 	api.Use(middleware.APIAuthMiddleware())
 
 	// Add API routes here when needed
-}
-
-// Legacy handlers that still need to be migrated
-// These should be moved to appropriate handler packages
-
-func handleMainPage(c *gin.Context) {
-	c.HTML(200, "main.html", nil)
-}
-
-func handleSetupPage(c *gin.Context) {
-	// Try to get existing Hetzner API key for prepopulation
-	var existingKey string
-	token := c.GetString("cf_token")
-
-	// Import necessary utility functions
-	exists, accountID, err := utils.CheckKVNamespaceExists(token)
-	if err == nil && exists {
-		// If we can get the account ID, try to retrieve the existing key
-		if hetznerKey, err := utils.GetHetznerAPIKey(token, accountID); err == nil {
-			// Mask the key for security (show only first 4 and last 4 characters)
-			if len(hetznerKey) > 8 {
-				existingKey = hetznerKey[:4] + "..." + hetznerKey[len(hetznerKey)-4:]
-			}
-		}
-	}
-
-	c.HTML(200, "setup.html", map[string]interface{}{
-		"existing_key": existingKey,
-	})
-}
-
-func handleSetupHetzner(c *gin.Context) {
-	// TODO: Move to setup handler or VPS handler - this needs full implementation
-}
-
-func handleVPSCheckKey(c *gin.Context) {
-	// TODO: Move to VPS handler
-}
-
-func handleVPSValidateKey(c *gin.Context) {
-	// TODO: Move to VPS handler
-}
-
-func handleVPSSSHKey(c *gin.Context) {
-	// TODO: Move to VPS handler
-}
-
-func handleVPSStatus(c *gin.Context) {
-	// TODO: Move to VPS handler
-}
-
-func handleVPSLogs(c *gin.Context) {
-	// TODO: Move to VPS handler
-}
-
-func handleVPSTerminal(c *gin.Context) {
-	// TODO: Move to VPS handler
-}
-
-func handleTerminalView(c *gin.Context) {
-	// TODO: Move to terminal handler
-}
-
-func handleTerminalStop(c *gin.Context) {
-	// TODO: Move to terminal handler
-}
-
-func handleVPSRepositories(c *gin.Context) {
-	// TODO: Move to applications handler
-}
-
-func handleVPSAddRepository(c *gin.Context) {
-	// TODO: Move to applications handler
-}
-
-func handleVPSCharts(c *gin.Context) {
-	// TODO: Move to applications handler
 }

@@ -824,21 +824,357 @@ func (h *VPSHandler) performVPSAction(c *gin.Context, action, actionText string)
 	})
 }
 
-// VPS SSH and Access:
-// - HandleVPSSSHKey (line 1750) - SSH key management
-// - HandleVPSCheckKey (line 2073) - Check SSH key status
-// - HandleVPSValidateKey (line 2106) - Validate SSH key
+// HandleVPSCheckKey checks if Hetzner API key exists in KV storage
+func (h *VPSHandler) HandleVPSCheckKey(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Invalid token")
+		return
+	}
 
-// VPS Monitoring and Status:
-// - HandleVPSStatus (line 1797) - Get VPS status
-// - HandleVPSLogs (line 1989) - View VPS logs
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONResponse(c, http.StatusOK, gin.H{"exists": false})
+		return
+	}
 
-// VPS Terminal Access:
-// - HandleVPSTerminal (line 2305) - Web terminal interface
-// - HandleTerminalView (line 2359) - Terminal view handler
-// - HandleTerminalStop (line 2379) - Stop terminal session
+	// Check if Hetzner API key exists
+	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	if err != nil || hetznerKey == "" {
+		utils.JSONResponse(c, http.StatusOK, gin.H{"exists": false})
+		return
+	}
 
-// VPS Application Management:
-// - HandleVPSRepositories (line 2778) - Manage Helm repositories
-// - HandleVPSAddRepository (line 2878) - Add new repository
-// - HandleVPSCharts (line 3009) - List available Helm charts
+	// Mask the key for security (show only first 4 and last 4 characters)
+	maskedKey := ""
+	if len(hetznerKey) > 8 {
+		maskedKey = hetznerKey[:4] + "..." + hetznerKey[len(hetznerKey)-4:]
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"exists":     true,
+		"masked_key": maskedKey,
+	})
+}
+
+// HandleVPSValidateKey validates and stores Hetzner API key
+func (h *VPSHandler) HandleVPSValidateKey(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Invalid token")
+		return
+	}
+
+	apiKey := c.PostForm("key")
+	if apiKey == "" {
+		utils.JSONBadRequest(c, "API key is required")
+		return
+	}
+
+	// Validate the key
+	if !utils.ValidateHetznerAPIKey(apiKey) {
+		utils.JSONBadRequest(c, "Invalid Hetzner API key")
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Store the key
+	client := &http.Client{Timeout: 10 * time.Second}
+	encryptedKey, err := utils.EncryptData(apiKey, token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to encrypt API key")
+		return
+	}
+
+	if err := utils.PutKVValue(client, token, accountID, "config:hetzner:api_key", encryptedKey); err != nil {
+		utils.JSONInternalServerError(c, "Failed to store API key")
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{"success": true})
+}
+
+// HandleVPSSSHKey returns SSH private key for VPS access
+func (h *VPSHandler) HandleVPSSSHKey(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Invalid token")
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get CSR configuration which contains the SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		CSR        string `json:"csr"`
+		PrivateKey string `json:"private_key"`
+		CreatedAt  string `json:"created_at"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Error getting CSR config: %v", err)
+		utils.JSONInternalServerError(c, "SSH private key not found. Please logout and login again.")
+		return
+	}
+
+	// Check if user wants to download the key
+	download := c.Query("download")
+	if download == "true" {
+		c.Header("Content-Type", "application/octet-stream")
+		c.Header("Content-Disposition", "attachment; filename=xanthus-ssh-key.pem")
+		c.String(http.StatusOK, csrConfig.PrivateKey)
+		return
+	}
+
+	// Return SSH private key and usage instructions
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"private_key": csrConfig.PrivateKey,
+		"instructions": map[string]interface{}{
+			"save_to_file":    "Save the private key to a file (e.g., ~/.ssh/xanthus-key.pem)",
+			"set_permissions": "chmod 600 ~/.ssh/xanthus-key.pem",
+			"ssh_command":     "ssh -i ~/.ssh/xanthus-key.pem root@<server-ip>",
+		},
+	})
+}
+
+// HandleVPSStatus gets VPS health status via SSH
+func (h *VPSHandler) HandleVPSStatus(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Invalid token")
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		utils.JSONBadRequest(c, "Invalid server ID")
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		utils.JSONNotFound(c, "VPS configuration not found")
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		utils.JSONInternalServerError(c, "SSH private key not found")
+		return
+	}
+
+	// Check VPS health via SSH
+	sshService := services.NewSSHService()
+	status, err := sshService.CheckVPSHealth(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to check VPS status: %v", err))
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, status)
+}
+
+// HandleVPSLogs fetches VPS logs via SSH connection
+func (h *VPSHandler) HandleVPSLogs(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Invalid token")
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		utils.JSONBadRequest(c, "Invalid server ID")
+		return
+	}
+
+	// Get number of lines (default 100)
+	lines := 100
+	if linesStr := c.Query("lines"); linesStr != "" {
+		if parsedLines, err := fmt.Sscanf(linesStr, "%d", &lines); err == nil && parsedLines > 0 {
+			if lines > 1000 {
+				lines = 1000 // Limit to prevent overwhelming response
+			}
+		}
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		utils.JSONNotFound(c, "VPS configuration not found")
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		utils.JSONInternalServerError(c, "SSH private key not found")
+		return
+	}
+
+	// Connect to VPS and get logs
+	sshService := services.NewSSHService()
+	logs, err := sshService.GetVPSLogs(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, lines)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to fetch logs: %v", err))
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"logs":      logs,
+		"server_id": serverID,
+		"lines":     lines,
+	})
+}
+
+// HandleVPSTerminal creates a web terminal session for VPS
+func (h *VPSHandler) HandleVPSTerminal(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Invalid token")
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		utils.JSONBadRequest(c, "Invalid server ID")
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		utils.JSONNotFound(c, "VPS configuration not found")
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		utils.JSONInternalServerError(c, "SSH private key not found")
+		return
+	}
+
+	// Create terminal session
+	terminalService := services.NewTerminalService()
+	session, err := terminalService.CreateSession(serverID, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to create terminal session: %v", err))
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"success":    true,
+		"session_id": session.ID,
+		"url":        fmt.Sprintf("/terminal/%s", session.ID),
+		"port":       session.Port,
+	})
+}
+
+// HandleSetupHetzner configures Hetzner API key in setup
+func (h *VPSHandler) HandleSetupHetzner(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.Redirect(http.StatusTemporaryRedirect, "/login")
+		return
+	}
+
+	hetznerKey := c.PostForm("hetzner_key")
+
+	// Get account ID for checking existing key
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		log.Printf("Error getting account ID: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte(fmt.Sprintf("❌ Error: %s", err.Error())))
+		return
+	}
+
+	// If no key provided, check if there's an existing key
+	if hetznerKey == "" {
+		if existingKey, err := utils.GetHetznerAPIKey(token, accountID); err == nil && existingKey != "" {
+			// Use existing key - proceed to next step
+			log.Println("✅ Using existing Hetzner API key")
+			c.Header("HX-Redirect", "/setup/server")
+			c.Status(http.StatusOK)
+			return
+		} else {
+			c.Data(http.StatusBadRequest, "text/html", []byte("❌ Hetzner API key is required"))
+			return
+		}
+	}
+
+	// Validate Hetzner API key
+	if !utils.ValidateHetznerAPIKey(hetznerKey) {
+		c.Data(http.StatusOK, "text/html", []byte("❌ Invalid Hetzner API key. Please check your key and try again."))
+		return
+	}
+
+	// Store encrypted Hetzner API key in KV
+	client := &http.Client{Timeout: 10 * time.Second}
+	encryptedKey, err := utils.EncryptData(hetznerKey, token)
+	if err != nil {
+		log.Printf("Error encrypting Hetzner key: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error storing API key"))
+		return
+	}
+
+	if err := utils.PutKVValue(client, token, accountID, "config:hetzner:api_key", encryptedKey); err != nil {
+		log.Printf("Error storing Hetzner key: %v", err)
+		c.Data(http.StatusOK, "text/html", []byte("❌ Error storing API key"))
+		return
+	}
+
+	log.Println("✅ Hetzner API key stored successfully")
+	c.Header("HX-Redirect", "/setup/server")
+	c.Status(http.StatusOK)
+}

@@ -79,6 +79,16 @@ func JSONInternalServerError(c *gin.Context, message string) {
 	JSONError(c, http.StatusInternalServerError, message)
 }
 
+// JSONServiceUnavailable sends a 503 Service Unavailable error response
+func JSONServiceUnavailable(c *gin.Context, message string) {
+	JSONError(c, http.StatusServiceUnavailable, message)
+}
+
+// JSONResponse sends a generic JSON response with custom status code
+func JSONResponse(c *gin.Context, statusCode int, data interface{}) {
+	c.JSON(statusCode, data)
+}
+
 // HTMLError sends an HTML error response (for HTMX requests)
 func HTMLError(c *gin.Context, message string) {
 	c.Data(http.StatusOK, "text/html", []byte("❌ "+message))

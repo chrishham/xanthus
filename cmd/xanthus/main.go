@@ -39,13 +39,17 @@ func main() {
 	dnsHandler := handlers.NewDNSHandler()
 	vpsHandler := handlers.NewVPSHandler()
 	appsHandler := handlers.NewApplicationsHandler()
+	terminalHandler := handlers.NewTerminalHandler()
+	pagesHandler := handlers.NewPagesHandler()
 
 	// Configure routes
 	routeConfig := router.RouteConfig{
-		AuthHandler: authHandler,
-		DNSHandler:  dnsHandler,
-		VPSHandler:  vpsHandler,
-		AppsHandler: appsHandler,
+		AuthHandler:     authHandler,
+		DNSHandler:      dnsHandler,
+		VPSHandler:      vpsHandler,
+		AppsHandler:     appsHandler,
+		TerminalHandler: terminalHandler,
+		PagesHandler:    pagesHandler,
 	}
 
 	router.SetupRoutes(r, routeConfig)
