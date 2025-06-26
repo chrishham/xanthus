@@ -51,23 +51,44 @@ tests/
   - ✅ `TestHandleHealth` - Should return 200 with status
 - **Additional**: Benchmark tests included for performance measurement
 
-#### VPS Handler (`vps.go`)
+#### VPS Handler (`vps.go`) ✅ COMPLETED
 - **Priority**: High (Complex business logic)
+- **Implementation**: `/tests/unit/handlers/vps_test.go`
 - **Test Cases**:
-  - `TestHandleVPSCreate` - Server creation with validation:
-    - Missing parameters (name, location, server_type)
-    - Invalid token scenarios
-    - SSH key creation flow
-    - Server type pricing calculation
-    - VPS configuration storage
-  - `TestHandleVPSDelete` - Server deletion:
-    - Valid deletion flow
-    - Configuration cleanup
-    - Error handling for non-existent servers
-  - `TestHandleVPSList` - Server listing with cost information
-  - `TestPerformVPSAction` - Power management (on/off/reboot)
-  - `TestHandleVPSServerOptions` - Filtering and sorting logic
-  - `TestHandleVPSValidateName` - Name uniqueness validation
+  - ✅ `TestHandleVPSCreate` - Server creation with validation:
+    - ✅ Missing parameters (name, location, server_type)
+    - ✅ Invalid token scenarios
+    - ✅ SSH key creation flow
+    - ✅ Server type pricing calculation
+    - ✅ VPS configuration storage
+  - ✅ `TestHandleVPSDelete` - Server deletion:
+    - ✅ Valid deletion flow
+    - ✅ Configuration cleanup
+    - ✅ Error handling for non-existent servers
+  - ✅ `TestHandleVPSList` - Server listing with cost information
+  - ✅ `TestHandleVPSPowerActions` - Power management (on/off/reboot)
+  - ✅ `TestHandleVPSServerOptions` - Filtering and sorting logic
+  - ✅ `TestHandleVPSValidateName` - Name uniqueness validation
+  - ✅ `TestHandleVPSManagePage` - VPS management page rendering
+  - ✅ `TestHandleVPSCreatePage` - VPS creation page rendering
+  - ✅ `TestHandleVPSConfigure` - SSL certificate configuration for domains
+  - ✅ `TestHandleVPSDeploy` - Kubernetes manifest deployment
+  - ✅ `TestHandleVPSLocations` - Hetzner location fetching
+  - ✅ `TestHandleVPSServerTypes` - Server type filtering and availability
+  - ✅ `TestHandleVPSCheckKey/ValidateKey` - Hetzner API key management
+  - ✅ `TestHandleVPSSSHKey` - SSH private key retrieval
+  - ✅ `TestHandleVPSStatus` - VPS health status via SSH
+  - ✅ `TestHandleVPSLogs` - VPS log retrieval
+  - ✅ `TestHandleVPSTerminal` - Web terminal session creation
+  - ✅ `TestHandleSetupHetzner` - Hetzner API key setup flow
+- **Advanced Testing**:
+  - ✅ Mock servers for external API calls (Cloudflare, Hetzner)
+  - ✅ Edge cases and error handling tests
+  - ✅ Concurrent operations testing
+  - ✅ Performance benchmarks for high-frequency requests
+  - ✅ Integration-style test flows
+  - ✅ Server ID parsing validation
+  - ✅ Large manifest deployment testing
 
 #### Applications Handler (`applications.go`)
 - **Priority**: Medium
@@ -423,7 +444,7 @@ clean:
 
 ### Phase 2 (Important) 🔄 IN PROGRESS
 1. ✅ Authentication middleware tests - **COMPLETED** (`/tests/unit/middleware/auth_test.go`)
-2. 🔄 VPS handler tests  
+2. ✅ VPS handler tests - **COMPLETED** (`/tests/unit/handlers/vps_test.go`)
 3. 🔄 Remaining handler tests (applications, dns, pages)
 4. 🔄 Integration tests
 5. 🔄 End-to-end workflows
@@ -435,8 +456,8 @@ clean:
 4. ⏳ Documentation tests
 
 ### Current Status Summary
-- **Unit Tests Completed**: 12 test files covering 4 major layers
-  - **Handlers**: 1/5 files (auth_test.go)
+- **Unit Tests Completed**: 13 test files covering 4 major layers
+  - **Handlers**: 2/5 files (auth_test.go, vps_test.go)
   - **Services**: 5/5 files (cloudflare, helm, hetzner, kv, ssh)
   - **Utils**: 5/5 files (crypto, responses, cloudflare, hetzner, server)
   - **Middleware**: 1/1 files (auth_test.go)
