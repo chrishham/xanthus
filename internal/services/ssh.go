@@ -784,3 +784,13 @@ spec:
 	// Deploy the ingress manifest
 	return ss.DeployManifest(conn, ingressManifest, "argocd-ingress")
 }
+
+// GetVPSInfo retrieves the VPS information file that includes ArgoCD credentials
+func (ss *SSHService) GetVPSInfo(conn *SSHConnection) (string, error) {
+	result, err := ss.ExecuteCommand(conn, "cat /opt/xanthus/info.txt 2>/dev/null || echo 'Info file not found'")
+	if err != nil {
+		return "", fmt.Errorf("failed to read VPS info: %w", err)
+	}
+	
+	return result.Output, nil
+}

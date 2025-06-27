@@ -3,9 +3,11 @@ package services
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 import _ "embed"
@@ -286,7 +288,7 @@ func (hs *HetznerService) GetServer(apiKey string, serverID int) (*HetznerServer
 }
 
 // CreateServer creates a new VPS instance using cloud-init script
-func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKeyName string) (*HetznerServer, error) {
+func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKeyName string, domain, domainCert, domainKey string) (*HetznerServer, error) {
 	// Use SSH key name directly - Hetzner accepts both names and IDs
 	var sshKeys []string
 	if sshKeyName != "" {
@@ -304,6 +306,18 @@ func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKe
 
 	// Use cloud-init script with proper readiness verification
 	userData := defaultUserData
+	
+	// Replace template variables if domain and certificates are provided
+	if domain != "" && domainCert != "" && domainKey != "" {
+		// Base64 encode the certificate and key
+		certB64 := base64.StdEncoding.EncodeToString([]byte(domainCert))
+		keyB64 := base64.StdEncoding.EncodeToString([]byte(domainKey))
+		
+		// Replace environment variables in the cloud-init script
+		userData = strings.ReplaceAll(userData, "${DOMAIN}", domain)
+		userData = strings.ReplaceAll(userData, "${DOMAIN_CERT}", certB64)
+		userData = strings.ReplaceAll(userData, "${DOMAIN_KEY}", keyB64)
+	}
 
 	createReq := HetznerCreateServerRequest{
 		Name:             name,

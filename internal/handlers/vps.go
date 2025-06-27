@@ -219,8 +219,19 @@ func (h *VPSHandler) HandleVPSCreate(c *gin.Context) {
 	sshKeyName = sshKey.Name
 	log.Printf("✅ Using SSH key: %s (ID: %d)", sshKeyName, sshKey.ID)
 
-	// Create server using cloud-init script
-	server, err := hetznerService.CreateServer(hetznerKey, name, serverType, location, sshKeyName)
+	// Get domain SSL configuration for cloud-init template
+	var domainCert, domainKey string
+	kvService := services.NewKVService()
+	if domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain); err == nil {
+		domainCert = domainConfig.Certificate
+		domainKey = domainConfig.PrivateKey
+		log.Printf("✅ Retrieved SSL configuration for domain %s", domain)
+	} else {
+		log.Printf("Warning: Could not get SSL config for domain %s: %v", domain, err)
+	}
+
+	// Create server using cloud-init script with domain/TLS configuration
+	server, err := hetznerService.CreateServer(hetznerKey, name, serverType, location, sshKeyName, domain, domainCert, domainKey)
 	if err != nil {
 		log.Printf("Error creating server: %v", err)
 
@@ -264,8 +275,7 @@ func (h *VPSHandler) HandleVPSCreate(c *gin.Context) {
 		}
 	}
 
-	// Initialize KV service for storing VPS configuration
-	kvService := services.NewKVService()
+	// kvService already initialized above for SSL config
 
 	// Store VPS configuration in KV
 	vpsConfig := &services.VPSConfig{
@@ -298,41 +308,8 @@ func (h *VPSHandler) HandleVPSCreate(c *gin.Context) {
 		log.Printf("✅ DNS configured for domain %s pointing to %s", domain, server.PublicNet.IPv4.IP)
 	}
 
-	// Configure TLS certificates and ArgoCD ingress (async operation)
-	go func() {
-		// Wait a bit for the server to be fully ready
-		time.Sleep(2 * time.Minute)
-
-		// Get domain SSL configuration
-		domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain)
-		if err != nil {
-			log.Printf("Warning: Could not get SSL config for domain %s: %v", domain, err)
-			return
-		}
-
-		// Connect to VPS via SSH
-		sshService := services.NewSSHService()
-		conn, err := sshService.ConnectToVPS(server.PublicNet.IPv4.IP, "root", csrConfig.PrivateKey)
-		if err != nil {
-			log.Printf("Warning: Could not connect to VPS for TLS setup: %v", err)
-			return
-		}
-		defer conn.Close()
-
-		// Create TLS secret for the domain
-		if err := sshService.CreateTLSSecret(conn, domain, domainConfig.Certificate, domainConfig.PrivateKey); err != nil {
-			log.Printf("Warning: Failed to create TLS secret for domain %s: %v", domain, err)
-		} else {
-			log.Printf("✅ TLS secret created for domain %s", domain)
-		}
-
-		// Create ArgoCD ingress
-		if err := sshService.CreateArgoCDIngress(conn, domain); err != nil {
-			log.Printf("Warning: Failed to create ArgoCD ingress for domain %s: %v", domain, err)
-		} else {
-			log.Printf("✅ ArgoCD ingress configured for https://argocd.%s", domain)
-		}
-	}()
+	// Note: TLS certificates and ArgoCD ingress are now configured automatically
+	// during server initialization via cloud-init if domain SSL config is available
 
 	// Update VPS config to include domain
 	vpsConfig.Domain = domain
@@ -1124,6 +1101,69 @@ func (h *VPSHandler) HandleVPSLogs(c *gin.Context) {
 		"logs":      logs,
 		"server_id": serverID,
 		"lines":     lines,
+	})
+}
+
+// HandleVPSInfo retrieves VPS information including ArgoCD credentials
+func (h *VPSHandler) HandleVPSInfo(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Invalid token")
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		utils.JSONBadRequest(c, "Invalid server ID")
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		utils.JSONNotFound(c, "VPS configuration not found")
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		utils.JSONInternalServerError(c, "SSH private key not found")
+		return
+	}
+
+	// Connect to VPS and get info file
+	sshService := services.NewSSHService()
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("SSH connection failed: %v", err))
+		return
+	}
+	defer conn.Close()
+
+	// Get VPS info including ArgoCD credentials
+	info, err := sshService.GetVPSInfo(conn)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to get VPS info: %v", err))
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"server_id": serverID,
+		"info":      info,
+		"config":    vpsConfig,
 	})
 }
 

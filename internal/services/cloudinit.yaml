@@ -143,7 +143,14 @@ write_files:
       # Install ArgoCD CLI
       update_status "INSTALLING_ARGOCD_CLI"
       log "Installing ArgoCD CLI..."
-      curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+      ARCH=$(uname -m)
+      case $ARCH in
+          x86_64) ARGOCD_ARCH="amd64" ;;
+          aarch64) ARGOCD_ARCH="arm64" ;;
+          armv7l) ARGOCD_ARCH="armv7" ;;
+          *) log "Warning: Unsupported architecture $ARCH, defaulting to amd64"; ARGOCD_ARCH="amd64" ;;
+      esac
+      curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-${ARGOCD_ARCH}
       chmod +x /usr/local/bin/argocd
       
       # Final verification
@@ -183,6 +190,90 @@ write_files:
       - Setup log: /opt/xanthus/setup.log
       - Status: /opt/xanthus/status
       EOF
+      
+      # Create TLS secrets and ArgoCD ingress if domain configuration is provided
+      if [ -n "${DOMAIN}" ] && [ -n "${DOMAIN_CERT}" ] && [ -n "${DOMAIN_KEY}" ]; then
+          update_status "CONFIGURING_TLS"
+          log "Configuring TLS secrets for domain: ${DOMAIN}"
+          
+          # Create TLS secret for the domain
+          log "Creating TLS secret for ${DOMAIN}..."
+          
+          # Decode certificates to temporary files
+          echo "${DOMAIN_CERT}" | base64 -d > /tmp/domain.crt
+          echo "${DOMAIN_KEY}" | base64 -d > /tmp/domain.key
+          
+          # Create TLS secret in default namespace
+          kubectl create secret tls "${DOMAIN}-tls" \
+              --cert=/tmp/domain.crt \
+              --key=/tmp/domain.key \
+              -n default 2>&1 | tee -a "$LOG_FILE" || log "Warning: Failed to create TLS secret"
+          
+          # Create TLS secret in argocd namespace
+          kubectl create secret tls "${DOMAIN}-tls" \
+              --cert=/tmp/domain.crt \
+              --key=/tmp/domain.key \
+              -n argocd 2>&1 | tee -a "$LOG_FILE" || log "Warning: Failed to create ArgoCD TLS secret"
+          
+          # Clean up temporary certificate files
+          rm -f /tmp/domain.crt /tmp/domain.key
+          
+          # Create ArgoCD ingress
+          update_status "CONFIGURING_ARGOCD_INGRESS"
+          log "Creating ArgoCD ingress for https://argocd.${DOMAIN}"
+          cat > /tmp/argocd-ingress.yaml << 'INGRESS_EOF'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server-ingress
+  namespace: argocd
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  tls:
+  - hosts:
+    - argocd.DOMAIN_PLACEHOLDER
+    secretName: DOMAIN_PLACEHOLDER-tls
+  rules:
+  - host: argocd.DOMAIN_PLACEHOLDER
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: argocd-server
+            port:
+              number: 80
+INGRESS_EOF
+          
+          # Replace placeholders with actual domain
+          sed -i "s/DOMAIN_PLACEHOLDER/${DOMAIN}/g" /tmp/argocd-ingress.yaml
+          
+          if kubectl apply -f /tmp/argocd-ingress.yaml 2>&1 | tee -a "$LOG_FILE"; then
+              log "ArgoCD ingress configured successfully for https://argocd.${DOMAIN}"
+          else
+              log "Warning: Failed to create ArgoCD ingress"
+          fi
+          
+          rm -f /tmp/argocd-ingress.yaml
+          
+          # Get ArgoCD initial admin password and save it
+          log "Retrieving ArgoCD initial admin password..."
+          if ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null); then
+              log "ArgoCD admin password retrieved successfully"
+              echo "ArgoCD Admin Credentials:" >> /opt/xanthus/info.txt
+              echo "- URL: https://argocd.${DOMAIN}" >> /opt/xanthus/info.txt
+              echo "- Username: admin" >> /opt/xanthus/info.txt
+              echo "- Password: ${ARGOCD_PASSWORD}" >> /opt/xanthus/info.txt
+              echo "" >> /opt/xanthus/info.txt
+          else
+              log "Warning: Could not retrieve ArgoCD admin password"
+          fi
+      else
+          log "Domain configuration not provided, skipping TLS and ingress setup"
+      fi
       
       log "Setup completed successfully!"
       log "K3s cluster is ready and all components are running"
