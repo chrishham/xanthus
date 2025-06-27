@@ -123,6 +123,23 @@ write_files:
           kubectl get pods -n argocd >> "$LOG_FILE" 2>&1 || log "Could not get final ArgoCD status"
       fi
       
+      # Configure ArgoCD for ingress
+      log "Configuring ArgoCD for proper ingress operation..."
+      if kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p='{"data":{"server.insecure":"true"}}' 2>&1 | tee -a "$LOG_FILE"; then
+          log "ArgoCD server.insecure configuration applied"
+      else
+          log "Could not configure ArgoCD server.insecure, creating configmap..."
+          kubectl create configmap argocd-cmd-params-cm -n argocd --from-literal=server.insecure=true 2>&1 | tee -a "$LOG_FILE" || log "Warning: Could not create ArgoCD configmap"
+      fi
+      
+      # Restart ArgoCD server to apply configuration
+      if kubectl rollout restart deployment argocd-server -n argocd 2>&1 | tee -a "$LOG_FILE"; then
+          log "ArgoCD server restarted to apply configuration"
+          kubectl rollout status deployment argocd-server -n argocd --timeout=300s 2>&1 | tee -a "$LOG_FILE" || log "Warning: ArgoCD restart status check timed out"
+      else
+          log "Warning: Could not restart ArgoCD server"
+      fi
+      
       # Install ArgoCD CLI
       update_status "INSTALLING_ARGOCD_CLI"
       log "Installing ArgoCD CLI..."
