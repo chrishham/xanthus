@@ -172,25 +172,6 @@ write_files:
       
       log "Final verification completed (warnings are non-critical)"
       
-      # Update status and info
-      update_status "READY"
-      cat > /opt/xanthus/info.txt << EOF
-      Xanthus managed K3s server
-      Created: $(date)
-      Status: Ready
-      
-      Components installed and verified:
-      - K3s: $(kubectl version --short --client 2>/dev/null | head -1 || echo "Ready")
-      - Helm: $(helm version --short 2>/dev/null || echo "Ready")
-      - ArgoCD: Ready
-      
-      Access Information:
-      - SSH: ssh root@<server-ip>
-      - Kubeconfig: /etc/rancher/k3s/k3s.yaml
-      - Setup log: /opt/xanthus/setup.log
-      - Status: /opt/xanthus/status
-      EOF
-      
       # Create TLS secrets and ArgoCD ingress if domain configuration is provided
       if [ -n "${DOMAIN}" ] && [ -n "${DOMAIN_CERT}" ] && [ -n "${DOMAIN_KEY}" ]; then
           update_status "CONFIGURING_TLS"
@@ -275,6 +256,26 @@ write_files:
           log "Domain configuration not provided, skipping TLS and ingress setup"
       fi
       
+      # Generate final info file
+      cat > /opt/xanthus/info.txt << EOF
+      Xanthus managed K3s server
+      Created: $(date)
+      Status: Ready
+      
+      Components installed and verified:
+      - K3s: $(kubectl version --short --client 2>/dev/null | head -1 || echo "Ready")
+      - Helm: $(helm version --short 2>/dev/null || echo "Ready")
+      - ArgoCD: Ready
+      
+      Access Information:
+      - SSH: ssh root@<server-ip>
+      - Kubeconfig: /etc/rancher/k3s/k3s.yaml
+      - Setup log: /opt/xanthus/setup.log
+      - Status: /opt/xanthus/status
+      EOF
+      
+      # Final status update
+      update_status "READY"
       log "Setup completed successfully!"
       log "K3s cluster is ready and all components are running"
 runcmd:

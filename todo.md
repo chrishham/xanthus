@@ -1,4 +1,12 @@
 ## VPS
+argocd admin initial-password -n argocd
+download approriate binaries for argocd depending on vps architecture
+
+streamline @internal/services/cloudinit.yaml with @internal/handlers/vps.go, is there anything that can be moved to the cloudinit?
+
+give the user the initial password for argocd :
+
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 @web/templates/vps-manage.html
 - show total days and hours since vps creation
