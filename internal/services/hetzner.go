@@ -307,7 +307,7 @@ func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKe
 	// Use cloud-init script with proper readiness verification
 	userData := defaultUserData
 	
-	// Replace template variables if domain and certificates are provided
+	// Replace template variables - always replace to avoid undefined variables
 	if domain != "" && domainCert != "" && domainKey != "" {
 		// Base64 encode the certificate and key
 		certB64 := base64.StdEncoding.EncodeToString([]byte(domainCert))
@@ -317,6 +317,11 @@ func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKe
 		userData = strings.ReplaceAll(userData, "${DOMAIN}", domain)
 		userData = strings.ReplaceAll(userData, "${DOMAIN_CERT}", certB64)
 		userData = strings.ReplaceAll(userData, "${DOMAIN_KEY}", keyB64)
+	} else {
+		// Replace with empty values to avoid undefined variables
+		userData = strings.ReplaceAll(userData, "${DOMAIN}", "")
+		userData = strings.ReplaceAll(userData, "${DOMAIN_CERT}", "")
+		userData = strings.ReplaceAll(userData, "${DOMAIN_KEY}", "")
 	}
 
 	createReq := HetznerCreateServerRequest{
