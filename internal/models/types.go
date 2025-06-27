@@ -102,7 +102,7 @@ type CloudflareDomain struct {
 	Status     string `json:"status"`
 	Paused     bool   `json:"paused"`
 	Type       string `json:"type"`
-	Managed    bool   `json:"managed"`
+	Managed    bool   `json:"managed_by_xanthus"`
 	CreatedOn  string `json:"created_on"`
 	ModifiedOn string `json:"modified_on"`
 }
