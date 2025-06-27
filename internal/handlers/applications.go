@@ -599,12 +599,28 @@ func (h *ApplicationsHandler) HandleVPSRepositories(c *gin.Context) {
 		return
 	}
 
-	// Connect to VPS via SSH
-	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
-	if err != nil {
-		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
-		utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
-		return
+	// Check for existing SSH session first
+	sessionID := c.GetHeader("X-SSH-Session-ID")
+	var conn *services.SSHConnection
+
+	sessionManager := services.GetGlobalSessionManager()
+	if sessionID != "" {
+		if sessionConn, exists := sessionManager.GetSessionConnection(sessionID); exists {
+			conn = sessionConn
+			log.Printf("Using existing SSH session %s for VPS %s", sessionID, vpsID)
+		}
+	}
+
+	// Fallback to creating new connection if no session available
+	if conn == nil {
+		var err error
+		conn, err = sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+		if err != nil {
+			log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+			utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
+			return
+		}
+		log.Printf("Created new SSH connection for VPS %s", vpsID)
 	}
 
 	// Get list of Helm repositories
@@ -696,12 +712,28 @@ func (h *ApplicationsHandler) HandleVPSAddRepository(c *gin.Context) {
 		return
 	}
 
-	// Connect to VPS via SSH
-	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
-	if err != nil {
-		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
-		utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
-		return
+	// Check for existing SSH session first
+	sessionID := c.GetHeader("X-SSH-Session-ID")
+	var conn *services.SSHConnection
+
+	sessionManager := services.GetGlobalSessionManager()
+	if sessionID != "" {
+		if sessionConn, exists := sessionManager.GetSessionConnection(sessionID); exists {
+			conn = sessionConn
+			log.Printf("Using existing SSH session %s for VPS %s", sessionID, vpsID)
+		}
+	}
+
+	// Fallback to creating new connection if no session available
+	if conn == nil {
+		var err error
+		conn, err = sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+		if err != nil {
+			log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+			utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
+			return
+		}
+		log.Printf("Created new SSH connection for VPS %s", vpsID)
 	}
 
 	// Add the repository
@@ -773,12 +805,28 @@ func (h *ApplicationsHandler) HandleVPSCharts(c *gin.Context) {
 		return
 	}
 
-	// Connect to VPS via SSH
-	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
-	if err != nil {
-		log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
-		utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
-		return
+	// Check for existing SSH session first
+	sessionID := c.GetHeader("X-SSH-Session-ID")
+	var conn *services.SSHConnection
+
+	sessionManager := services.GetGlobalSessionManager()
+	if sessionID != "" {
+		if sessionConn, exists := sessionManager.GetSessionConnection(sessionID); exists {
+			conn = sessionConn
+			log.Printf("Using existing SSH session %s for VPS %s", sessionID, vpsID)
+		}
+	}
+
+	// Fallback to creating new connection if no session available
+	if conn == nil {
+		var err error
+		conn, err = sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+		if err != nil {
+			log.Printf("Failed to connect to VPS %s: %v", vpsID, err)
+			utils.JSONServiceUnavailable(c, "Cannot connect to VPS")
+			return
+		}
+		log.Printf("Created new SSH connection for VPS %s", vpsID)
 	}
 
 	// List charts from the repository
@@ -793,5 +841,110 @@ func (h *ApplicationsHandler) HandleVPSCharts(c *gin.Context) {
 		"charts":     charts,
 		"repository": repo,
 		"vps_id":     vpsID,
+	})
+}
+
+// HandleCreateSSHSession creates a new SSH session for wizard operations
+func (h *ApplicationsHandler) HandleCreateSSHSession(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Unauthorized")
+		return
+	}
+
+	var sessionData struct {
+		VPSID string `json:"vps_id"`
+	}
+
+	if err := c.ShouldBindJSON(&sessionData); err != nil {
+		utils.JSONBadRequest(c, "Invalid request data")
+		return
+	}
+
+	if sessionData.VPSID == "" {
+		utils.JSONBadRequest(c, "VPS ID is required")
+		return
+	}
+
+	serverID, err := strconv.Atoi(sessionData.VPSID)
+	if err != nil {
+		utils.JSONBadRequest(c, "Invalid VPS ID")
+		return
+	}
+
+	log.Printf("Creating SSH session for VPS %s", sessionData.VPSID)
+
+	// Initialize services
+	kvService := services.NewKVService()
+	sessionManager := services.GetGlobalSessionManager()
+
+	// Get account ID from token
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration from KV
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Failed to get VPS config: %v", err)
+		utils.JSONNotFound(c, "VPS not found")
+		return
+	}
+
+	// Get SSH private key from KV
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Failed to get SSH private key: %v", err)
+		utils.JSONInternalServerError(c, "SSH key not found")
+		return
+	}
+
+	// Create SSH session
+	sessionID, err := sessionManager.CreateSession(
+		serverID,
+		vpsConfig.PublicIPv4,
+		vpsConfig.SSHUser,
+		csrConfig.PrivateKey,
+		token,
+	)
+	if err != nil {
+		log.Printf("Failed to create SSH session: %v", err)
+		utils.JSONInternalServerError(c, "Failed to create SSH session")
+		return
+	}
+
+	log.Printf("Successfully created SSH session %s for VPS %s", sessionID, sessionData.VPSID)
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"session_id": sessionID,
+		"vps_id":     sessionData.VPSID,
+		"message":    "SSH session created successfully",
+	})
+}
+
+// HandleCloseSSHSession closes an existing SSH session
+func (h *ApplicationsHandler) HandleCloseSSHSession(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Unauthorized")
+		return
+	}
+
+	sessionID := c.Param("session_id")
+	if sessionID == "" {
+		utils.JSONBadRequest(c, "Session ID is required")
+		return
+	}
+
+	sessionManager := services.GetGlobalSessionManager()
+	sessionManager.RemoveSession(sessionID)
+
+	log.Printf("Closed SSH session %s", sessionID)
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"message": "SSH session closed successfully",
 	})
 }

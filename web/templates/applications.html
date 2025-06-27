@@ -227,7 +227,8 @@
                         selectedVPS: null,
                         selectedRepo: null,
                         selectedChart: null,
-                        appConfig: {}
+                        appConfig: {},
+                        sessionID: null
                     };
                     
                     // First, check prerequisites
@@ -370,6 +371,10 @@
                     if (selectedVPS) {
                         this.wizardData.selectedVPS = selectedVPS;
                         this.wizardData.step = 2;
+                        
+                        // Create SSH session for the selected VPS
+                        await this.createSSHSession(selectedVPS);
+                        
                         await this.showWizardStep2();
                     }
                 },
@@ -380,7 +385,18 @@
                     
                     try {
                         // Get repositories from VPS
-                        const response = await fetch(`/applications/vps/${this.wizardData.selectedVPS}/repositories`);
+                        const headers = {
+                            'Content-Type': 'application/json'
+                        };
+                        
+                        // Include session header if available
+                        if (this.wizardData.sessionID) {
+                            headers['X-SSH-Session-ID'] = this.wizardData.sessionID;
+                        }
+                        
+                        const response = await fetch(`/applications/vps/${this.wizardData.selectedVPS}/repositories`, {
+                            headers: headers
+                        });
                         const data = await response.json();
                         
                         this.loading = false;
@@ -498,8 +514,13 @@
                             this.wizardData.step = 3;
                             await this.showWizardStep3();
                         } else {
-                            // Back button pressed
-                            await this.showWizardStep1();
+                            // Back button pressed or cancelled
+                            if (formValues === undefined) {
+                                // Wizard was cancelled, clean up session
+                                await this.closeSSHSession();
+                            } else {
+                                await this.showWizardStep1();
+                            }
                         }
                     } catch (error) {
                         this.loading = false;
@@ -514,7 +535,18 @@
                     
                     try {
                         // Get charts from repository
-                        const response = await fetch(`/applications/vps/${this.wizardData.selectedVPS}/charts/${this.wizardData.selectedRepo}`);
+                        const headers = {
+                            'Content-Type': 'application/json'
+                        };
+                        
+                        // Include session header if available
+                        if (this.wizardData.sessionID) {
+                            headers['X-SSH-Session-ID'] = this.wizardData.sessionID;
+                        }
+                        
+                        const response = await fetch(`/applications/vps/${this.wizardData.selectedVPS}/charts/${this.wizardData.selectedRepo}`, {
+                            headers: headers
+                        });
                         const data = await response.json();
                         
                         this.loading = false;
@@ -602,8 +634,13 @@
                             this.wizardData.step = 4;
                             await this.showWizardStep4();
                         } else {
-                            // Back button pressed
-                            await this.showWizardStep2();
+                            // Back button pressed or cancelled
+                            if (selectedChart === undefined) {
+                                // Wizard was cancelled, clean up session
+                                await this.closeSSHSession();
+                            } else {
+                                await this.showWizardStep2();
+                            }
                         }
                     } catch (error) {
                         this.loading = false;
@@ -719,6 +756,8 @@
 
                     if (formValues) {
                         await this.createApplication(formValues);
+                        // Close SSH session after application creation
+                        await this.closeSSHSession();
                     } else {
                         // Back button pressed
                         await this.showWizardStep3();
@@ -728,11 +767,18 @@
                 async addHelmRepository(name, url) {
                     this.setLoadingState('Adding Repository', `Adding ${name} repository to VPS...`);
                     try {
+                        const headers = {
+                            'Content-Type': 'application/json'
+                        };
+                        
+                        // Include session header if available
+                        if (this.wizardData.sessionID) {
+                            headers['X-SSH-Session-ID'] = this.wizardData.sessionID;
+                        }
+                        
                         const response = await fetch(`/applications/vps/${this.wizardData.selectedVPS}/repositories`, {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
+                            headers: headers,
                             body: JSON.stringify({ name, url })
                         });
                         
@@ -900,6 +946,51 @@
                     this.loadingTitle = title;
                     this.loadingMessage = message;
                     this.loading = true;
+                },
+
+                async createSSHSession(vpsID) {
+                    this.setLoadingState('Connecting', 'Establishing secure connection to VPS...');
+                    try {
+                        const response = await fetch('/applications/create-session', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ vps_id: vpsID })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            this.wizardData.sessionID = data.session_id;
+                            console.log('SSH session created:', data.session_id);
+                        } else {
+                            console.warn('Failed to create SSH session:', data.error);
+                            // Continue without session - fallback will be used
+                        }
+                    } catch (error) {
+                        console.warn('Error creating SSH session:', error);
+                        // Continue without session - fallback will be used
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async closeSSHSession() {
+                    if (!this.wizardData.sessionID) {
+                        return;
+                    }
+                    
+                    try {
+                        await fetch(`/applications/session/${this.wizardData.sessionID}`, {
+                            method: 'DELETE'
+                        });
+                        console.log('SSH session closed:', this.wizardData.sessionID);
+                    } catch (error) {
+                        console.warn('Error closing SSH session:', error);
+                    }
+                    
+                    this.wizardData.sessionID = null;
                 }
             }
         }

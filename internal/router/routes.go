@@ -91,6 +91,8 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		apps.GET("", config.AppsHandler.HandleApplicationsPage)
 		apps.GET("/list", config.AppsHandler.HandleApplicationsList)
 		apps.GET("/prerequisites", config.AppsHandler.HandleApplicationsPrerequisites)
+		apps.POST("/create-session", config.AppsHandler.HandleCreateSSHSession)
+		apps.DELETE("/session/:session_id", config.AppsHandler.HandleCloseSSHSession)
 		apps.GET("/vps/:id/repositories", config.AppsHandler.HandleVPSRepositories)
 		apps.POST("/vps/:id/repositories", config.AppsHandler.HandleVPSAddRepository)
 		apps.GET("/vps/:id/charts/:repo", config.AppsHandler.HandleVPSCharts)

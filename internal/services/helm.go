@@ -19,12 +19,34 @@ func NewHelmService() *HelmService {
 
 // InstallChart installs a Helm chart on the specified VPS
 func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, chartName, chartVersion, namespace string, values map[string]string) error {
-	// Connect to VPS
-	conn, err := h.sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
-	if err != nil {
-		return fmt.Errorf("failed to connect to VPS: %v", err)
+	// Try to get existing connection from session manager
+	sessionManager := GetGlobalSessionManager()
+	var conn *SSHConnection
+	var shouldCloseConn bool = true
+
+	// Check if there's an active session for this VPS
+	sessionManager.mutex.RLock()
+	for _, session := range sessionManager.sessions {
+		if session.Host == vpsIP && session.User == sshUser && session.isValid() {
+			conn = session.Connection
+			shouldCloseConn = false // Don't close shared session connection
+			break
+		}
 	}
-	defer conn.Close()
+	sessionManager.mutex.RUnlock()
+
+	// Fallback to creating new connection if no session available
+	if conn == nil {
+		var err error
+		conn, err = h.sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
+		if err != nil {
+			return fmt.Errorf("failed to connect to VPS: %v", err)
+		}
+	}
+
+	if shouldCloseConn {
+		defer conn.Close()
+	}
 
 	// Create namespace if it doesn't exist
 	createNamespaceCmd := fmt.Sprintf("kubectl create namespace %s --dry-run=client -o yaml | kubectl apply -f -", namespace)
@@ -55,12 +77,34 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 
 // UpgradeChart upgrades an existing Helm release
 func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, chartName, chartVersion, namespace string, values map[string]string) error {
-	// Connect to VPS
-	conn, err := h.sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
-	if err != nil {
-		return fmt.Errorf("failed to connect to VPS: %v", err)
+	// Try to get existing connection from session manager
+	sessionManager := GetGlobalSessionManager()
+	var conn *SSHConnection
+	var shouldCloseConn bool = true
+
+	// Check if there's an active session for this VPS
+	sessionManager.mutex.RLock()
+	for _, session := range sessionManager.sessions {
+		if session.Host == vpsIP && session.User == sshUser && session.isValid() {
+			conn = session.Connection
+			shouldCloseConn = false // Don't close shared session connection
+			break
+		}
 	}
-	defer conn.Close()
+	sessionManager.mutex.RUnlock()
+
+	// Fallback to creating new connection if no session available
+	if conn == nil {
+		var err error
+		conn, err = h.sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
+		if err != nil {
+			return fmt.Errorf("failed to connect to VPS: %v", err)
+		}
+	}
+
+	if shouldCloseConn {
+		defer conn.Close()
+	}
 
 	// Build Helm upgrade command
 	helmCmd := fmt.Sprintf("helm upgrade %s %s --version %s --namespace %s",
@@ -85,12 +129,34 @@ func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, char
 
 // UninstallChart removes a Helm release
 func (h *HelmService) UninstallChart(vpsIP, sshUser, privateKey, releaseName, namespace string) error {
-	// Connect to VPS
-	conn, err := h.sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
-	if err != nil {
-		return fmt.Errorf("failed to connect to VPS: %v", err)
+	// Try to get existing connection from session manager
+	sessionManager := GetGlobalSessionManager()
+	var conn *SSHConnection
+	var shouldCloseConn bool = true
+
+	// Check if there's an active session for this VPS
+	sessionManager.mutex.RLock()
+	for _, session := range sessionManager.sessions {
+		if session.Host == vpsIP && session.User == sshUser && session.isValid() {
+			conn = session.Connection
+			shouldCloseConn = false // Don't close shared session connection
+			break
+		}
 	}
-	defer conn.Close()
+	sessionManager.mutex.RUnlock()
+
+	// Fallback to creating new connection if no session available
+	if conn == nil {
+		var err error
+		conn, err = h.sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
+		if err != nil {
+			return fmt.Errorf("failed to connect to VPS: %v", err)
+		}
+	}
+
+	if shouldCloseConn {
+		defer conn.Close()
+	}
 
 	// Execute Helm uninstall
 	helmCmd := fmt.Sprintf("helm uninstall %s --namespace %s", releaseName, namespace)
@@ -111,12 +177,34 @@ func (h *HelmService) UninstallChart(vpsIP, sshUser, privateKey, releaseName, na
 
 // GetReleaseStatus gets the status of a Helm release
 func (h *HelmService) GetReleaseStatus(vpsIP, sshUser, privateKey, releaseName, namespace string) (string, error) {
-	// Connect to VPS
-	conn, err := h.sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to connect to VPS: %v", err)
+	// Try to get existing connection from session manager
+	sessionManager := GetGlobalSessionManager()
+	var conn *SSHConnection
+	var shouldCloseConn bool = true
+
+	// Check if there's an active session for this VPS
+	sessionManager.mutex.RLock()
+	for _, session := range sessionManager.sessions {
+		if session.Host == vpsIP && session.User == sshUser && session.isValid() {
+			conn = session.Connection
+			shouldCloseConn = false // Don't close shared session connection
+			break
+		}
 	}
-	defer conn.Close()
+	sessionManager.mutex.RUnlock()
+
+	// Fallback to creating new connection if no session available
+	if conn == nil {
+		var err error
+		conn, err = h.sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
+		if err != nil {
+			return "", fmt.Errorf("failed to connect to VPS: %v", err)
+		}
+	}
+
+	if shouldCloseConn {
+		defer conn.Close()
+	}
 
 	// Get Helm release status
 	helmCmd := fmt.Sprintf("helm status %s --namespace %s -o json", releaseName, namespace)
