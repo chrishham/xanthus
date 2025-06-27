@@ -357,8 +357,28 @@ func (ss *SSHService) CheckVPSHealth(host, user, privateKeyPEM string, serverID 
 		status.SystemLoad["uptime"] = result.Output
 	}
 
-	// Get memory usage
-	if result, err := ss.ExecuteCommand(conn, "free -h"); err == nil {
+	// Get memory usage with structured data from /proc/meminfo
+	if result, err := ss.ExecuteCommand(conn, `awk '/^MemTotal:|^MemFree:|^MemAvailable:|^Buffers:|^Cached:|^SwapTotal:|^SwapFree:/ {
+		if ($1 == "MemTotal:") mem_total = $2
+		else if ($1 == "MemFree:") mem_free = $2
+		else if ($1 == "MemAvailable:") mem_available = $2
+		else if ($1 == "Buffers:") buffers = $2
+		else if ($1 == "Cached:") cached = $2
+		else if ($1 == "SwapTotal:") swap_total = $2
+		else if ($1 == "SwapFree:") swap_free = $2
+	}
+	END {
+		mem_used = mem_total - mem_free
+		buff_cache = buffers + cached
+		swap_used = swap_total - swap_free
+		
+		printf "Memory Usage:\n"
+		printf "Total: %.1fG, Used: %.1fG, Free: %.1fG, Available: %.1fG, Buff/Cache: %.1fG\n", 
+			mem_total/1024/1024, mem_used/1024/1024, mem_free/1024/1024, mem_available/1024/1024, buff_cache/1024/1024
+		printf "Swap Usage:\n"
+		printf "Total: %.1fG, Used: %.1fG, Free: %.1fG\n", 
+			swap_total/1024/1024, swap_used/1024/1024, swap_free/1024/1024
+	}' /proc/meminfo`); err == nil {
 		status.SystemLoad["memory"] = result.Output
 	}
 

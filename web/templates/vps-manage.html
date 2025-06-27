@@ -215,10 +215,10 @@
                                 <span class="text-sm font-medium text-gray-900" x-text="formatDate(server.created)"></span>
                             </div>
                             
-                            <!-- Uptime -->
+                            <!-- Time Since Created -->
                             <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-500">Uptime:</span>
-                                <span class="text-sm font-medium text-gray-900" x-text="getUptime(server.created)"></span>
+                                <span class="text-sm text-gray-500">Time Since Created:</span>
+                                <span class="text-sm font-medium text-gray-900" x-text="getTimeSinceCreation(server.created)"></span>
                             </div>
                         </div>
                     </div>
@@ -668,7 +668,7 @@
                     });
                 },
 
-                getUptime(createdString) {
+                getTimeSinceCreation(createdString) {
                     const created = new Date(createdString);
                     const now = new Date();
                     const diffMs = now - created;
@@ -801,11 +801,11 @@
                                         <div class="grid grid-cols-2 gap-4 mb-6">
                                             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                                 <span class="font-medium text-gray-700">SSH Status:</span>
-                                                <span class="font-semibold">${data.reachable ? '✅ Connected' : '❌ Failed'}</span>
+                                                <span class="font-semibold ml-2">${data.reachable ? '✅ Connected' : '❌ Failed'}</span>
                                             </div>
                                             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                                                 <span class="font-medium text-gray-700">K3s Service:</span>
-                                                <span class="font-semibold">${k3sStatus}</span>
+                                                <span class="font-semibold ml-2">${k3sStatus}</span>
                                             </div>
                                         </div>
                                         
@@ -846,10 +846,10 @@
                                             </h4>
                                             <div class="bg-gray-50 p-3 rounded-lg border">
                                                 <div class="space-y-2">
-                                                    ${Object.entries(data.services || {}).map(([service, status]) => 
+                                                    ${Object.entries(data.services || {}).filter(([service, status]) => service !== 'systemd-resolved').map(([service, status]) => 
                                                         `<div class="flex items-center justify-between text-sm">
                                                             <span class="font-medium text-gray-700">${service}:</span>
-                                                            <span class="font-semibold">${status === 'active' ? '✅ Active' : '❌ ' + status}</span>
+                                                            <span class="font-semibold ml-2">${status === 'active' ? '✅ Active' : '❌ ' + status}</span>
                                                         </div>`
                                                     ).join('')}
                                                 </div>
@@ -1421,55 +1421,49 @@
                 return `<pre class="text-xs font-mono text-gray-700">${memoryOutput}</pre>`;
             }
 
-            // Parse header and data lines
-            const headerLine = lines[0];
-            const dataLines = lines.slice(1);
-
-            // Expected headers for free -h output
-            const expectedHeaders = ['total', 'used', 'free', 'shared', 'buff/cache', 'available'];
-            const headers = headerLine.trim().split(/\s+/);
-            
+            // Parse the structured memory output
             let tableHTML = '<table class="w-full text-xs">';
             
             // Add header row
             tableHTML += '<thead><tr class="border-b border-gray-300">';
-            headers.forEach(header => {
-                tableHTML += `<th class="text-left py-1 px-2 font-semibold text-gray-700">${header}</th>`;
-            });
+            tableHTML += '<th class="text-left py-1 px-2 font-semibold text-gray-700">Type</th>';
+            tableHTML += '<th class="text-left py-1 px-2 font-semibold text-gray-700">Total</th>';
+            tableHTML += '<th class="text-left py-1 px-2 font-semibold text-gray-700">Used</th>';
+            tableHTML += '<th class="text-left py-1 px-2 font-semibold text-gray-700">Free</th>';
+            tableHTML += '<th class="text-left py-1 px-2 font-semibold text-gray-700">Available</th>';
+            tableHTML += '<th class="text-left py-1 px-2 font-semibold text-gray-700">Buff/Cache</th>';
             tableHTML += '</tr></thead>';
 
             // Add data rows
             tableHTML += '<tbody>';
-            dataLines.forEach(line => {
-                const cells = line.trim().split(/\s+/);
-                if (cells.length > 0) {
-                    tableHTML += '<tr class="border-b border-gray-200">';
+            
+            let currentType = '';
+            lines.forEach(line => {
+                if (line.includes('Memory Usage:')) {
+                    currentType = 'Memory';
+                } else if (line.includes('Swap Usage:')) {
+                    currentType = 'Swap';
+                } else if (line.includes('Total:') && line.includes('Used:') && currentType) {
+                    // Extract values using regex
+                    const totalMatch = line.match(/Total:\s*([0-9.]+G)/);
+                    const usedMatch = line.match(/Used:\s*([0-9.]+G)/);
+                    const freeMatch = line.match(/Free:\s*([0-9.]+G)/);
+                    const availableMatch = line.match(/Available:\s*([0-9.]+G)/);
+                    const buffCacheMatch = line.match(/Buff\/Cache:\s*([0-9.]+G)/);
                     
-                    const rowName = cells[0]; // "Mem:" or "Swap:"
-                    
-                    // For each expected column
-                    for (let i = 0; i < headers.length; i++) {
-                        const isFirstCol = i === 0;
-                        const cellClass = isFirstCol ? 'font-medium text-gray-800' : 'text-gray-600';
-                        
-                        if (i < cells.length) {
-                            // We have data for this column
-                            tableHTML += `<td class="py-1 px-2 ${cellClass}">${cells[i]}</td>`;
-                        } else {
-                            // No data for this column
-                            if (rowName === 'Swap:' && (headers[i] === 'shared' || headers[i] === 'buff/cache')) {
-                                // Swap doesn't have shared or buff/cache
-                                tableHTML += '<td class="py-1 px-2 text-gray-400 text-center">-</td>';
-                            } else {
-                                // Missing data
-                                tableHTML += '<td class="py-1 px-2 text-gray-400 text-center">-</td>';
-                            }
-                        }
+                    if (totalMatch && usedMatch && freeMatch) {
+                        tableHTML += '<tr class="border-b border-gray-200">';
+                        tableHTML += `<td class="py-1 px-2 font-medium text-gray-800">${currentType}</td>`;
+                        tableHTML += `<td class="py-1 px-2 text-gray-600">${totalMatch[1]}</td>`;
+                        tableHTML += `<td class="py-1 px-2 text-gray-600">${usedMatch[1]}</td>`;
+                        tableHTML += `<td class="py-1 px-2 text-gray-600">${freeMatch[1]}</td>`;
+                        tableHTML += `<td class="py-1 px-2 text-gray-600">${availableMatch ? availableMatch[1] : '-'}</td>`;
+                        tableHTML += `<td class="py-1 px-2 text-gray-600">${buffCacheMatch ? buffCacheMatch[1] : '-'}</td>`;
+                        tableHTML += '</tr>';
                     }
-                    
-                    tableHTML += '</tr>';
                 }
             });
+            
             tableHTML += '</tbody></table>';
 
             return tableHTML;
