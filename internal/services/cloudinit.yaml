@@ -244,11 +244,6 @@ write_files:
           log "Retrieving ArgoCD initial admin password..."
           if ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>/dev/null | base64 -d 2>/dev/null); then
               log "ArgoCD admin password retrieved successfully"
-              echo "ArgoCD Admin Credentials:" >> /opt/xanthus/info.txt
-              echo "- URL: https://argocd.${DOMAIN}" >> /opt/xanthus/info.txt
-              echo "- Username: admin" >> /opt/xanthus/info.txt
-              echo "- Password: ${ARGOCD_PASSWORD}" >> /opt/xanthus/info.txt
-              echo "" >> /opt/xanthus/info.txt
           else
               log "Warning: Could not retrieve ArgoCD admin password"
           fi
@@ -273,6 +268,15 @@ write_files:
       - Setup log: /opt/xanthus/setup.log
       - Status: /opt/xanthus/status
       EOF
+      
+      # Append ArgoCD credentials if available
+      if [[ -n "${DOMAIN}" && -n "${ARGOCD_PASSWORD}" ]]; then
+          echo "" >> /opt/xanthus/info.txt
+          echo "ArgoCD Admin Credentials:" >> /opt/xanthus/info.txt
+          echo "- URL: https://argocd.${DOMAIN}" >> /opt/xanthus/info.txt
+          echo "- Username: admin" >> /opt/xanthus/info.txt
+          echo "- Password: ${ARGOCD_PASSWORD}" >> /opt/xanthus/info.txt
+      fi
       
       # Final status update
       update_status "READY"

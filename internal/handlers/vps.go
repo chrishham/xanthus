@@ -1167,6 +1167,74 @@ func (h *VPSHandler) HandleVPSInfo(c *gin.Context) {
 	})
 }
 
+// HandleVPSArgoCDCredentials fetches ArgoCD credentials via SSH command
+func (h *VPSHandler) HandleVPSArgoCDCredentials(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		utils.JSONUnauthorized(c, "Invalid token")
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	var serverID int
+	if _, err := fmt.Sscanf(serverIDStr, "%d", &serverID); err != nil {
+		utils.JSONBadRequest(c, "Invalid server ID")
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		utils.JSONInternalServerError(c, "Failed to get account ID")
+		return
+	}
+
+	// Get VPS configuration
+	kvService := services.NewKVService()
+	vpsConfig, err := kvService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		utils.JSONNotFound(c, "VPS configuration not found")
+		return
+	}
+
+	// Check if VPS has a domain configured
+	if vpsConfig.Domain == "" {
+		utils.JSONBadRequest(c, "VPS does not have a domain configured")
+		return
+	}
+
+	// Get CSR configuration for SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		utils.JSONInternalServerError(c, "SSH private key not found")
+		return
+	}
+
+	// Connect to VPS
+	sshService := services.NewSSHService()
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("SSH connection failed: %v", err))
+		return
+	}
+	defer conn.Close()
+
+	// Get ArgoCD credentials via SSH command
+	credentials, err := sshService.GetArgoCDCredentials(conn, vpsConfig.Domain)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to get ArgoCD credentials: %v", err))
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"server_id":   serverID,
+		"credentials": credentials,
+	})
+}
+
 // HandleVPSTerminal creates a web terminal session for VPS
 func (h *VPSHandler) HandleVPSTerminal(c *gin.Context) {
 	token, err := c.Cookie("cf_token")

@@ -794,3 +794,33 @@ func (ss *SSHService) GetVPSInfo(conn *SSHConnection) (string, error) {
 	
 	return result.Output, nil
 }
+
+// GetArgoCDCredentials fetches ArgoCD credentials directly via SSH command
+func (ss *SSHService) GetArgoCDCredentials(conn *SSHConnection, domain string) (map[string]string, error) {
+	credentials := make(map[string]string)
+	
+	// Get ArgoCD admin password using the CLI command
+	result, err := ss.ExecuteCommand(conn, "argocd admin initial-password -n argocd 2>/dev/null")
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute argocd command: %w", err)
+	}
+	
+	if result.ExitCode != 0 {
+		return nil, fmt.Errorf("argocd command failed: %s", result.Output)
+	}
+	
+	// Parse the password from the output (it's typically the first line)
+	password := strings.TrimSpace(strings.Split(result.Output, "\n")[0])
+	if password == "" {
+		return nil, fmt.Errorf("empty password returned from argocd command")
+	}
+	
+	// Build the ArgoCD URL
+	argoCDURL := fmt.Sprintf("https://argocd.%s", domain)
+	
+	credentials["url"] = argoCDURL
+	credentials["username"] = "admin"
+	credentials["password"] = password
+	
+	return credentials, nil
+}
