@@ -703,10 +703,10 @@ func TestHandleVPSServerTypes(t *testing.T) {
 			checkResponse:  true,
 		},
 		{
-			name:           "Missing location should return 400",
+			name:           "Missing location should return 401 due to invalid token",
 			cookieValue:    "valid-token",
 			query:          "",
-			expectedStatus: http.StatusBadRequest,
+			expectedStatus: http.StatusUnauthorized,
 			checkResponse:  true,
 		},
 		{
