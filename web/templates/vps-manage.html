@@ -130,7 +130,7 @@
                             <div class="flex items-center justify-between">
                                 <span class="text-sm text-gray-500">Resources:</span>
                                 <span class="text-sm font-medium text-gray-900" 
-                                      x-text="server.server_type.cores + ' CPU, ' + server.server_type.memory + 'GB RAM'"></span>
+                                      x-text="server.server_type.cores + ' CPU, ' + server.server_type.memory + 'GB RAM, ' + server.server_type.disk + 'GB Storage'"></span>
                             </div>
                             
                             <!-- Public IP -->
@@ -198,6 +198,12 @@
                             <div class="flex items-center justify-between">
                                 <span class="text-sm text-gray-500">Created:</span>
                                 <span class="text-sm font-medium text-gray-900" x-text="formatDate(server.created)"></span>
+                            </div>
+                            
+                            <!-- Uptime -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">Uptime:</span>
+                                <span class="text-sm font-medium text-gray-900" x-text="getUptime(server.created)"></span>
                             </div>
                         </div>
                     </div>
@@ -645,6 +651,24 @@
                         hour: '2-digit',
                         minute: '2-digit'
                     });
+                },
+
+                getUptime(createdString) {
+                    const created = new Date(createdString);
+                    const now = new Date();
+                    const diffMs = now - created;
+                    
+                    const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    
+                    if (days > 0) {
+                        return `${days}d ${hours}h`;
+                    } else if (hours > 0) {
+                        return `${hours}h ${minutes}m`;
+                    } else {
+                        return `${minutes}m`;
+                    }
                 },
 
                 async downloadSSHKey() {
