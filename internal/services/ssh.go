@@ -733,11 +733,11 @@ func (ss *SSHService) CreateTLSSecret(conn *SSHConnection, domain, certificate, 
 	}
 
 	// Delete existing secret if it exists (ignore errors)
-	deleteCommand := fmt.Sprintf("kubectl delete secret %s -n default --ignore-not-found=true", secretName)
+	deleteCommand := fmt.Sprintf("kubectl delete secret %s -n argocd --ignore-not-found=true", secretName)
 	ss.ExecuteCommand(conn, deleteCommand)
 
-	// Create the TLS secret
-	createSecretCommand := fmt.Sprintf("kubectl create secret tls %s --cert=%s --key=%s -n default",
+	// Create the TLS secret in argocd namespace
+	createSecretCommand := fmt.Sprintf("kubectl create secret tls %s --cert=%s --key=%s -n argocd",
 		secretName, certPath, keyPath)
 	if result, err := ss.ExecuteCommand(conn, createSecretCommand); err != nil || result.ExitCode != 0 {
 		return fmt.Errorf("failed to create TLS secret: %s", result.Output)

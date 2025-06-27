@@ -6,11 +6,26 @@
 
 - is there a way to determine the degree of utilisation of the vps ? so that the user will know if he needs to provision another vps
 
+
+- Uptime: 1d 0h no uptime, time since creation
+
+- systemd-resolved: ✅ Active => remove it 
+- Fix spacing , label and status should be closer together
+SSH Status: ✅ Connected
+K3s Service: ✅ Running
+
+
+- terminal: user can add multiple ssh sessions as tabs
+
 @web/templates/vps-create.html
 - at vps creation ensure that login without ssh is completely disabled
 - at create a vps, list and the dedicated instances and add an appropriate filter
 - choose server type: add option to filter out unavailable
+- install filebrowser https://github.com/gtsteffaniak/filebrowser
+- let the user choose a domain from managed by xanthus domains  to link to the vps. Add check that
+if there are not any managed domains dont let the user initiate the create vps wizard but display an informative message and redirect him to dns page. Then after vps obtains an ip address, delete all the A records at the cloudfare at the domain and add the A records necessary for resolving domain and *.domain to the new ip.
 
+- How to enable argocd web app?
 
 ## Applications
 @web/templates/applications.html
@@ -21,6 +36,18 @@
 # Settings
 
 - separate page to update the Hetzner api key ?
+
+## Port forward from vps to local machine
+
+- need for both tunelling
+ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key -D 8089 -N -f ubuntu@158.180.27.32
+- and port forwarding one or more ports
+ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 8080:localhost:8080 ubuntu@158.180.27.32
+ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 3000:localhost:3000 ubuntu@158.180.27.32
+
+ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 8082:localhost:8082 ubuntu@158.180.27.32
+ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 9000:localhost:9000 ubuntu@158.180.27.32
+ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 9001:localhost:9001 ubuntu@158.180.27.32
 
 
 # Tests

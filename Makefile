@@ -8,6 +8,10 @@ dev: css
 build: assets
 	go build -o bin/xanthus cmd/xanthus/main.go
 
+# Build for Windows 64-bit
+build-windows: assets
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o bin/xanthus.exe cmd/xanthus/main.go
+
 # Build all assets (CSS + JS)
 assets:
 	npm run build-assets

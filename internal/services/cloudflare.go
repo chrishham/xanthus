@@ -590,16 +590,15 @@ func (cs *CloudflareService) ConfigureDNSForVPS(token, domain, vpsIP string) err
 	for _, record := range existingRecords {
 		// Normalize record name (remove trailing dot if present)
 		recordName := strings.TrimSuffix(record.Name, ".")
-		
+
 		// Check if this is an A record we should delete
-		shouldDelete := record.Type == "A" && (
-			recordName == domain ||
+		shouldDelete := record.Type == "A" && (recordName == domain ||
 			recordName == "*."+domain ||
 			recordName == "www."+domain ||
 			record.Name == domain ||
 			record.Name == "*."+domain ||
 			record.Name == "www."+domain)
-			
+
 		if shouldDelete {
 			log.Printf("🗑️ Deleting existing A record: %s -> %s", record.Name, record.Content)
 			if err := cs.DeleteDNSRecord(token, zoneID, record.ID); err != nil {
