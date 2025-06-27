@@ -16,7 +16,7 @@ type CleanupManager struct {
 
 // TestResource represents a resource that needs cleanup
 type TestResource struct {
-	Type       string                 // "vps", "ssl", "dns", "app"
+	Type       string // "vps", "ssl", "dns", "app"
 	ID         string
 	Name       string
 	Properties map[string]interface{}
@@ -52,7 +52,7 @@ func (c *CleanupManager) CleanupTestResources() error {
 	}
 
 	log.Printf("Starting cleanup of %d resources...", len(c.resources))
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), c.config.CleanupTimeout)
 	defer cancel()
 
@@ -99,7 +99,7 @@ func (c *CleanupManager) cleanupVPS(ctx context.Context, resource TestResource) 
 		log.Printf("LIVE: Deleting VPS %s via Hetzner API", resource.ID)
 		// Implementation would go here:
 		// return c.hetznerService.DeleteServer(ctx, resource.ID)
-		
+
 		// For now, simulate the operation
 		time.Sleep(100 * time.Millisecond)
 		return nil
@@ -121,7 +121,7 @@ func (c *CleanupManager) cleanupSSL(ctx context.Context, resource TestResource) 
 		log.Printf("LIVE: Removing SSL configuration for domain %s", domain)
 		// Implementation would go here:
 		// return c.cloudflareService.RemoveDomainFromXanthus(ctx, domain)
-		
+
 		// For now, simulate the operation
 		time.Sleep(100 * time.Millisecond)
 		return nil
@@ -142,7 +142,7 @@ func (c *CleanupManager) cleanupDNS(ctx context.Context, resource TestResource) 
 		log.Printf("LIVE: Deleting DNS record %s", recordID)
 		// Implementation would go here:
 		// return c.cloudflareService.DeleteDNSRecord(ctx, recordID)
-		
+
 		// For now, simulate the operation
 		time.Sleep(100 * time.Millisecond)
 		return nil
@@ -168,7 +168,7 @@ func (c *CleanupManager) cleanupApplication(ctx context.Context, resource TestRe
 		log.Printf("LIVE: Uninstalling application %s from namespace %s", appName, namespace)
 		// Implementation would go here:
 		// return c.helmService.UninstallChart(ctx, appName, namespace)
-		
+
 		// For now, simulate the operation
 		time.Sleep(100 * time.Millisecond)
 		return nil
@@ -181,11 +181,11 @@ func (c *CleanupManager) cleanupApplication(ctx context.Context, resource TestRe
 // GetCleanupReport returns a summary of cleanup operations
 func (c *CleanupManager) GetCleanupReport() map[string]int {
 	report := make(map[string]int)
-	
+
 	for _, resource := range c.resources {
 		report[resource.Type]++
 	}
-	
+
 	return report
 }
 
@@ -193,7 +193,7 @@ func (c *CleanupManager) GetCleanupReport() map[string]int {
 // This is useful for cleaning up orphaned resources from failed tests
 func (c *CleanupManager) ForceCleanupByPattern(pattern string) error {
 	log.Printf("Force cleanup of resources matching pattern: %s", pattern)
-	
+
 	if c.config.TestMode == "live" {
 		log.Printf("LIVE: Would scan and clean up resources matching pattern %s", pattern)
 		// Implementation would scan for resources matching the pattern
@@ -208,7 +208,7 @@ func (c *CleanupManager) ForceCleanupByPattern(pattern string) error {
 // ScheduledCleanup runs periodic cleanup of old test resources
 func ScheduledCleanup(config *E2ETestConfig, maxAge time.Duration) error {
 	log.Printf("Running scheduled cleanup of resources older than %v", maxAge)
-	
+
 	if config.TestMode == "live" {
 		// Implementation would:
 		// 1. List all resources with test prefixes

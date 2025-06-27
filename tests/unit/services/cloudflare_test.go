@@ -23,22 +23,22 @@ func TestCloudflareService_GenerateCSR(t *testing.T) {
 		csr, err := service.GenerateCSR()
 		require.NoError(t, err)
 		assert.NotNil(t, csr)
-		
+
 		// Verify CSR structure
 		assert.NotEmpty(t, csr.CSR)
 		assert.NotEmpty(t, csr.PrivateKey)
 		assert.NotEmpty(t, csr.CreatedAt)
-		
+
 		// Verify CSR is valid PEM
 		csrBlock, _ := pem.Decode([]byte(csr.CSR))
 		assert.NotNil(t, csrBlock)
 		assert.Equal(t, "CERTIFICATE REQUEST", csrBlock.Type)
-		
+
 		// Verify private key is valid PEM
 		keyBlock, _ := pem.Decode([]byte(csr.PrivateKey))
 		assert.NotNil(t, keyBlock)
 		assert.Equal(t, "PRIVATE KEY", keyBlock.Type)
-		
+
 		// Verify CSR can be parsed
 		certReq, err := x509.ParseCertificateRequest(csrBlock.Bytes)
 		require.NoError(t, err)
@@ -50,10 +50,10 @@ func TestCloudflareService_GenerateCSR(t *testing.T) {
 	t.Run("generates different CSRs on multiple calls", func(t *testing.T) {
 		csr1, err := service.GenerateCSR()
 		require.NoError(t, err)
-		
+
 		csr2, err := service.GenerateCSR()
 		require.NoError(t, err)
-		
+
 		// Should generate different keys
 		assert.NotEqual(t, csr1.CSR, csr2.CSR)
 		assert.NotEqual(t, csr1.PrivateKey, csr2.PrivateKey)
@@ -66,17 +66,17 @@ func TestCloudflareService_MakeRequest(t *testing.T) {
 			// Verify authorization header
 			auth := r.Header.Get("Authorization")
 			assert.Equal(t, "Bearer test-token", auth)
-			
+
 			// Verify content type
 			contentType := r.Header.Get("Content-Type")
 			assert.Equal(t, "application/json", contentType)
-			
+
 			// Return success response
 			response := services.CFResponse{
 				Success: true,
 				Result:  map[string]string{"id": "test-id"},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -102,7 +102,7 @@ func TestCloudflareService_MakeRequest(t *testing.T) {
 					},
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(response)
@@ -125,19 +125,19 @@ func TestCloudflareService_GetZoneID(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "GET", r.Method)
 			assert.Contains(t, r.URL.Query().Get("name"), "example.com")
-			
+
 			zones := []map[string]string{
 				{
 					"id":   "zone-123",
 					"name": "example.com",
 				},
 			}
-			
+
 			response := services.CFResponse{
 				Success: true,
 				Result:  zones,
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -153,7 +153,7 @@ func TestCloudflareService_GetZoneID(t *testing.T) {
 				Success: true,
 				Result:  []map[string]string{}, // Empty result
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -180,17 +180,17 @@ func TestCloudflareService_SSLModeOperations(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, tt.method, r.Method)
 				assert.Equal(t, tt.endpoint, r.URL.Path)
-				
+
 				var body map[string]string
 				err := json.NewDecoder(r.Body).Decode(&body)
 				require.NoError(t, err)
 				assert.Equal(t, tt.value, body["value"])
-				
+
 				response := services.CFResponse{
 					Success: true,
 					Result:  map[string]string{"id": "setting-id"},
 				}
-				
+
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(response)
 			}))
@@ -218,17 +218,17 @@ func TestCloudflareService_AlwaysHTTPSOperations(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, tt.method, r.Method)
 				assert.Equal(t, tt.endpoint, r.URL.Path)
-				
+
 				var body map[string]string
 				err := json.NewDecoder(r.Body).Decode(&body)
 				require.NoError(t, err)
 				assert.Equal(t, tt.value, body["value"])
-				
+
 				response := services.CFResponse{
 					Success: true,
 					Result:  map[string]string{"id": "setting-id"},
 				}
-				
+
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(response)
 			}))
@@ -245,33 +245,33 @@ func TestCloudflareService_CreateOriginCertificate(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)
 			assert.Equal(t, "/certificates", r.URL.Path)
-			
+
 			var body map[string]interface{}
 			err := json.NewDecoder(r.Body).Decode(&body)
 			require.NoError(t, err)
-			
+
 			// Verify request body
 			hostnames := body["hostnames"].([]interface{})
 			assert.Len(t, hostnames, 2)
 			assert.Contains(t, hostnames, "example.com")
 			assert.Contains(t, hostnames, "*.example.com")
-			
+
 			assert.Equal(t, float64(5475), body["requested_validity"])
 			assert.Equal(t, "origin-rsa", body["request_type"])
 			assert.NotEmpty(t, body["csr"])
-			
+
 			// Return mock certificate
 			cert := services.Certificate{
 				ID:          "cert-123",
 				Certificate: "-----BEGIN CERTIFICATE-----\nMIIC...\n-----END CERTIFICATE-----",
 				PrivateKey:  "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
 			}
-			
+
 			response := services.CFResponse{
 				Success: true,
 				Result:  cert,
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(response)
@@ -294,7 +294,7 @@ func TestCloudflareService_AppendRootCertificate(t *testing.T) {
 		defer rootCertServer.Close()
 
 		service := services.NewCloudflareService()
-		
+
 		// In practice, we'd need to mock the HTTP client or provide a way to override the URL
 		// Test certificate would be:
 		// originalCert := "-----BEGIN CERTIFICATE-----\nORIGINAL_CERT\n-----END CERTIFICATE-----"
@@ -302,7 +302,7 @@ func TestCloudflareService_AppendRootCertificate(t *testing.T) {
 		// require.NoError(t, err)
 		// assert.Contains(t, result, "ORIGINAL_CERT")
 		// assert.Contains(t, result, "ROOT_CERT_CONTENT")
-		
+
 		assert.NotNil(t, service)
 	})
 }
@@ -312,42 +312,42 @@ func TestCloudflareService_PageRuleOperations(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)
 			assert.Equal(t, "/zones/zone-123/pagerules", r.URL.Path)
-			
+
 			var body map[string]interface{}
 			err := json.NewDecoder(r.Body).Decode(&body)
 			require.NoError(t, err)
-			
+
 			// Verify targets
 			targets := body["targets"].([]interface{})
 			assert.Len(t, targets, 1)
-			
+
 			target := targets[0].(map[string]interface{})
 			assert.Equal(t, "url", target["target"])
-			
+
 			constraint := target["constraint"].(map[string]interface{})
 			assert.Equal(t, "matches", constraint["operator"])
 			assert.Equal(t, "www.example.com/*", constraint["value"])
-			
+
 			// Verify actions
 			actions := body["actions"].([]interface{})
 			assert.Len(t, actions, 1)
-			
+
 			action := actions[0].(map[string]interface{})
 			assert.Equal(t, "forwarding_url", action["id"])
-			
+
 			value := action["value"].(map[string]interface{})
 			assert.Equal(t, "https://example.com/$1", value["url"])
 			assert.Equal(t, float64(301), value["status_code"])
-			
+
 			// Verify other fields
 			assert.Equal(t, float64(1), body["priority"])
 			assert.Equal(t, "active", body["status"])
-			
+
 			response := services.CFResponse{
 				Success: true,
 				Result:  map[string]string{"id": "pagerule-123"},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -361,7 +361,7 @@ func TestCloudflareService_PageRuleOperations(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "GET", r.Method)
 			assert.Equal(t, "/zones/zone-123/pagerules", r.URL.Path)
-			
+
 			pageRules := []map[string]interface{}{
 				{
 					"id":       "rule-1",
@@ -378,12 +378,12 @@ func TestCloudflareService_PageRuleOperations(t *testing.T) {
 					},
 				},
 			}
-			
+
 			response := services.CFResponse{
 				Success: true,
 				Result:  pageRules,
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -397,12 +397,12 @@ func TestCloudflareService_PageRuleOperations(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "DELETE", r.Method)
 			assert.Equal(t, "/zones/zone-123/pagerules/rule-123", r.URL.Path)
-			
+
 			response := services.CFResponse{
 				Success: true,
 				Result:  map[string]string{"id": "rule-123"},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(response)
@@ -419,12 +419,12 @@ func TestCloudflareService_CertificateOperations(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "DELETE", r.Method)
 			assert.Equal(t, "/certificates/cert-123", r.URL.Path)
-			
+
 			response := services.CFResponse{
 				Success: true,
 				Result:  map[string]string{"id": "cert-123"},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(response)
@@ -443,14 +443,14 @@ func TestCloudflareService_ConvertPrivateKeyToSSH(t *testing.T) {
 		// First generate a CSR to get a valid private key
 		csr, err := service.GenerateCSR()
 		require.NoError(t, err)
-		
+
 		sshKey, err := service.ConvertPrivateKeyToSSH(csr.PrivateKey)
 		require.NoError(t, err)
-		
+
 		// Verify SSH key format
 		assert.True(t, strings.HasPrefix(sshKey, "ssh-rsa "))
 		assert.NotContains(t, sshKey, "\n") // Should be single line
-		
+
 		// Verify it's a valid SSH key format
 		parts := strings.Fields(sshKey)
 		assert.Len(t, parts, 2) // ssh-rsa and base64-encoded key
@@ -468,7 +468,7 @@ func TestCloudflareService_ConvertPrivateKeyToSSH(t *testing.T) {
 		invalidPEM := `-----BEGIN PRIVATE KEY-----
 invalid base64 data
 -----END PRIVATE KEY-----`
-		
+
 		_, err := service.ConvertPrivateKeyToSSH(invalidPEM)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse PEM block containing the private key")
@@ -484,7 +484,7 @@ func TestCloudflareService_ConfigureDomainSSL(t *testing.T) {
 		// Generate test CSR
 		csr, err := service.GenerateCSR()
 		require.NoError(t, err)
-		
+
 		// In practice, this would call the actual method with mocked endpoints
 		// config, err := service.ConfigureDomainSSL("test-token", "example.com", csr.CSR, csr.PrivateKey)
 		// require.NoError(t, err)
@@ -494,7 +494,7 @@ func TestCloudflareService_ConfigureDomainSSL(t *testing.T) {
 		// assert.True(t, config.PageRuleCreated)
 		// assert.NotEmpty(t, config.Certificate)
 		// assert.NotEmpty(t, config.PrivateKey)
-		
+
 		assert.NotNil(t, service)
 		assert.NotNil(t, csr)
 	})
@@ -503,7 +503,7 @@ func TestCloudflareService_ConfigureDomainSSL(t *testing.T) {
 func TestCloudflareService_RemoveDomainFromXanthus(t *testing.T) {
 	t.Run("removes all SSL configurations", func(t *testing.T) {
 		service := services.NewCloudflareService()
-		
+
 		// Mock SSL config
 		config := &services.DomainSSLConfig{
 			Domain:          "example.com",
@@ -513,11 +513,11 @@ func TestCloudflareService_RemoveDomainFromXanthus(t *testing.T) {
 			AlwaysUseHTTPS:  true,
 			PageRuleCreated: true,
 		}
-		
+
 		// In practice, this would call the actual method with mocked endpoints
 		// err := service.RemoveDomainFromXanthus("test-token", "example.com", config)
 		// assert.NoError(t, err)
-		
+
 		assert.NotNil(t, service)
 		assert.NotNil(t, config)
 	})
@@ -525,7 +525,7 @@ func TestCloudflareService_RemoveDomainFromXanthus(t *testing.T) {
 
 func BenchmarkCloudflareService_GenerateCSR(b *testing.B) {
 	service := services.NewCloudflareService()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		csr, err := service.GenerateCSR()
@@ -538,13 +538,13 @@ func BenchmarkCloudflareService_GenerateCSR(b *testing.B) {
 
 func BenchmarkCloudflareService_ConvertPrivateKeyToSSH(b *testing.B) {
 	service := services.NewCloudflareService()
-	
+
 	// Generate a test private key
 	csr, err := service.GenerateCSR()
 	if err != nil {
 		b.Fatal(err)
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		sshKey, err := service.ConvertPrivateKeyToSSH(csr.PrivateKey)

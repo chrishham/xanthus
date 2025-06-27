@@ -74,7 +74,7 @@ func setupMockCloudflareServer(t *testing.T, responses map[string]interface{}) *
 				w.WriteHeader(http.StatusOK)
 				json.NewEncoder(w).Encode(map[string]interface{}{
 					"success": true,
-					"result": map[string]interface{}{"id": "new-namespace-id"},
+					"result":  map[string]interface{}{"id": "new-namespace-id"},
 				})
 			}
 		} else if strings.Contains(r.URL.Path, "/values/") {
@@ -128,8 +128,8 @@ func setupMockHetznerServer(t *testing.T) *httptest.Server {
 			// Mock list servers
 			servers := []services.HetznerServer{
 				{
-					ID:   123,
-					Name: "test-server",
+					ID:     123,
+					Name:   "test-server",
 					Status: "running",
 					PublicNet: services.HetznerPublicNet{
 						IPv4: services.HetznerIPv4Info{IP: "1.2.3.4"},
@@ -144,8 +144,8 @@ func setupMockHetznerServer(t *testing.T) *httptest.Server {
 		} else if strings.Contains(r.URL.Path, "/servers") && r.Method == "POST" {
 			// Mock create server
 			server := services.HetznerServer{
-				ID:   456,
-				Name: "new-server",
+				ID:     456,
+				Name:   "new-server",
 				Status: "running",
 				PublicNet: services.HetznerPublicNet{
 					IPv4: services.HetznerIPv4Info{IP: "5.6.7.8"},
@@ -196,18 +196,18 @@ func setupMockHetznerServer(t *testing.T) *httptest.Server {
 			// Mock server types
 			serverTypes := []models.HetznerServerType{
 				{
-					ID:   1,
-					Name: "cx11",
-					Description: "CX11",
+					ID:           1,
+					Name:         "cx11",
+					Description:  "CX11",
 					Architecture: "x86",
-					CPUType: "shared",
-					Cores: 1,
-					Memory: 4,
-					Disk: 20,
+					CPUType:      "shared",
+					Cores:        1,
+					Memory:       4,
+					Disk:         20,
 					Prices: []models.HetznerPrice{
 						{
-							Location: "nbg1",
-							PriceHourly: models.HetznerPriceDetail{Net: "0.0045", Gross: "0.0054"},
+							Location:     "nbg1",
+							PriceHourly:  models.HetznerPriceDetail{Net: "0.0045", Gross: "0.0054"},
 							PriceMonthly: models.HetznerPriceDetail{Net: "2.76", Gross: "3.29"},
 						},
 					},
@@ -547,7 +547,7 @@ func TestHandleVPSConfigure(t *testing.T) {
 			handler, engine := setupVPSTest()
 			path := fmt.Sprintf("/api/vps/%s/configure", tt.serverID)
 			ctx, rec := createMockContext(engine, "POST", path, tt.formData, tt.cookieValue)
-			
+
 			// Set the server ID parameter
 			ctx.Params = gin.Params{{Key: "id", Value: tt.serverID}}
 
@@ -629,7 +629,7 @@ func TestHandleVPSDeploy(t *testing.T) {
 			handler, engine := setupVPSTest()
 			path := fmt.Sprintf("/api/vps/%s/deploy", tt.serverID)
 			ctx, rec := createMockContext(engine, "POST", path, tt.formData, tt.cookieValue)
-			
+
 			// Set the server ID parameter
 			ctx.Params = gin.Params{{Key: "id", Value: tt.serverID}}
 
@@ -1017,7 +1017,7 @@ func TestHandleVPSStatus(t *testing.T) {
 			handler, engine := setupVPSTest()
 			path := fmt.Sprintf("/api/vps/%s/status", tt.serverID)
 			ctx, rec := createMockContext(engine, "GET", path, nil, tt.cookieValue)
-			
+
 			// Set the server ID parameter
 			ctx.Params = gin.Params{{Key: "id", Value: tt.serverID}}
 
@@ -1073,7 +1073,7 @@ func TestHandleVPSLogs(t *testing.T) {
 			handler, engine := setupVPSTest()
 			path := fmt.Sprintf("/api/vps/%s/logs%s", tt.serverID, tt.query)
 			ctx, rec := createMockContext(engine, "GET", path, nil, tt.cookieValue)
-			
+
 			// Set the server ID parameter
 			ctx.Params = gin.Params{{Key: "id", Value: tt.serverID}}
 
@@ -1120,7 +1120,7 @@ func TestHandleVPSTerminal(t *testing.T) {
 			handler, engine := setupVPSTest()
 			path := fmt.Sprintf("/api/vps/%s/terminal", tt.serverID)
 			ctx, rec := createMockContext(engine, "POST", path, nil, tt.cookieValue)
-			
+
 			// Set the server ID parameter
 			ctx.Params = gin.Params{{Key: "id", Value: tt.serverID}}
 
@@ -1234,15 +1234,15 @@ func TestVPSHandlerEdgeCases(t *testing.T) {
 
 	t.Run("Server ID parsing edge cases", func(t *testing.T) {
 		handler, engine := setupVPSTest()
-		
+
 		testCases := []struct {
 			serverID string
 			expected int
 		}{
-			{"0", http.StatusUnauthorized},     // Zero server ID (auth fails first)
-			{"-1", http.StatusUnauthorized},    // Negative server ID (auth fails first)
+			{"0", http.StatusUnauthorized},      // Zero server ID (auth fails first)
+			{"-1", http.StatusUnauthorized},     // Negative server ID (auth fails first)
 			{"999999", http.StatusUnauthorized}, // Very large server ID (auth fails first)
-			{"1.5", http.StatusUnauthorized},   // Decimal server ID (auth fails first)
+			{"1.5", http.StatusUnauthorized},    // Decimal server ID (auth fails first)
 		}
 
 		for _, tc := range testCases {
@@ -1257,24 +1257,24 @@ func TestVPSHandlerEdgeCases(t *testing.T) {
 
 	t.Run("Large manifest deployment", func(t *testing.T) {
 		handler, engine := setupVPSTest()
-		
+
 		// Create a large manifest
 		largeManifest := strings.Repeat("apiVersion: v1\nkind: Pod\n", 1000)
 		formData := url.Values{
 			"manifest": {largeManifest},
 			"name":     {"large-app"},
 		}
-		
+
 		ctx, rec := createMockContext(engine, "POST", "/api/vps/123/deploy", formData, "valid-token")
 		ctx.Params = gin.Params{{Key: "id", Value: "123"}}
-		
+
 		handler.HandleVPSDeploy(ctx)
 		assert.Equal(t, http.StatusUnauthorized, rec.Code) // Will fail due to token validation
 	})
 
 	t.Run("Concurrent VPS operations", func(t *testing.T) {
 		handler, engine := setupVPSTest()
-		
+
 		// Test concurrent name validation
 		done := make(chan bool, 10)
 		for i := 0; i < 10; i++ {
@@ -1286,7 +1286,7 @@ func TestVPSHandlerEdgeCases(t *testing.T) {
 				done <- true
 			}(fmt.Sprintf("server-%d", i))
 		}
-		
+
 		// Wait for all goroutines to complete
 		for i := 0; i < 10; i++ {
 			<-done
@@ -1298,10 +1298,10 @@ func TestVPSHandlerEdgeCases(t *testing.T) {
 func TestVPSHandlerIntegration(t *testing.T) {
 	// These tests would require more sophisticated mocking of external services
 	// For now, we'll test the handler logic with minimal mocking
-	
+
 	t.Run("Complete VPS creation flow validation", func(t *testing.T) {
 		handler, engine := setupVPSTest()
-		
+
 		// Test the parameter validation flow
 		testCases := []struct {
 			name     string
@@ -1313,7 +1313,7 @@ func TestVPSHandlerIntegration(t *testing.T) {
 			{"Missing location", url.Values{"name": {"test"}, "server_type": {"cx11"}}, http.StatusUnauthorized},
 			{"Missing server_type", url.Values{"name": {"test"}, "location": {"nbg1"}}, http.StatusUnauthorized},
 		}
-		
+
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				ctx, rec := createMockContext(engine, "POST", "/api/vps/create", tc.formData, "valid-token")
@@ -1322,22 +1322,22 @@ func TestVPSHandlerIntegration(t *testing.T) {
 			})
 		}
 	})
-	
+
 	t.Run("VPS configuration parameter validation", func(t *testing.T) {
 		handler, engine := setupVPSTest()
-		
+
 		testCases := []struct {
-			name       string
-			serverID   string
-			formData   url.Values
-			expected   int
+			name     string
+			serverID string
+			formData url.Values
+			expected int
 		}{
 			{"Valid configuration", "123", url.Values{"domain": {"example.com"}}, http.StatusUnauthorized},
 			{"Invalid server ID", "abc", url.Values{"domain": {"example.com"}}, http.StatusUnauthorized},
 			{"Missing domain", "123", url.Values{}, http.StatusUnauthorized},
 			{"Empty domain", "123", url.Values{"domain": {""}}, http.StatusUnauthorized},
 		}
-		
+
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				path := fmt.Sprintf("/api/vps/%s/configure", tc.serverID)
@@ -1356,12 +1356,12 @@ func TestVPSHandlerHelpers(t *testing.T) {
 		handler := handlers.NewVPSHandler()
 		assert.NotNil(t, handler)
 	})
-	
+
 	t.Run("Context creation with various cookies", func(t *testing.T) {
 		_, engine := setupVPSTest()
-		
+
 		testCases := []string{"", "invalid", "valid-token", "very-long-token-that-might-cause-issues"}
-		
+
 		for _, cookie := range testCases {
 			ctx, rec := createMockContext(engine, "GET", "/test", nil, cookie)
 			assert.NotNil(t, ctx)
@@ -1369,17 +1369,17 @@ func TestVPSHandlerHelpers(t *testing.T) {
 			assert.NotNil(t, ctx.Request)
 		}
 	})
-	
+
 	t.Run("Form data parsing edge cases", func(t *testing.T) {
 		_, engine := setupVPSTest()
-		
+
 		// Test with special characters in form data
 		formData := url.Values{
 			"name":        {"test-server!@#$%^&*()"},
 			"location":    {"nbg1-test"},
 			"server_type": {"cx11-custom"},
 		}
-		
+
 		ctx, rec := createMockContext(engine, "POST", "/test", formData, "valid-token")
 		assert.NotNil(t, ctx)
 		assert.NotNil(t, rec)
@@ -1392,31 +1392,31 @@ func TestVPSHandlerPerformance(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping performance tests in short mode")
 	}
-	
+
 	t.Run("High frequency requests", func(t *testing.T) {
 		handler, engine := setupVPSTest()
-		
+
 		start := time.Now()
 		for i := 0; i < 100; i++ {
 			ctx, _ := createMockContext(engine, "GET", "/api/vps/list", nil, "")
 			handler.HandleVPSList(ctx)
 		}
 		duration := time.Since(start)
-		
+
 		// Should handle 100 requests reasonably quickly
 		assert.Less(t, duration, 5*time.Second, "Handler should process 100 requests within 5 seconds")
 	})
-	
+
 	t.Run("Memory usage stability", func(t *testing.T) {
 		handler, engine := setupVPSTest()
-		
+
 		// Run many operations to check for memory leaks
 		for i := 0; i < 1000; i++ {
 			formData := url.Values{"name": {fmt.Sprintf("server-%d", i)}}
 			ctx, _ := createMockContext(engine, "POST", "/api/vps/validate-name", formData, "")
 			handler.HandleVPSValidateName(ctx)
 		}
-		
+
 		// This test mainly ensures no panics occur during high-volume operations
 		assert.True(t, true, "Handler should remain stable during high-volume operations")
 	})

@@ -19,11 +19,11 @@ func TestHetznerService_MakeRequest(t *testing.T) {
 		// Verify authorization header
 		auth := r.Header.Get("Authorization")
 		assert.Equal(t, "Bearer test-token", auth)
-		
+
 		// Verify content type
 		contentType := r.Header.Get("Content-Type")
 		assert.Equal(t, "application/json", contentType)
-		
+
 		// Return mock response based on endpoint
 		switch r.URL.Path {
 		case "/servers":
@@ -31,8 +31,8 @@ func TestHetznerService_MakeRequest(t *testing.T) {
 				response := services.HetznerServersResponse{
 					Servers: []services.HetznerServer{
 						{
-							ID:   123,
-							Name: "test-server",
+							ID:     123,
+							Name:   "test-server",
 							Status: "running",
 							PublicNet: services.HetznerPublicNet{
 								IPv4: services.HetznerIPv4Info{IP: "192.168.1.1"},
@@ -45,8 +45,8 @@ func TestHetznerService_MakeRequest(t *testing.T) {
 			} else if r.Method == "POST" {
 				response := services.HetznerCreateServerResponse{
 					Server: services.HetznerServer{
-						ID:   124,
-						Name: "new-server",
+						ID:     124,
+						Name:   "new-server",
 						Status: "initializing",
 					},
 				}
@@ -67,7 +67,7 @@ func TestHetznerService_MakeRequest(t *testing.T) {
 	// Create service with custom HTTP client pointing to test server
 	service := services.NewHetznerService()
 	// Replace the base URL for testing (we'll need to modify the service to support this)
-	
+
 	t.Run("successful GET request", func(t *testing.T) {
 		// We would need to modify the service to accept a custom base URL for testing
 		// For now, we'll test the method signature and behavior
@@ -80,7 +80,7 @@ func TestHetznerService_ListServers(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
 		assert.Contains(t, r.URL.Query().Get("label_selector"), "managed_by=xanthus")
-		
+
 		response := services.HetznerServersResponse{
 			Servers: []services.HetznerServer{
 				{
@@ -109,14 +109,14 @@ func TestHetznerService_ListServers(t *testing.T) {
 				},
 			},
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
 	service := services.NewHetznerService()
-	
+
 	// Note: This test demonstrates the structure but won't work without modifying
 	// the service to accept a custom base URL for testing
 	t.Run("returns list of servers", func(t *testing.T) {
@@ -136,8 +136,8 @@ func TestHetznerService_CreateServer(t *testing.T) {
 			response := services.HetznerSSHKeysResponse{
 				SSHKeys: []services.HetznerSSHKey{
 					{
-						ID:   1,
-						Name: "test-key",
+						ID:        1,
+						Name:      "test-key",
 						PublicKey: "ssh-rsa AAAAB3...",
 					},
 				},
@@ -146,13 +146,13 @@ func TestHetznerService_CreateServer(t *testing.T) {
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		
+
 		if r.URL.Path == "/servers" && r.Method == "POST" {
 			// Parse request body
 			var createReq services.HetznerCreateServerRequest
 			err := json.NewDecoder(r.Body).Decode(&createReq)
 			require.NoError(t, err)
-			
+
 			// Validate request
 			assert.Equal(t, "test-server", createReq.Name)
 			assert.Equal(t, "cx11", createReq.ServerType)
@@ -163,7 +163,7 @@ func TestHetznerService_CreateServer(t *testing.T) {
 			assert.Equal(t, "xanthus", createReq.Labels["managed_by"])
 			assert.Equal(t, "k3s-cluster", createReq.Labels["purpose"])
 			assert.NotEmpty(t, createReq.UserData)
-			
+
 			// Return mock response
 			response := services.HetznerCreateServerResponse{
 				Server: services.HetznerServer{
@@ -176,19 +176,19 @@ func TestHetznerService_CreateServer(t *testing.T) {
 					Labels: createReq.Labels,
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(response)
 			return
 		}
-		
+
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
 
 	service := services.NewHetznerService()
-	
+
 	t.Run("creates server with valid parameters", func(t *testing.T) {
 		// This test demonstrates the expected behavior
 		// In practice, we'd need to modify the service to accept a custom base URL
@@ -200,13 +200,13 @@ func TestHetznerService_DeleteServer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "DELETE", r.Method)
 		assert.Equal(t, "/servers/123", r.URL.Path)
-		
+
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
 	service := services.NewHetznerService()
-	
+
 	t.Run("deletes server successfully", func(t *testing.T) {
 		// err := service.DeleteServer("test-api-key", 123)
 		// assert.NoError(t, err)
@@ -231,18 +231,18 @@ func TestHetznerService_PowerOperations(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, tt.method, r.Method)
 				assert.Equal(t, tt.endpoint, r.URL.Path)
-				
+
 				var body map[string]string
 				err := json.NewDecoder(r.Body).Decode(&body)
 				require.NoError(t, err)
 				assert.Equal(t, tt.action, body["type"])
-				
+
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer server.Close()
 
 			service := services.NewHetznerService()
-			
+
 			// Test would call the appropriate method
 			assert.NotNil(t, service)
 		})
@@ -254,17 +254,17 @@ func TestHetznerService_SSHKeyOperations(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "POST", r.Method)
 			assert.Equal(t, "/ssh_keys", r.URL.Path)
-			
+
 			var body map[string]interface{}
 			err := json.NewDecoder(r.Body).Decode(&body)
 			require.NoError(t, err)
-			
+
 			assert.Equal(t, "test-key", body["name"])
 			assert.Equal(t, "ssh-rsa AAAAB3...", body["public_key"])
-			
+
 			labels := body["labels"].(map[string]interface{})
 			assert.Equal(t, "xanthus", labels["managed_by"])
-			
+
 			response := struct {
 				SSHKey services.HetznerSSHKey `json:"ssh_key"`
 			}{
@@ -277,7 +277,7 @@ func TestHetznerService_SSHKeyOperations(t *testing.T) {
 					},
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(response)
@@ -292,7 +292,7 @@ func TestHetznerService_SSHKeyOperations(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "GET", r.Method)
 			assert.Equal(t, "/ssh_keys", r.URL.Path)
-			
+
 			response := services.HetznerSSHKeysResponse{
 				SSHKeys: []services.HetznerSSHKey{
 					{
@@ -307,7 +307,7 @@ func TestHetznerService_SSHKeyOperations(t *testing.T) {
 					},
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -350,7 +350,7 @@ func TestHetznerService_ErrorHandling(t *testing.T) {
 					},
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(errorResp)
@@ -384,7 +384,7 @@ func BenchmarkHetznerService_ListServers(b *testing.B) {
 		response := services.HetznerServersResponse{
 			Servers: make([]services.HetznerServer, 100), // Simulate 100 servers
 		}
-		
+
 		for i := range response.Servers {
 			response.Servers[i] = services.HetznerServer{
 				ID:     i + 1,
@@ -392,14 +392,14 @@ func BenchmarkHetznerService_ListServers(b *testing.B) {
 				Status: "running",
 			}
 		}
-		
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
 	service := services.NewHetznerService()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// In practice, this would call the actual service method
@@ -420,8 +420,8 @@ func createMockHetznerServer(id int, name, status string) services.HetznerServer
 			},
 		},
 		ServerType: services.HetznerServerTypeInfo{
-			Name:  "cx11",
-			Cores: 1,
+			Name:   "cx11",
+			Cores:  1,
 			Memory: 1.0,
 			Disk:   25,
 		},

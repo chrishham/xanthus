@@ -12,11 +12,11 @@ import (
 
 // MockSSHServiceForHelm provides a mock SSH service for testing Helm operations
 type MockSSHServiceForHelm struct {
-	commands           map[string]*services.CommandResult
-	connectionError    error
-	commandError       error
-	expectedCommands   []string
-	executedCommands   []string
+	commands         map[string]*services.CommandResult
+	connectionError  error
+	commandError     error
+	expectedCommands []string
+	executedCommands []string
 }
 
 func NewMockSSHServiceForHelm() *MockSSHServiceForHelm {
@@ -52,15 +52,15 @@ func (m *MockSSHServiceForHelm) ConnectToVPS(host, user, privateKey string) (*Mo
 
 func (m *MockSSHServiceForHelm) ExecuteCommand(conn *MockSSHConnection, command string) (*services.CommandResult, error) {
 	m.executedCommands = append(m.executedCommands, command)
-	
+
 	if m.commandError != nil {
 		return nil, m.commandError
 	}
-	
+
 	if result, exists := conn.commands[command]; exists {
 		return result, nil
 	}
-	
+
 	// Default success result
 	return &services.CommandResult{
 		Command:  command,
@@ -76,7 +76,7 @@ func (m *MockSSHServiceForHelm) GetExecutedCommands() []string {
 
 func TestHelmService_NewHelmService(t *testing.T) {
 	service := services.NewHelmService()
-	
+
 	assert.NotNil(t, service)
 	// Service should be initialized with an SSH service
 }
@@ -92,14 +92,14 @@ func TestHelmService_InstallChart(t *testing.T) {
 		chartVersion := "1.0.0"
 		namespace := "test-namespace"
 		values := map[string]string{
-			"service.type":      "NodePort",
+			"service.type":     "NodePort",
 			"image.repository": "nginx",
 		}
-		
+
 		// Expected commands that should be executed
 		expectedNamespaceCmd := "kubectl create namespace test-namespace --dry-run=client -o yaml | kubectl apply -f -"
 		expectedHelmCmd := "helm install test-release nginx/nginx --version 1.0.0 --namespace test-namespace --create-namespace --set service.type=NodePort,image.repository=nginx"
-		
+
 		// In a real test, we would mock the SSH service and verify these commands
 		// For now, we'll verify the expected command structure
 		assert.Contains(t, expectedHelmCmd, releaseName)
@@ -109,7 +109,7 @@ func TestHelmService_InstallChart(t *testing.T) {
 		assert.Contains(t, expectedHelmCmd, "service.type=NodePort")
 		assert.Contains(t, expectedHelmCmd, "image.repository=nginx")
 		assert.Contains(t, expectedNamespaceCmd, namespace)
-		
+
 		// Test that all parameters are used
 		assert.NotEmpty(t, vpsIP)
 		assert.NotEmpty(t, sshUser)
@@ -122,9 +122,9 @@ func TestHelmService_InstallChart(t *testing.T) {
 		chartName := "stable/apache"
 		chartVersion := "2.0.0"
 		namespace := "default"
-		
+
 		expectedHelmCmd := "helm install simple-release stable/apache --version 2.0.0 --namespace default --create-namespace"
-		
+
 		// Command should not contain --set when no values are provided
 		assert.NotContains(t, expectedHelmCmd, "--set")
 		assert.Contains(t, expectedHelmCmd, releaseName)
@@ -136,7 +136,7 @@ func TestHelmService_InstallChart(t *testing.T) {
 	t.Run("SSH connection failure", func(t *testing.T) {
 		// Test handling of SSH connection failures
 		service := services.NewHelmService()
-		
+
 		// In practice, this would test with a mock that returns connection error
 		assert.NotNil(t, service)
 	})
@@ -164,9 +164,9 @@ func TestHelmService_UpgradeChart(t *testing.T) {
 			"replicas":     "3",
 			"service.port": "8080",
 		}
-		
+
 		expectedHelmCmd := "helm upgrade test-release nginx/nginx --version 1.1.0 --namespace test-namespace --set replicas=3,service.port=8080"
-		
+
 		assert.Contains(t, expectedHelmCmd, "helm upgrade")
 		assert.Contains(t, expectedHelmCmd, releaseName)
 		assert.Contains(t, expectedHelmCmd, chartName)
@@ -182,9 +182,9 @@ func TestHelmService_UpgradeChart(t *testing.T) {
 		chartName := "stable/apache"
 		chartVersion := "2.1.0"
 		namespace := "default"
-		
+
 		expectedHelmCmd := "helm upgrade simple-release stable/apache --version 2.1.0 --namespace default"
-		
+
 		// Command should not contain --set when no values are provided
 		assert.NotContains(t, expectedHelmCmd, "--set")
 		assert.Contains(t, expectedHelmCmd, releaseName)
@@ -208,9 +208,9 @@ func TestHelmService_UninstallChart(t *testing.T) {
 	t.Run("successful chart uninstall", func(t *testing.T) {
 		releaseName := "test-release"
 		namespace := "test-namespace"
-		
+
 		expectedHelmCmd := "helm uninstall test-release --namespace test-namespace"
-		
+
 		assert.Contains(t, expectedHelmCmd, "helm uninstall")
 		assert.Contains(t, expectedHelmCmd, releaseName)
 		assert.Contains(t, expectedHelmCmd, namespace)
@@ -231,36 +231,36 @@ func TestHelmService_GetReleaseStatus(t *testing.T) {
 	t.Run("deployed status", func(t *testing.T) {
 		releaseName := "test-release"
 		namespace := "test-namespace"
-		
+
 		expectedHelmCmd := "helm status test-release --namespace test-namespace -o json"
 		mockOutput := `{"status": "deployed", "info": {"status": "deployed"}}`
-		
+
 		assert.Contains(t, expectedHelmCmd, "helm status")
 		assert.Contains(t, expectedHelmCmd, releaseName)
 		assert.Contains(t, expectedHelmCmd, namespace)
 		assert.Contains(t, expectedHelmCmd, "-o json")
-		
+
 		// Test status parsing logic
 		assert.Contains(t, mockOutput, "deployed")
 	})
 
 	t.Run("failed status", func(t *testing.T) {
 		mockOutput := `{"status": "failed", "info": {"status": "failed"}}`
-		
+
 		// Test that failed status is properly detected
 		assert.Contains(t, mockOutput, "failed")
 	})
 
 	t.Run("pending status", func(t *testing.T) {
 		mockOutput := `{"status": "pending", "info": {"status": "pending"}}`
-		
+
 		// Test that pending status is properly detected
 		assert.Contains(t, mockOutput, "pending")
 	})
 
 	t.Run("unknown status", func(t *testing.T) {
 		mockOutput := `{"status": "superseded", "info": {"status": "superseded"}}`
-		
+
 		// Test that unknown statuses default to "unknown"
 		assert.NotContains(t, mockOutput, "deployed")
 		assert.NotContains(t, mockOutput, "failed")
@@ -281,24 +281,24 @@ func TestHelmService_GetReleaseStatus(t *testing.T) {
 func TestHelmService_CommandConstruction(t *testing.T) {
 	t.Run("install command with multiple values", func(t *testing.T) {
 		values := map[string]string{
-			"service.type":        "LoadBalancer",
-			"image.repository":    "nginx",
-			"image.tag":          "latest",
+			"service.type":            "LoadBalancer",
+			"image.repository":        "nginx",
+			"image.tag":               "latest",
 			"resources.limits.memory": "512Mi",
 		}
-		
+
 		// Test that all values are included in the command
 		var setArgs []string
 		for key, value := range values {
 			setArgs = append(setArgs, fmt.Sprintf("%s=%s", key, value))
 		}
 		setString := strings.Join(setArgs, ",")
-		
+
 		assert.Contains(t, setString, "service.type=LoadBalancer")
 		assert.Contains(t, setString, "image.repository=nginx")
 		assert.Contains(t, setString, "image.tag=latest")
 		assert.Contains(t, setString, "resources.limits.memory=512Mi")
-		
+
 		// Verify comma separation
 		parts := strings.Split(setString, ",")
 		assert.Len(t, parts, 4)
@@ -309,28 +309,28 @@ func TestHelmService_CommandConstruction(t *testing.T) {
 		chartName := "bitnami/nginx"
 		chartVersion := "9.5.1"
 		namespace := "production"
-		
+
 		baseCmd := fmt.Sprintf("helm upgrade %s %s --version %s --namespace %s",
 			releaseName, chartName, chartVersion, namespace)
-		
+
 		assert.Equal(t, "helm upgrade my-app bitnami/nginx --version 9.5.1 --namespace production", baseCmd)
 	})
 
 	t.Run("uninstall command construction", func(t *testing.T) {
 		releaseName := "my-app"
 		namespace := "production"
-		
+
 		cmd := fmt.Sprintf("helm uninstall %s --namespace %s", releaseName, namespace)
-		
+
 		assert.Equal(t, "helm uninstall my-app --namespace production", cmd)
 	})
 
 	t.Run("status command construction", func(t *testing.T) {
 		releaseName := "my-app"
 		namespace := "production"
-		
+
 		cmd := fmt.Sprintf("helm status %s --namespace %s -o json", releaseName, namespace)
-		
+
 		assert.Equal(t, "helm status my-app --namespace production -o json", cmd)
 	})
 }
@@ -339,7 +339,7 @@ func TestHelmService_ParameterValidation(t *testing.T) {
 	t.Run("empty release name", func(t *testing.T) {
 		// Test validation of empty release name
 		releaseName := ""
-		
+
 		// In practice, this should be validated and return an error
 		assert.Empty(t, releaseName)
 	})
@@ -347,21 +347,21 @@ func TestHelmService_ParameterValidation(t *testing.T) {
 	t.Run("empty chart name", func(t *testing.T) {
 		// Test validation of empty chart name
 		chartName := ""
-		
+
 		assert.Empty(t, chartName)
 	})
 
 	t.Run("empty namespace", func(t *testing.T) {
 		// Test validation of empty namespace
 		namespace := ""
-		
+
 		assert.Empty(t, namespace)
 	})
 
 	t.Run("invalid chart version", func(t *testing.T) {
 		// Test validation of invalid chart version
 		chartVersion := "invalid-version"
-		
+
 		assert.NotEmpty(t, chartVersion)
 		// In practice, semantic version validation could be implemented
 	})
@@ -473,7 +473,7 @@ func TestHelmService_StatusParsing(t *testing.T) {
 			} else {
 				status = "unknown"
 			}
-			
+
 			assert.Equal(t, tc.expectedStatus, status)
 		})
 	}
@@ -481,7 +481,7 @@ func TestHelmService_StatusParsing(t *testing.T) {
 
 func BenchmarkHelmService_InstallChart(b *testing.B) {
 	service := services.NewHelmService()
-	
+
 	// Test parameters
 	vpsIP := "192.168.1.100"
 	sshUser := "root"
@@ -493,7 +493,7 @@ func BenchmarkHelmService_InstallChart(b *testing.B) {
 	values := map[string]string{
 		"service.type": "NodePort",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// In practice, this would benchmark the actual install operation
@@ -515,17 +515,17 @@ func BenchmarkHelmService_CommandConstruction(b *testing.B) {
 	chartVersion := "1.0.0"
 	namespace := "test-namespace"
 	values := map[string]string{
-		"service.type":      "NodePort",
+		"service.type":     "NodePort",
 		"image.repository": "nginx",
 		"replicas":         "3",
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Benchmark command construction
 		helmCmd := fmt.Sprintf("helm install %s %s --version %s --namespace %s --create-namespace",
 			releaseName, chartName, chartVersion, namespace)
-		
+
 		if len(values) > 0 {
 			var setArgs []string
 			for key, value := range values {
@@ -533,7 +533,7 @@ func BenchmarkHelmService_CommandConstruction(b *testing.B) {
 			}
 			helmCmd += " --set " + strings.Join(setArgs, ",")
 		}
-		
+
 		_ = helmCmd
 	}
 }

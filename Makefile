@@ -26,7 +26,7 @@ test-unit:
 
 # Run integration tests (excluding E2E)
 test-integration:
-	go test -v ./tests/integration/... -run "^((?!E2E_).)*$$"
+	go test -v ./tests/integration/... -skip "TestE2E_"
 
 # Run end-to-end tests
 test-e2e:
@@ -71,11 +71,11 @@ test-e2e-dr:
 
 # Run all structured tests (unit + integration, excluding E2E)
 test:
-	go test -v ./tests/unit/... ./tests/integration/... -run "^((?!E2E_).)*$$"
+	go test -v ./tests/unit/... ./tests/integration/... -skip "TestE2E_"
 
 # Run tests with coverage (excluding E2E tests)
 test-coverage:
-	go test -v ./tests/unit/... ./tests/integration/... -run "^((?!E2E_).)*$$" -coverprofile=coverage.out
+	go test -v ./tests/unit/... ./tests/integration/... -skip "TestE2E_" -coverprofile=coverage.out
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report generated: coverage.html"
 
@@ -88,7 +88,7 @@ test-e2e-coverage:
 
 # Run all tests including any legacy tests (excluding E2E)
 test-all:
-	go test -v ./... -run "^((?!E2E_).)*$$"
+	go test -v ./... -skip "TestE2E_"
 
 # Run everything including E2E tests
 test-everything:

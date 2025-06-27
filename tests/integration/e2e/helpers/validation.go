@@ -1,13 +1,11 @@
 package helpers
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -109,7 +107,7 @@ func (v *Validator) ValidateSSLCertificate(domain string) (*ValidationResult, er
 		result.Details["tls_version"] = resp.TLS.Version
 		result.Details["cipher_suite"] = resp.TLS.CipherSuite
 		result.Details["server_certificates"] = len(resp.TLS.PeerCertificates)
-		
+
 		if len(resp.TLS.PeerCertificates) > 0 {
 			cert := resp.TLS.PeerCertificates[0]
 			result.Details["cert_subject"] = cert.Subject.String()
@@ -329,48 +327,48 @@ func (v *Validator) ValidateEndToEndFlow(workflow string, steps []string) (*Vali
 // RunValidationSuite runs a complete validation suite
 func (v *Validator) RunValidationSuite(validations []func() (*ValidationResult, error)) ([]*ValidationResult, error) {
 	results := make([]*ValidationResult, 0, len(validations))
-	
+
 	for i, validation := range validations {
 		log.Printf("Running validation %d/%d", i+1, len(validations))
-		
+
 		result, err := validation()
 		if err != nil {
 			return results, fmt.Errorf("validation %d failed: %w", i+1, err)
 		}
-		
+
 		results = append(results, result)
-		
+
 		if !result.Passed {
 			log.Printf("Validation failed: %s - %s", result.Check, result.Message)
 		} else {
 			log.Printf("Validation passed: %s - %s", result.Check, result.Message)
 		}
 	}
-	
+
 	return results, nil
 }
 
 // GenerateValidationReport creates a summary report of validation results
 func GenerateValidationReport(results []*ValidationResult) map[string]interface{} {
 	report := make(map[string]interface{})
-	
+
 	totalChecks := len(results)
 	passedChecks := 0
 	totalDuration := time.Duration(0)
-	
+
 	for _, result := range results {
 		if result.Passed {
 			passedChecks++
 		}
 		totalDuration += result.Duration
 	}
-	
+
 	report["total_checks"] = totalChecks
 	report["passed_checks"] = passedChecks
 	report["failed_checks"] = totalChecks - passedChecks
 	report["success_rate"] = float64(passedChecks) / float64(totalChecks) * 100
 	report["total_duration"] = totalDuration
 	report["average_duration"] = totalDuration / time.Duration(totalChecks)
-	
+
 	return report
 }

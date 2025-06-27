@@ -58,9 +58,9 @@ func TestValidateHetznerAPIKey(t *testing.T) {
 			expectedResult: false,
 		},
 		{
-			name:         "Server error",
-			responseCode: 500,
-			responseBody: `{"error": "Internal server error"}`,
+			name:           "Server error",
+			responseCode:   500,
+			responseBody:   `{"error": "Internal server error"}`,
 			expectedResult: false,
 		},
 	}
@@ -100,7 +100,7 @@ func TestGetHetznerAPIKey(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Test with invalid credentials (should fail)
 			_, err := utils.GetHetznerAPIKey("invalid-token", "invalid-account-id")
-			
+
 			if tc.expectError {
 				assert.Error(t, err)
 			}
@@ -159,15 +159,15 @@ func TestFetchHetznerLocations(t *testing.T) {
 			name:         "HTTP error",
 			responseCode: 500,
 			responseBody: `{"error": "Internal server error"}`,
-			expectError: true,
-			expectedLen: 0,
+			expectError:  true,
+			expectedLen:  0,
 		},
 		{
 			name:         "Invalid JSON",
 			responseCode: 200,
 			responseBody: `invalid json`,
-			expectError: true,
-			expectedLen: 0,
+			expectError:  true,
+			expectedLen:  0,
 		},
 	}
 
@@ -186,7 +186,7 @@ func TestFetchHetznerLocations(t *testing.T) {
 
 			// Test with real API (should fail with invalid key)
 			locations, err := utils.FetchHetznerLocations("invalid-api-key")
-			
+
 			// For invalid credentials, we expect errors
 			assert.Error(t, err)
 			assert.Empty(t, locations)
@@ -269,8 +269,8 @@ func TestFetchHetznerServerTypes(t *testing.T) {
 			name:         "HTTP error",
 			responseCode: 401,
 			responseBody: `{"error": "Unauthorized"}`,
-			expectError: true,
-			expectedLen: 0,
+			expectError:  true,
+			expectedLen:  0,
 		},
 	}
 
@@ -289,7 +289,7 @@ func TestFetchHetznerServerTypes(t *testing.T) {
 
 			// Test with real API (should fail with invalid key)
 			serverTypes, err := utils.FetchHetznerServerTypes("invalid-api-key")
-			
+
 			// For invalid credentials, we expect errors
 			assert.Error(t, err)
 			assert.Empty(t, serverTypes)
@@ -381,7 +381,7 @@ func TestFetchServerAvailability(t *testing.T) {
 
 			// Test with real API (should fail with invalid key)
 			availability, err := utils.FetchServerAvailability("invalid-api-key")
-			
+
 			// For invalid credentials, we expect errors
 			assert.Error(t, err)
 			assert.Nil(t, availability)
@@ -624,12 +624,12 @@ func TestSortServerTypesByMemoryDesc(t *testing.T) {
 func TestSortingEdgeCases(t *testing.T) {
 	t.Run("Empty slice", func(t *testing.T) {
 		var serverTypes []models.HetznerServerType
-		
+
 		// Should not panic
 		utils.SortServerTypesByPriceAsc(serverTypes)
 		utils.SortServerTypesByCPUAsc(serverTypes)
 		utils.SortServerTypesByMemoryAsc(serverTypes)
-		
+
 		assert.Empty(t, serverTypes)
 	})
 
@@ -637,11 +637,11 @@ func TestSortingEdgeCases(t *testing.T) {
 		serverTypes := []models.HetznerServerType{
 			{Name: "single", Cores: 2, Memory: 8.0},
 		}
-		
+
 		utils.SortServerTypesByPriceAsc(serverTypes)
 		utils.SortServerTypesByCPUAsc(serverTypes)
 		utils.SortServerTypesByMemoryAsc(serverTypes)
-		
+
 		assert.Len(t, serverTypes, 1)
 		assert.Equal(t, "single", serverTypes[0].Name)
 	})
@@ -652,9 +652,9 @@ func TestSortingEdgeCases(t *testing.T) {
 			{Name: "server2", Cores: 2, Memory: 8.0},
 			{Name: "server3", Cores: 2, Memory: 8.0},
 		}
-		
+
 		utils.SortServerTypesByCPUAsc(serverTypes)
-		
+
 		// Order should be preserved for equal values
 		assert.Len(t, serverTypes, 3)
 		for _, server := range serverTypes {
@@ -667,7 +667,7 @@ func TestSortingEdgeCases(t *testing.T) {
 func TestHetznerUtilsIntegration(t *testing.T) {
 	t.Run("Full workflow with invalid credentials", func(t *testing.T) {
 		// Test that all functions handle invalid credentials gracefully
-		
+
 		// Validate API key
 		isValid := utils.ValidateHetznerAPIKey("invalid-key")
 		assert.False(t, isValid)

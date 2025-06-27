@@ -9,37 +9,37 @@ import (
 
 // E2ETestConfig holds configuration for end-to-end tests
 type E2ETestConfig struct {
-	HetznerAPIKey     string
-	CloudflareToken   string
-	TestDomain        string
-	TestAccountID     string
-	MaxTestDuration   time.Duration
-	CleanupTimeout    time.Duration
-	RetryAttempts     int
-	ResourceLimits    ResourceLimits
-	TestRunID         string
-	BaseURL           string
-	TestMode          string // "live" or "mock"
+	HetznerAPIKey   string
+	CloudflareToken string
+	TestDomain      string
+	TestAccountID   string
+	MaxTestDuration time.Duration
+	CleanupTimeout  time.Duration
+	RetryAttempts   int
+	ResourceLimits  ResourceLimits
+	TestRunID       string
+	BaseURL         string
+	TestMode        string // "live" or "mock"
 }
 
 // ResourceLimits defines limits for test resource usage
 type ResourceLimits struct {
-	MaxVPSInstances   int
-	MaxSSLDomains     int
-	MaxCostEUR        float64
-	MaxTestDuration   time.Duration
+	MaxVPSInstances int
+	MaxSSLDomains   int
+	MaxCostEUR      float64
+	MaxTestDuration time.Duration
 }
 
 // VPSInstance represents a VPS created during testing
 type VPSInstance struct {
-	ID          string
-	Name        string
-	IP          string
-	Status      string
-	CreatedAt   time.Time
-	ServerType  string
-	Location    string
-	Cost        float64
+	ID         string
+	Name       string
+	IP         string
+	Status     string
+	CreatedAt  time.Time
+	ServerType string
+	Location   string
+	Cost       float64
 }
 
 // TestResults holds results from E2E test execution
@@ -105,14 +105,14 @@ func validateLiveTestConfig(config *E2ETestConfig) error {
 // WaitForCondition waits for a condition to become true with timeout and retry logic
 func WaitForCondition(condition func() bool, timeout time.Duration, checkInterval time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	
+
 	for time.Now().Before(deadline) {
 		if condition() {
 			return nil
 		}
 		time.Sleep(checkInterval)
 	}
-	
+
 	return fmt.Errorf("condition not met within timeout of %v", timeout)
 }
 

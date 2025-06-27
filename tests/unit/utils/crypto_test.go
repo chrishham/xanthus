@@ -17,7 +17,7 @@ func TestEncryptData(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, encrypted)
 	assert.NotEqual(t, data, encrypted)
-	
+
 	// Verify it's base64 encoded
 	assert.True(t, strings.Contains(encrypted, "==") || len(encrypted) > 0)
 }

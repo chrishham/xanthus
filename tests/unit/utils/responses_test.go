@@ -362,7 +362,7 @@ func TestJSONValidationError(t *testing.T) {
 
 	assert.False(t, response["success"].(bool))
 	assert.Equal(t, "Validation failed", response["error"])
-	
+
 	errors, ok := response["errors"].([]interface{})
 	require.True(t, ok)
 	assert.Len(t, errors, 2)
@@ -500,7 +500,7 @@ func TestDNSConfigurationSuccess(t *testing.T) {
 
 			assert.True(t, response.Success)
 			assert.Equal(t, tc.expectedMessage, response.Message)
-			
+
 			data, ok := response.Data.(map[string]interface{})
 			require.True(t, ok)
 			assert.Equal(t, "example.com", data["domain"])

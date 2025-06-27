@@ -17,7 +17,7 @@ import (
 
 func TestKVService_NewKVService(t *testing.T) {
 	service := services.NewKVService()
-	
+
 	assert.NotNil(t, service)
 	// Service should be initialized with proper timeout
 }
@@ -28,7 +28,7 @@ func TestKVService_GetXanthusNamespaceID(t *testing.T) {
 			assert.Equal(t, "GET", r.Method)
 			assert.Contains(t, r.URL.Path, "/accounts/test-account/storage/kv/namespaces")
 			assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
-			
+
 			response := services.KVNamespaceResponse{
 				Success: true,
 				Result: []services.KVNamespace{
@@ -46,7 +46,7 @@ func TestKVService_GetXanthusNamespaceID(t *testing.T) {
 					},
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -68,7 +68,7 @@ func TestKVService_GetXanthusNamespaceID(t *testing.T) {
 					},
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(response)
 		}))
@@ -89,7 +89,7 @@ func TestKVService_GetXanthusNamespaceID(t *testing.T) {
 					},
 				},
 			}
-			
+
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(response)
@@ -116,20 +116,20 @@ func TestKVService_PutValue(t *testing.T) {
 				json.NewEncoder(w).Encode(response)
 				return
 			}
-			
+
 			if strings.Contains(r.URL.Path, "/values/test-key") {
 				// PUT value request
 				assert.Equal(t, "PUT", r.Method)
 				assert.Contains(t, r.URL.Path, "namespace-456/values/test-key")
 				assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-				
+
 				// Verify request body
 				var body map[string]interface{}
 				err := json.NewDecoder(r.Body).Decode(&body)
 				require.NoError(t, err)
 				assert.Equal(t, "test-value", body["data"])
-				
+
 				response := services.CFResponse{
 					Success: true,
 				}
@@ -164,11 +164,11 @@ func TestKVService_PutValue(t *testing.T) {
 
 	t.Run("value marshal error", func(t *testing.T) {
 		service := services.NewKVService()
-		
+
 		// Test with unmarshallable value (channels can't be marshaled)
 		ch := make(chan int)
 		defer close(ch)
-		
+
 		assert.NotNil(t, service)
 		assert.NotNil(t, ch)
 	})
@@ -189,13 +189,13 @@ func TestKVService_GetValue(t *testing.T) {
 				json.NewEncoder(w).Encode(response)
 				return
 			}
-			
+
 			if strings.Contains(r.URL.Path, "/values/test-key") {
 				// GET value request
 				assert.Equal(t, "GET", r.Method)
 				assert.Contains(t, r.URL.Path, "namespace-456/values/test-key")
 				assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
-				
+
 				testData := map[string]string{"data": "retrieved-value"}
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -223,7 +223,7 @@ func TestKVService_GetValue(t *testing.T) {
 				json.NewEncoder(w).Encode(response)
 				return
 			}
-			
+
 			if strings.Contains(r.URL.Path, "/values/nonexistent-key") {
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -248,7 +248,7 @@ func TestKVService_GetValue(t *testing.T) {
 				json.NewEncoder(w).Encode(response)
 				return
 			}
-			
+
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
 		defer server.Close()
@@ -272,12 +272,12 @@ func TestKVService_DeleteValue(t *testing.T) {
 				json.NewEncoder(w).Encode(response)
 				return
 			}
-			
+
 			if strings.Contains(r.URL.Path, "/values/test-key") {
 				assert.Equal(t, "DELETE", r.Method)
 				assert.Contains(t, r.URL.Path, "namespace-456/values/test-key")
 				assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
-				
+
 				w.WriteHeader(http.StatusOK)
 				return
 			}
@@ -301,7 +301,7 @@ func TestKVService_DeleteValue(t *testing.T) {
 				json.NewEncoder(w).Encode(response)
 				return
 			}
-			
+
 			w.WriteHeader(http.StatusNotFound)
 		}))
 		defer server.Close()
@@ -324,9 +324,9 @@ func TestKVService_DomainSSLOperations(t *testing.T) {
 			AlwaysUseHTTPS:  true,
 			PageRuleCreated: true,
 		}
-		
+
 		expectedKey := "domain:example.com:ssl_config"
-		
+
 		assert.Equal(t, "example.com", config.Domain)
 		assert.Equal(t, "zone-123", config.ZoneID)
 		assert.Equal(t, "cert-456", config.CertificateID)
@@ -336,7 +336,7 @@ func TestKVService_DomainSSLOperations(t *testing.T) {
 	t.Run("GetDomainSSLConfig", func(t *testing.T) {
 		domain := "example.com"
 		expectedKey := "domain:example.com:ssl_config"
-		
+
 		assert.Equal(t, "example.com", domain)
 		assert.Contains(t, expectedKey, domain)
 		assert.Contains(t, expectedKey, "ssl_config")
@@ -352,7 +352,7 @@ func TestKVService_DomainSSLOperations(t *testing.T) {
 			{Name: "other:key:type"},
 			{Name: "domain:sample.net:ssl_config"},
 		}
-		
+
 		// Test key filtering logic
 		var sslConfigKeys []string
 		for _, key := range mockKeys {
@@ -360,7 +360,7 @@ func TestKVService_DomainSSLOperations(t *testing.T) {
 				sslConfigKeys = append(sslConfigKeys, key.Name)
 			}
 		}
-		
+
 		assert.Len(t, sslConfigKeys, 3)
 		assert.Contains(t, sslConfigKeys, "domain:example.com:ssl_config")
 		assert.Contains(t, sslConfigKeys, "domain:test.org:ssl_config")
@@ -370,7 +370,7 @@ func TestKVService_DomainSSLOperations(t *testing.T) {
 	t.Run("DeleteDomainSSLConfig", func(t *testing.T) {
 		domain := "example.com"
 		expectedKey := fmt.Sprintf("domain:%s:ssl_config", domain)
-		
+
 		assert.Equal(t, "domain:example.com:ssl_config", expectedKey)
 	})
 }
@@ -392,9 +392,9 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 			HourlyRate:    0.0052,
 			MonthlyRate:   3.79,
 		}
-		
+
 		expectedKey := "vps:123:config"
-		
+
 		assert.Equal(t, 123, config.ServerID)
 		assert.Equal(t, "test-server", config.Name)
 		assert.Equal(t, "cx11", config.ServerType)
@@ -413,7 +413,7 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 	t.Run("GetVPSConfig", func(t *testing.T) {
 		serverID := 123
 		expectedKey := fmt.Sprintf("vps:%d:config", serverID)
-		
+
 		assert.Equal(t, "vps:123:config", expectedKey)
 	})
 
@@ -428,7 +428,7 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 			{Name: "vps:789:config"},
 			{Name: "other:key:type"},
 		}
-		
+
 		// Test key filtering logic
 		var vpsConfigKeys []string
 		for _, key := range mockKeys {
@@ -436,7 +436,7 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 				vpsConfigKeys = append(vpsConfigKeys, key.Name)
 			}
 		}
-		
+
 		assert.Len(t, vpsConfigKeys, 3)
 		assert.Contains(t, vpsConfigKeys, "vps:123:config")
 		assert.Contains(t, vpsConfigKeys, "vps:456:config")
@@ -446,21 +446,21 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 	t.Run("DeleteVPSConfig", func(t *testing.T) {
 		serverID := 123
 		expectedKey := fmt.Sprintf("vps:%d:config", serverID)
-		
+
 		assert.Equal(t, "vps:123:config", expectedKey)
 	})
 
 	t.Run("UpdateVPSConfig", func(t *testing.T) {
 		// Test update logic
 		updates := map[string]interface{}{
-			"status":          "stopped",
-			"public_ipv4":     "192.168.1.101",
-			"ssl_configured":  false,
-			"ssh_key_name":    "new-key",
-			"ssh_user":        "ubuntu",
-			"ssh_port":        2222,
+			"status":         "stopped",
+			"public_ipv4":    "192.168.1.101",
+			"ssl_configured": false,
+			"ssh_key_name":   "new-key",
+			"ssh_user":       "ubuntu",
+			"ssh_port":       2222,
 		}
-		
+
 		// Mock existing config
 		config := &services.VPSConfig{
 			ServerID:      123,
@@ -471,7 +471,7 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 			SSHUser:       "root",
 			SSHPort:       22,
 		}
-		
+
 		// Apply updates
 		for field, value := range updates {
 			switch field {
@@ -501,7 +501,7 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 				}
 			}
 		}
-		
+
 		// Verify updates were applied
 		assert.Equal(t, "stopped", config.Status)
 		assert.Equal(t, "192.168.1.101", config.PublicIPv4)
@@ -521,15 +521,15 @@ func TestKVService_CalculateVPSCosts(t *testing.T) {
 			CreatedAt:  createdAt.Format(time.RFC3339),
 			HourlyRate: 0.0052, // EUR per hour
 		}
-		
+
 		// Mock the calculation logic
 		parsedTime, err := time.Parse(time.RFC3339, config.CreatedAt)
 		require.NoError(t, err)
-		
+
 		now := time.Now().UTC()
 		hoursSinceCreation := now.Sub(parsedTime).Hours()
 		expectedCost := hoursSinceCreation * config.HourlyRate
-		
+
 		assert.Greater(t, hoursSinceCreation, 23.0) // Should be around 24 hours
 		assert.Less(t, hoursSinceCreation, 25.0)
 		assert.Greater(t, expectedCost, 0.0)
@@ -542,7 +542,7 @@ func TestKVService_CalculateVPSCosts(t *testing.T) {
 			CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 			HourlyRate: 0, // No rate set
 		}
-		
+
 		assert.Equal(t, float64(0), config.HourlyRate)
 	})
 
@@ -552,7 +552,7 @@ func TestKVService_CalculateVPSCosts(t *testing.T) {
 			CreatedAt:  "invalid-time-format",
 			HourlyRate: 0.0052,
 		}
-		
+
 		_, err := time.Parse(time.RFC3339, config.CreatedAt)
 		assert.Error(t, err)
 	})
@@ -565,13 +565,13 @@ func TestKVService_CalculateVPSCosts(t *testing.T) {
 			CreatedAt:  futureTime.Format(time.RFC3339),
 			HourlyRate: 0.0052,
 		}
-		
+
 		parsedTime, err := time.Parse(time.RFC3339, config.CreatedAt)
 		require.NoError(t, err)
-		
+
 		now := time.Now().UTC()
 		hoursSinceCreation := now.Sub(parsedTime).Hours()
-		
+
 		assert.Less(t, hoursSinceCreation, 0.0) // Should be negative
 	})
 }
@@ -630,14 +630,14 @@ func TestKVService_KeyParsing(t *testing.T) {
 			{"domain:ssl_config", "", false},
 			{"short:key", "", false},
 		}
-		
+
 		for _, tc := range testCases {
 			t.Run(tc.key, func(t *testing.T) {
 				if len(tc.key) > 20 && tc.key[len(tc.key)-11:] == ":ssl_config" {
 					// Extract domain from key format: domain:example.com:ssl_config
-					parts := tc.key[7:]           // Remove "domain:" prefix
+					parts := tc.key[7:]             // Remove "domain:" prefix
 					domain := parts[:len(parts)-11] // Remove ":ssl_config" suffix
-					
+
 					if tc.shouldMatch {
 						assert.Equal(t, tc.expectedDomain, domain)
 					}
@@ -661,7 +661,7 @@ func TestKVService_KeyParsing(t *testing.T) {
 			{"vps:config", false},
 			{"short", false},
 		}
-		
+
 		for _, tc := range testCases {
 			t.Run(tc.key, func(t *testing.T) {
 				matches := strings.HasPrefix(tc.key, "vps:") && strings.HasSuffix(tc.key, ":config") && len(tc.key) > len("vps::config")
@@ -674,7 +674,7 @@ func TestKVService_KeyParsing(t *testing.T) {
 func BenchmarkKVService_PutValue(b *testing.B) {
 	service := services.NewKVService()
 	testData := map[string]string{"test": "data"}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// In practice, this would benchmark the actual put operation
@@ -685,7 +685,7 @@ func BenchmarkKVService_PutValue(b *testing.B) {
 
 func BenchmarkKVService_GetValue(b *testing.B) {
 	service := services.NewKVService()
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// In practice, this would benchmark the actual get operation
@@ -699,7 +699,7 @@ func BenchmarkKVService_CalculateVPSCosts(b *testing.B) {
 		CreatedAt:  time.Now().UTC().Add(-24 * time.Hour).Format(time.RFC3339),
 		HourlyRate: 0.0052,
 	}
-	
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		// Mock the calculation

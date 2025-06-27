@@ -46,15 +46,15 @@ func TestVerifyCloudflareToken(t *testing.T) {
 			expectedResult: false,
 		},
 		{
-			name:         "HTTP error",
-			responseCode: 500,
-			responseBody: `{"error": "Internal server error"}`,
+			name:           "HTTP error",
+			responseCode:   500,
+			responseBody:   `{"error": "Internal server error"}`,
 			expectedResult: false,
 		},
 		{
-			name:         "Invalid JSON response",
-			responseCode: 200,
-			responseBody: `invalid json`,
+			name:           "Invalid JSON response",
+			responseCode:   200,
+			responseBody:   `invalid json`,
 			expectedResult: false,
 		},
 	}
@@ -82,14 +82,14 @@ func TestVerifyCloudflareToken(t *testing.T) {
 
 func TestCheckKVNamespaceExists(t *testing.T) {
 	testCases := []struct {
-		name                string
-		membershipResponse  string
-		kvResponse          string
-		expectedExists      bool
-		expectedAccountID   string
-		expectedError       bool
-		membershipStatus    int
-		kvStatus            int
+		name               string
+		membershipResponse string
+		kvResponse         string
+		expectedExists     bool
+		expectedAccountID  string
+		expectedError      bool
+		membershipStatus   int
+		kvStatus           int
 	}{
 		{
 			name:             "Namespace exists",
@@ -194,14 +194,14 @@ func TestCheckKVNamespaceExists(t *testing.T) {
 			// This test will fail because we can't mock the actual API calls
 			// But we can test the function with invalid data to ensure it handles errors
 			exists, accountID, err := utils.CheckKVNamespaceExists("invalid-token")
-			
+
 			if tc.expectedError {
 				assert.Error(t, err)
 			} else {
 				// For real API calls with invalid token, we expect errors
 				assert.Error(t, err)
 			}
-			
+
 			// The function should return false and empty account ID for invalid tokens
 			assert.False(t, exists)
 			assert.Empty(t, accountID)
@@ -242,7 +242,7 @@ func TestCreateKVNamespace(t *testing.T) {
 			name:         "HTTP error",
 			responseCode: 500,
 			responseBody: `{"error": "Internal server error"}`,
-			expectError: true,
+			expectError:  true,
 		},
 	}
 
@@ -274,11 +274,11 @@ func TestCreateKVNamespace(t *testing.T) {
 
 func TestGetXanthusNamespaceID(t *testing.T) {
 	testCases := []struct {
-		name           string
-		responseCode   int
-		responseBody   string
-		expectedID     string
-		expectError    bool
+		name         string
+		responseCode int
+		responseBody string
+		expectedID   string
+		expectError  bool
 	}{
 		{
 			name:         "Namespace found",
@@ -343,7 +343,7 @@ func TestGetXanthusNamespaceID(t *testing.T) {
 			defer server.Close()
 
 			client := &http.Client{Timeout: 10 * time.Second}
-			
+
 			// Test with real API (should fail with invalid credentials)
 			_, err := utils.GetXanthusNamespaceID(client, "invalid-token", "invalid-account-id")
 			assert.Error(t, err) // Should fail with invalid credentials
@@ -389,7 +389,7 @@ func TestPutKVValue(t *testing.T) {
 	defer server.Close()
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	
+
 	// Test with real API (should fail with invalid credentials)
 	err := utils.PutKVValue(client, "invalid-token", "invalid-account-id", "test-key", testData)
 	assert.Error(t, err) // Should fail with invalid credentials
@@ -419,7 +419,7 @@ func TestGetKVValue(t *testing.T) {
 		} else if strings.Contains(r.URL.Path, "/values/") && r.Method == "GET" {
 			// Mock KV get
 			assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
-			
+
 			if strings.Contains(r.URL.Path, "/values/not-found") {
 				w.WriteHeader(404)
 				w.Write([]byte(`{"error": "Key not found"}`))
@@ -433,7 +433,7 @@ func TestGetKVValue(t *testing.T) {
 	defer server.Close()
 
 	client := &http.Client{Timeout: 10 * time.Second}
-	
+
 	// Test with real API (should fail with invalid credentials)
 	var result map[string]interface{}
 	err := utils.GetKVValue(client, "invalid-token", "invalid-account-id", "test-key", &result)
@@ -487,8 +487,8 @@ func TestFetchCloudflareDomains(t *testing.T) {
 			name:         "HTTP error",
 			responseCode: 500,
 			responseBody: `{"error": "Internal server error"}`,
-			expectError: true,
-			expectedLen: 0,
+			expectError:  true,
+			expectedLen:  0,
 		},
 	}
 
@@ -507,14 +507,14 @@ func TestFetchCloudflareDomains(t *testing.T) {
 
 			// Test with real API (should fail with invalid token)
 			domains, err := utils.FetchCloudflareDomains("invalid-token")
-			
+
 			if tc.expectError {
 				assert.Error(t, err)
 			} else {
 				// For real API calls with invalid token, we expect errors
 				assert.Error(t, err)
 			}
-			
+
 			// Should return empty slice for invalid token
 			assert.Empty(t, domains)
 		})
@@ -527,7 +527,7 @@ func TestCloudflareUtilsIntegration(t *testing.T) {
 		requestCount := 0
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestCount++
-			
+
 			switch {
 			case strings.Contains(r.URL.Path, "/memberships"):
 				w.WriteHeader(200)
@@ -573,7 +573,7 @@ func TestCloudflareUtilsIntegration(t *testing.T) {
 
 		// Test that our functions handle errors gracefully with invalid tokens
 		// (since we can't easily mock the actual API endpoints)
-		
+
 		// Test token verification
 		result := utils.VerifyCloudflareToken("invalid-token")
 		assert.False(t, result)
