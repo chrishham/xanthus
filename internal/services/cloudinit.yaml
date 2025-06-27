@@ -222,31 +222,31 @@ write_files:
           update_status "CONFIGURING_ARGOCD_INGRESS"
           log "Creating ArgoCD ingress for https://argocd.${DOMAIN}"
           cat > /tmp/argocd-ingress.yaml << 'INGRESS_EOF'
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: argocd-server-ingress
-  namespace: argocd
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
-spec:
-  tls:
-  - hosts:
-    - argocd.DOMAIN_PLACEHOLDER
-    secretName: DOMAIN_PLACEHOLDER-tls
-  rules:
-  - host: argocd.DOMAIN_PLACEHOLDER
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: argocd-server
-            port:
-              number: 80
-INGRESS_EOF
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: argocd-server-ingress
+        namespace: argocd
+        annotations:
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.tls: "true"
+      spec:
+        tls:
+        - hosts:
+          - argocd.DOMAIN_PLACEHOLDER
+          secretName: DOMAIN_PLACEHOLDER-tls
+        rules:
+        - host: argocd.DOMAIN_PLACEHOLDER
+          http:
+            paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: argocd-server
+                  port:
+                    number: 80
+      INGRESS_EOF
           
           # Replace placeholders with actual domain
           sed -i "s/DOMAIN_PLACEHOLDER/${DOMAIN}/g" /tmp/argocd-ingress.yaml
