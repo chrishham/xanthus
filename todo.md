@@ -1,48 +1,13 @@
 ## VPS
-argocd admin initial-password -n argocd
-
-
-ArgoCD: View Credentials 
-ArgoCD Not Ready
-ArgoCD credentials are not yet available. This could mean:
-
-    The server is still initializing
-    ArgoCD installation is in progress
-    No domain was configured for this VPS
-
-Please wait a few minutes and try again.
-
-
-give the user the initial password for argocd :
-
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 @web/templates/vps-manage.html
-- show total days and hours since vps creation
-- at resources add the storage capacity
-
-- is there a way to determine the degree of utilisation of the vps ? so that the user will know if he needs to provision another vps
-
-
-- Uptime: 1d 0h no uptime, time since creation
-
-- systemd-resolved: ✅ Active => remove it 
-- Fix spacing , label and status should be closer together
-SSH Status: ✅ Connected
-K3s Service: ✅ Running
-
-
-- terminal: user can add multiple ssh sessions as tabs
-
+ram usage output is problematic
 @web/templates/vps-create.html
 - at vps creation ensure that login without ssh is completely disabled
 - at create a vps, list and the dedicated instances and add an appropriate filter
 - choose server type: add option to filter out unavailable
 - install filebrowser https://github.com/gtsteffaniak/filebrowser
-- let the user choose a domain from managed by xanthus domains  to link to the vps. Add check that
-if there are not any managed domains dont let the user initiate the create vps wizard but display an informative message and redirect him to dns page. Then after vps obtains an ip address, delete all the A records at the cloudfare at the domain and add the A records necessary for resolving domain and *.domain to the new ip.
-
-- How to enable argocd web app?
+headlmamp, openwebui, code-server
 
 ## Applications
 @web/templates/applications.html
