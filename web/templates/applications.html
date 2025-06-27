@@ -32,7 +32,7 @@
         <!-- Header -->
         <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-2">Applications</h2>
-            <p class="text-gray-600">Deploy, manage, and monitor applications using Helm charts</p>
+            <p class="text-gray-600">Deploy and manage curated applications on your VPS servers</p>
         </div>
 
         <!-- Action Buttons -->
@@ -46,118 +46,166 @@
                     </svg>
                     Refresh
                 </button>
-                <button @click="showCreateApplicationModal()" 
-                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    Deploy New Application
-                </button>
             </div>
         </div>
 
-        <!-- No Applications State -->
-        <div x-show="applications.length === 0 && !loading" class="text-center py-12">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-            </svg>
-            <h3 class="mt-2 text-lg font-medium text-gray-900">No applications deployed</h3>
-            <p class="mt-1 text-gray-500">Get started by deploying your first application using Helm charts.</p>
-            <div class="mt-6">
-                <button @click="showCreateApplicationModal()"
-                   class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    Deploy Application
-                </button>
+        <!-- Available Applications Catalog -->
+        <div class="mb-12">
+            <h3 class="text-xl font-semibold text-gray-900 mb-4">Available Applications</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template x-for="app in predefinedApps" :key="app.id">
+                    <div class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
+                        <!-- Application Header -->
+                        <div class="p-6 border-b border-gray-200">
+                            <div class="flex items-center">
+                                <div class="text-3xl mr-4" x-text="app.icon"></div>
+                                <div class="flex-1">
+                                    <h4 class="text-lg font-medium text-gray-900" x-text="app.name"></h4>
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800" x-text="app.category"></span>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-500 mt-3" x-text="app.description"></p>
+                        </div>
+
+                        <!-- Application Details -->
+                        <div class="p-6">
+                            <div class="space-y-3">
+                                <!-- Version -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-500">Version:</span>
+                                    <span class="text-sm font-medium text-gray-900" x-text="app.version"></span>
+                                </div>
+                                
+                                <!-- Features -->
+                                <div>
+                                    <span class="text-sm text-gray-500 block mb-2">Features:</span>
+                                    <div class="space-y-1">
+                                        <template x-for="feature in app.features.slice(0, 3)" :key="feature">
+                                            <div class="text-xs text-gray-600 flex items-center">
+                                                <svg class="w-3 h-3 text-green-500 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                                </svg>
+                                                <span x-text="feature"></span>
+                                            </div>
+                                        </template>
+                                        <div x-show="app.features.length > 3" class="text-xs text-gray-400">
+                                            <span x-text="`+${app.features.length - 3} more features`"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+                            <button @click="deployApplication(app)" 
+                                    class="w-full px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                                Deploy Application
+                            </button>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
 
-        <!-- Applications Grid -->
-        <div x-show="applications.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <template x-for="app in applications" :key="app.id">
-                <div class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
-                    <!-- Application Header -->
-                    <div class="p-6 border-b border-gray-200">
-                        <div class="flex items-center justify-between">
-                            <h3 class="text-lg font-medium text-gray-900" x-text="app.name"></h3>
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                  :class="{
-                                      'bg-green-100 text-green-800': app.status === 'deployed',
-                                      'bg-yellow-100 text-yellow-800': app.status === 'pending',
-                                      'bg-red-100 text-red-800': app.status === 'failed',
-                                      'bg-gray-100 text-gray-800': !['deployed', 'pending', 'failed'].includes(app.status)
-                                  }"
-                                  x-text="app.status">
-                            </span>
-                        </div>
-                        <p class="text-sm text-gray-500 mt-1" x-text="app.description || 'No description'"></p>
-                    </div>
+        <!-- Deployed Applications -->
+        <div>
+            <h3 class="text-xl font-semibold text-gray-900 mb-4">Deployed Applications</h3>
+            
+            <!-- No Applications State -->
+            <div x-show="applications.length === 0 && !loading" class="text-center py-12 bg-white rounded-lg shadow-md">
+                <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                </svg>
+                <h4 class="mt-2 text-lg font-medium text-gray-900">No applications deployed</h4>
+                <p class="mt-1 text-gray-500">Deploy your first application from the catalog above.</p>
+            </div>
 
-                    <!-- Application Details -->
-                    <div class="p-6">
-                        <div class="space-y-3">
-                            <!-- URL -->
+            <!-- Applications Grid -->
+            <div x-show="applications.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template x-for="app in applications" :key="app.id">
+                    <div class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
+                        <!-- Application Header -->
+                        <div class="p-6 border-b border-gray-200">
                             <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-500">URL:</span>
-                                <a :href="'https://' + app.subdomain + '.' + app.domain" 
-                                   target="_blank"
-                                   class="text-sm font-medium text-purple-600 hover:text-purple-800" 
-                                   x-text="app.subdomain + '.' + app.domain">
-                                </a>
+                                <div class="flex items-center">
+                                    <div class="text-2xl mr-3" x-text="getPredefinedAppIcon(app.app_type)"></div>
+                                    <div>
+                                        <h4 class="text-lg font-medium text-gray-900" x-text="app.name"></h4>
+                                        <span class="text-sm text-gray-500" x-text="getPredefinedAppName(app.app_type)"></span>
+                                    </div>
+                                </div>
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                      :class="{
+                                          'bg-green-100 text-green-800': app.status === 'deployed',
+                                          'bg-yellow-100 text-yellow-800': app.status === 'pending',
+                                          'bg-red-100 text-red-800': app.status === 'failed',
+                                          'bg-gray-100 text-gray-800': !['deployed', 'pending', 'failed'].includes(app.status)
+                                      }"
+                                      x-text="app.status">
+                                </span>
                             </div>
-                            
-                            <!-- VPS -->
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-500">VPS:</span>
-                                <span class="text-sm font-medium text-gray-900" x-text="app.vps_name"></span>
-                            </div>
-                            
-                            <!-- Helm Chart -->
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-500">Chart:</span>
-                                <span class="text-sm font-medium text-gray-900" x-text="app.chart_name + ':' + app.chart_version"></span>
-                            </div>
-                            
-                            <!-- Namespace -->
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-500">Namespace:</span>
-                                <span class="text-sm font-medium text-gray-900" x-text="app.namespace"></span>
-                            </div>
-                            
-                            <!-- Created -->
-                            <div class="flex items-center justify-between">
-                                <span class="text-sm text-gray-500">Created:</span>
-                                <span class="text-sm font-medium text-gray-900" x-text="formatDate(app.created_at)"></span>
-                            </div>
+                            <p class="text-sm text-gray-500 mt-2" x-text="app.description || 'No description'"></p>
                         </div>
-                    </div>
 
-                    <!-- Actions -->
-                    <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
-                        <div class="flex space-x-2">
-                            <!-- Visit Application -->
-                            <button @click="visitApplication(app)" 
-                                    class="flex-1 text-xs px-3 py-2 border border-purple-300 text-purple-700 bg-purple-50 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500">
-                                Visit
-                            </button>
-                            
-                            <!-- Upgrade -->
-                            <button @click="showUpgradeModal(app)" 
-                                    class="flex-1 text-xs px-3 py-2 border border-blue-300 text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                Upgrade
-                            </button>
-                            
-                            <!-- Delete -->
-                            <button @click="confirmDeleteApplication(app.id, app.name)" 
-                                    class="flex-1 text-xs px-3 py-2 border border-red-300 text-red-700 bg-red-50 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500">
-                                Delete
-                            </button>
+                        <!-- Application Details -->
+                        <div class="p-6">
+                            <div class="space-y-3">
+                                <!-- URL -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-500">URL:</span>
+                                    <a :href="app.url" 
+                                       target="_blank"
+                                       class="text-sm font-medium text-purple-600 hover:text-purple-800 truncate max-w-48" 
+                                       x-text="app.url.replace('https://', '')">
+                                    </a>
+                                </div>
+                                
+                                <!-- VPS -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-500">VPS:</span>
+                                    <span class="text-sm font-medium text-gray-900" x-text="app.vps_name"></span>
+                                </div>
+                                
+                                <!-- Version -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-500">Version:</span>
+                                    <span class="text-sm font-medium text-gray-900" x-text="app.app_version"></span>
+                                </div>
+                                
+                                <!-- Created -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm text-gray-500">Created:</span>
+                                    <span class="text-sm font-medium text-gray-900" x-text="formatDate(app.created_at)"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
+                            <div class="flex space-x-2">
+                                <!-- Visit Application -->
+                                <button @click="visitApplication(app)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-purple-300 text-purple-700 bg-purple-50 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                    Visit
+                                </button>
+                                
+                                <!-- Upgrade -->
+                                <button @click="showUpgradeModal(app)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-blue-300 text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    Upgrade
+                                </button>
+                                
+                                <!-- Delete -->
+                                <button @click="confirmDeleteApplication(app.id, app.name)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-red-300 text-red-700 bg-red-50 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500">
+                                    Delete
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </template>
+                </template>
+            </div>
         </div>
     </div>
 
@@ -165,10 +213,10 @@
         function applicationsManagement() {
             return {
                 applications: {{.Applications | toJSON}},
+                predefinedApps: {{.PredefinedApps | toJSON}},
                 loading: false,
                 loadingTitle: 'Processing...',
                 loadingMessage: 'Please wait while the operation completes.',
-                wizardData: {},
 
                 init() {
                     // Initialize applications list
@@ -200,21 +248,10 @@
                     }
                 },
 
-                async showCreateApplicationModal() {
-                    // Show loading immediately
-                    this.setLoadingState('Loading Prerequisites', 'Checking available VPS instances...');
+                async deployApplication(predefinedApp) {
+                    // Check prerequisites first
+                    this.setLoadingState('Checking Prerequisites', 'Verifying VPS instances and domains...');
                     
-                    // Initialize wizard data
-                    this.wizardData = {
-                        step: 1,
-                        selectedVPS: null,
-                        selectedRepo: null,
-                        selectedChart: null,
-                        appConfig: {},
-                        sessionID: null
-                    };
-                    
-                    // First, check prerequisites
                     try {
                         const response = await fetch('/applications/prerequisites');
                         const data = await response.json();
@@ -227,6 +264,7 @@
                         
                         // Check if we have domains and servers
                         if (!domains || domains.length === 0) {
+                            this.loading = false;
                             Swal.fire({
                                 title: 'Setup Required',
                                 html: `
@@ -253,6 +291,7 @@
                         }
                         
                         if (!servers || servers.length === 0) {
+                            this.loading = false;
                             Swal.fire({
                                 title: 'Setup Required',
                                 html: `
@@ -278,398 +317,56 @@
                             return;
                         }
                         
-                        // Store data for wizard
-                        this.wizardData.domains = domains;
-                        this.wizardData.servers = servers;
-                        
-                        // Start the wizard
-                        await this.showWizardStep1();
+                        // Show deployment form
+                        await this.showDeploymentForm(predefinedApp, domains, servers);
                         
                     } catch (error) {
-                        console.error('Error loading prerequisites:', error);
-                        Swal.fire('Error', 'Failed to load application prerequisites. Please check your configuration.', 'error');
+                        console.error('Error checking prerequisites:', error);
+                        Swal.fire('Error', 'Failed to load prerequisites. Please check your configuration.', 'error');
                     } finally {
-                        // Clear loading state when modal is shown or error occurs
                         this.loading = false;
                     }
                 },
 
-                async showWizardStep1() {
-                    // Step 1: Select VPS
-                    const serverOptions = this.wizardData.servers.map(s => 
+                async showDeploymentForm(predefinedApp, domains, servers) {
+                    const serverOptions = servers.map(s => 
                         `<option value="${s.id}">${s.name} (${s.public_net.ipv4.ip})</option>`
                     ).join('');
 
-                    const { value: selectedVPS } = await Swal.fire({
-                        title: 'Deploy Application - Step 1 of 4',
-                        html: `
-                            <div class="text-left">
-                                <div class="mb-4">
-                                    <div class="flex items-center mb-4">
-                                        <div class="flex items-center space-x-2">
-                                            <div class="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-medium">1</div>
-                                            <span class="font-medium text-purple-600">Select VPS</span>
-                                            <div class="w-8 h-1 bg-gray-200"></div>
-                                            <div class="w-8 h-8 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-sm">2</div>
-                                            <span class="text-gray-500">Repository</span>
-                                            <div class="w-8 h-1 bg-gray-200"></div>
-                                            <div class="w-8 h-8 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-sm">3</div>
-                                            <span class="text-gray-500">Chart</span>
-                                            <div class="w-8 h-1 bg-gray-200"></div>
-                                            <div class="w-8 h-8 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-sm">4</div>
-                                            <span class="text-gray-500">Config</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div class="mb-4">
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Select VPS to host your application:</label>
-                                    <select id="wizard-vps" class="swal2-select w-full">
-                                        <option value="">Choose a VPS instance</option>
-                                        ${serverOptions}
-                                    </select>
-                                </div>
-                                
-                                <div class="p-3 bg-blue-50 rounded-md text-sm">
-                                    <strong>What happens next:</strong><br>
-                                    We'll check what Helm repositories are configured on this VPS and let you add new ones if needed.
-                                </div>
-                            </div>
-                        `,
-                        showCancelButton: true,
-                        confirmButtonText: 'Next',
-                        cancelButtonText: 'Cancel',
-                        confirmButtonColor: '#7c3aed',
-                        width: 700,
-                        preConfirm: () => {
-                            const vps = document.getElementById('wizard-vps').value;
-                            if (!vps) {
-                                Swal.showValidationMessage('Please select a VPS');
-                                return false;
-                            }
-                            return vps;
-                        }
-                    });
-
-                    if (selectedVPS) {
-                        this.wizardData.selectedVPS = selectedVPS;
-                        this.wizardData.step = 2;
-                        
-                        // Create SSH session for the selected VPS
-                        await this.createSSHSession(selectedVPS);
-                        
-                        await this.showWizardStep2();
-                    }
-                },
-
-                async showWizardStep2() {
-                    // Step 2: Select/Add Helm repositories
-                    this.setLoadingState('Loading Repositories', 'Fetching Helm repositories from VPS...');
-                    
-                    try {
-                        // Get repositories from VPS
-                        const headers = {
-                            'Content-Type': 'application/json'
-                        };
-                        
-                        // Include session header if available
-                        if (this.wizardData.sessionID) {
-                            headers['X-SSH-Session-ID'] = this.wizardData.sessionID;
-                        }
-                        
-                        const response = await fetch(`/applications/vps/${this.wizardData.selectedVPS}/repositories`, {
-                            headers: headers
-                        });
-                        const data = await response.json();
-                        
-                        this.loading = false;
-                        
-                        if (!response.ok) {
-                            throw new Error(data.error || 'Failed to get repositories');
-                        }
-                        
-                        const repositories = data.repositories || [];
-                        const repoOptions = repositories.map(repo => 
-                            `<option value="${repo.name}">${repo.name} (${repo.url})</option>`
-                        ).join('');
-
-                        const { value: formValues } = await Swal.fire({
-                            title: 'Deploy Application - Step 2 of 4',
-                            html: `
-                                <div class="text-left">
-                                    <div class="mb-4">
-                                        <div class="flex items-center mb-4">
-                                            <div class="flex items-center space-x-2">
-                                                <div class="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm">✓</div>
-                                                <span class="text-green-600">VPS Selected</span>
-                                                <div class="w-8 h-1 bg-green-500"></div>
-                                                <div class="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-medium">2</div>
-                                                <span class="font-medium text-purple-600">Repository</span>
-                                                <div class="w-8 h-1 bg-gray-200"></div>
-                                                <div class="w-8 h-8 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-sm">3</div>
-                                                <span class="text-gray-500">Chart</span>
-                                                <div class="w-8 h-1 bg-gray-200"></div>
-                                                <div class="w-8 h-8 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-sm">4</div>
-                                                <span class="text-gray-500">Config</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="mb-4">
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Helm Repository:</label>
-                                        <select id="wizard-repo" class="swal2-select w-full">
-                                            <option value="">Choose existing repository</option>
-                                            ${repoOptions}
-                                            <option value="__add_new__">+ Add New Repository</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <div id="new-repo-fields" style="display: none;" class="space-y-3">
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Repository Name:</label>
-                                            <input id="new-repo-name" class="swal2-input w-full" placeholder="bitnami">
-                                        </div>
-                                        <div>
-                                            <label class="block text-sm font-medium text-gray-700 mb-1">Repository URL:</label>
-                                            <input id="new-repo-url" class="swal2-input w-full" placeholder="https://charts.bitnami.com/bitnami">
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="p-3 bg-blue-50 rounded-md text-sm mt-4">
-                                        <strong>Popular repositories:</strong><br>
-                                        • Bitnami: https://charts.bitnami.com/bitnami<br>
-                                        • Stable: https://charts.helm.sh/stable<br>
-                                        • Ingress-nginx: https://kubernetes.github.io/ingress-nginx
-                                    </div>
-                                </div>
-                                
-                                <script>
-                                    setTimeout(() => {
-                                        const repoSelect = document.getElementById('wizard-repo');
-                                        const newRepoFields = document.getElementById('new-repo-fields');
-                                        
-                                        if (repoSelect && newRepoFields) {
-                                            repoSelect.addEventListener('change', function() {
-                                                if (this.value === '__add_new__') {
-                                                    newRepoFields.style.display = 'block';
-                                                } else {
-                                                    newRepoFields.style.display = 'none';
-                                                }
-                                            });
-                                        }
-                                    }, 100);
-                                </script>
-                            `,
-                            showCancelButton: true,
-                            confirmButtonText: 'Next',
-                            cancelButtonText: 'Back',
-                            confirmButtonColor: '#7c3aed',
-                            width: 700,
-                            preConfirm: () => {
-                                const repo = document.getElementById('wizard-repo').value;
-                                if (!repo) {
-                                    Swal.showValidationMessage('Please select or add a repository');
-                                    return false;
-                                }
-                                
-                                if (repo === '__add_new__') {
-                                    const name = document.getElementById('new-repo-name').value.trim();
-                                    const url = document.getElementById('new-repo-url').value.trim();
-                                    if (!name || !url) {
-                                        Swal.showValidationMessage('Repository name and URL are required');
-                                        return false;
-                                    }
-                                    return { action: 'add', name, url };
-                                } else {
-                                    return { action: 'existing', repo };
-                                }
-                            }
-                        });
-
-                        if (formValues) {
-                            if (formValues.action === 'add') {
-                                // Add new repository
-                                await this.addHelmRepository(formValues.name, formValues.url);
-                                this.wizardData.selectedRepo = formValues.name;
-                            } else {
-                                this.wizardData.selectedRepo = formValues.repo;
-                            }
-                            this.wizardData.step = 3;
-                            await this.showWizardStep3();
-                        } else {
-                            // Back button pressed or cancelled
-                            if (formValues === undefined) {
-                                // Wizard was cancelled, clean up session
-                                await this.closeSSHSession();
-                            } else {
-                                await this.showWizardStep1();
-                            }
-                        }
-                    } catch (error) {
-                        this.loading = false;
-                        console.error('Error loading repositories:', error);
-                        Swal.fire('Error', 'Failed to load repositories. Please try again.', 'error');
-                    }
-                },
-
-                async showWizardStep3() {
-                    // Step 3: Select Helm chart
-                    this.setLoadingState('Loading Charts', 'Fetching available Helm charts...');
-                    
-                    try {
-                        // Get charts from repository
-                        const headers = {
-                            'Content-Type': 'application/json'
-                        };
-                        
-                        // Include session header if available
-                        if (this.wizardData.sessionID) {
-                            headers['X-SSH-Session-ID'] = this.wizardData.sessionID;
-                        }
-                        
-                        const response = await fetch(`/applications/vps/${this.wizardData.selectedVPS}/charts/${this.wizardData.selectedRepo}`, {
-                            headers: headers
-                        });
-                        const data = await response.json();
-                        
-                        this.loading = false;
-                        
-                        if (!response.ok) {
-                            throw new Error(data.error || 'Failed to get charts');
-                        }
-                        
-                        const charts = data.charts || [];
-                        const chartOptions = charts.map(chart => 
-                            `<option value="${chart.name}">${chart.name} - ${chart.description || 'No description'}</option>`
-                        ).join('');
-
-                        const { value: selectedChart } = await Swal.fire({
-                            title: 'Deploy Application - Step 3 of 4',
-                            html: `
-                                <div class="text-left">
-                                    <div class="mb-4">
-                                        <div class="flex items-center mb-4">
-                                            <div class="flex items-center space-x-2">
-                                                <div class="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm">✓</div>
-                                                <span class="text-green-600">VPS</span>
-                                                <div class="w-8 h-1 bg-green-500"></div>
-                                                <div class="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm">✓</div>
-                                                <span class="text-green-600">Repository</span>
-                                                <div class="w-8 h-1 bg-green-500"></div>
-                                                <div class="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-medium">3</div>
-                                                <span class="font-medium text-purple-600">Chart</span>
-                                                <div class="w-8 h-1 bg-gray-200"></div>
-                                                <div class="w-8 h-8 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-sm">4</div>
-                                                <span class="text-gray-500">Config</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="mb-4">
-                                        <label class="block text-sm font-medium text-gray-700 mb-2">Search and select Helm chart:</label>
-                                        <input id="chart-search" class="swal2-input w-full mb-2" placeholder="Search charts..." onkeyup="filterCharts()">
-                                        <select id="wizard-chart" class="swal2-select w-full" size="8">
-                                            ${chartOptions}
-                                        </select>
-                                    </div>
-                                    
-                                    <div class="p-3 bg-blue-50 rounded-md text-sm">
-                                        <strong>Repository:</strong> ${this.wizardData.selectedRepo}<br>
-                                        <strong>Available charts:</strong> ${charts.length}
-                                    </div>
-                                </div>
-                                
-                                <script>
-                                    function filterCharts() {
-                                        const search = document.getElementById('chart-search').value.toLowerCase();
-                                        const select = document.getElementById('wizard-chart');
-                                        const options = select.getElementsByTagName('option');
-                                        
-                                        for (let i = 0; i < options.length; i++) {
-                                            const option = options[i];
-                                            const text = option.textContent.toLowerCase();
-                                            if (text.includes(search)) {
-                                                option.style.display = '';
-                                            } else {
-                                                option.style.display = 'none';
-                                            }
-                                        }
-                                    }
-                                </script>
-                            `,
-                            showCancelButton: true,
-                            confirmButtonText: 'Next',
-                            cancelButtonText: 'Back',
-                            confirmButtonColor: '#7c3aed',
-                            width: 700,
-                            preConfirm: () => {
-                                const chart = document.getElementById('wizard-chart').value;
-                                if (!chart) {
-                                    Swal.showValidationMessage('Please select a chart');
-                                    return false;
-                                }
-                                return chart;
-                            }
-                        });
-
-                        if (selectedChart) {
-                            this.wizardData.selectedChart = selectedChart;
-                            this.wizardData.step = 4;
-                            await this.showWizardStep4();
-                        } else {
-                            // Back button pressed or cancelled
-                            if (selectedChart === undefined) {
-                                // Wizard was cancelled, clean up session
-                                await this.closeSSHSession();
-                            } else {
-                                await this.showWizardStep2();
-                            }
-                        }
-                    } catch (error) {
-                        this.loading = false;
-                        console.error('Error loading charts:', error);
-                        Swal.fire('Error', 'Failed to load charts. Please try again.', 'error');
-                    }
-                },
-
-                async showWizardStep4() {
-                    // Step 4: Configure application
-                    const domainOptions = this.wizardData.domains.map(d => 
+                    const domainOptions = domains.map(d => 
                         `<option value="${d.name}">${d.name}</option>`
                     ).join('');
 
                     const { value: formValues } = await Swal.fire({
-                        title: 'Deploy Application - Step 4 of 4',
+                        title: `Deploy ${predefinedApp.name}`,
                         html: `
                             <div class="text-left">
-                                <div class="mb-4">
-                                    <div class="flex items-center mb-4">
-                                        <div class="flex items-center space-x-2">
-                                            <div class="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm">✓</div>
-                                            <span class="text-green-600">VPS</span>
-                                            <div class="w-8 h-1 bg-green-500"></div>
-                                            <div class="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm">✓</div>
-                                            <span class="text-green-600">Repository</span>
-                                            <div class="w-8 h-1 bg-green-500"></div>
-                                            <div class="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center text-sm">✓</div>
-                                            <span class="text-green-600">Chart</span>
-                                            <div class="w-8 h-1 bg-green-500"></div>
-                                            <div class="w-8 h-8 bg-purple-600 text-white rounded-full flex items-center justify-center text-sm font-medium">4</div>
-                                            <span class="font-medium text-purple-600">Configure</span>
-                                        </div>
+                                <div class="flex items-center mb-4 p-3 bg-purple-50 rounded-md">
+                                    <div class="text-2xl mr-3">${predefinedApp.icon}</div>
+                                    <div>
+                                        <h4 class="font-medium text-gray-900">${predefinedApp.name}</h4>
+                                        <p class="text-sm text-gray-600">${predefinedApp.description}</p>
                                     </div>
                                 </div>
                                 
                                 <div class="space-y-4">
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 mb-1">Application Name</label>
-                                        <input id="app-name" class="swal2-input w-full" placeholder="my-app">
-                                        <p class="text-xs text-gray-500 mt-1">This will be used as the Helm release name</p>
+                                        <input id="app-name" class="swal2-input w-full" placeholder="my-${predefinedApp.id}">
+                                        <p class="text-xs text-gray-500 mt-1">A friendly name for your application instance</p>
+                                    </div>
+                                    
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">VPS Server</label>
+                                        <select id="app-vps" class="swal2-select w-full">
+                                            <option value="">Choose a VPS server</option>
+                                            ${serverOptions}
+                                        </select>
                                     </div>
                                     
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700 mb-1">Subdomain</label>
-                                        <input id="app-subdomain" class="swal2-input w-full" placeholder="app">
+                                        <input id="app-subdomain" class="swal2-input w-full" placeholder="${predefinedApp.id}">
                                         <p class="text-xs text-gray-500 mt-1">Your app will be available at subdomain.domain.com</p>
                                     </div>
                                     
@@ -682,38 +379,38 @@
                                     </div>
                                     
                                     <div>
-                                        <label class="block text-sm font-medium text-gray-700 mb-1">Chart Version (optional)</label>
-                                        <input id="app-version" class="swal2-input w-full" placeholder="latest" value="latest">
-                                    </div>
-                                    
-                                    <div>
                                         <label class="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-                                        <input id="app-description" class="swal2-input w-full" placeholder="My awesome application">
+                                        <input id="app-description" class="swal2-input w-full" placeholder="My ${predefinedApp.name} instance">
                                     </div>
                                     
                                     <div class="p-3 bg-green-50 border border-green-200 rounded-md text-sm">
-                                        <strong>Ready to deploy:</strong><br>
-                                        • VPS: ${this.wizardData.servers.find(s => s.id === this.wizardData.selectedVPS)?.name}<br>
-                                        • Repository: ${this.wizardData.selectedRepo}<br>
-                                        • Chart: ${this.wizardData.selectedChart}
+                                        <strong>What will be deployed:</strong><br>
+                                        • ${predefinedApp.name} v${predefinedApp.version}<br>
+                                        • Automatic HTTPS with SSL certificates<br>
+                                        • Persistent storage and configuration<br>
+                                        • Ready to use after deployment
                                     </div>
                                 </div>
                             </div>
                         `,
                         showCancelButton: true,
                         confirmButtonText: 'Deploy Application',
-                        cancelButtonText: 'Back',
+                        cancelButtonText: 'Cancel',
                         confirmButtonColor: '#7c3aed',
-                        width: 700,
+                        width: 600,
                         preConfirm: () => {
                             const name = document.getElementById('app-name').value.trim();
+                            const vps = document.getElementById('app-vps').value;
                             const subdomain = document.getElementById('app-subdomain').value.trim();
                             const domain = document.getElementById('app-domain').value;
-                            const version = document.getElementById('app-version').value.trim() || 'latest';
                             const description = document.getElementById('app-description').value.trim();
                             
                             if (!name) {
                                 Swal.showValidationMessage('Application name is required');
+                                return false;
+                            }
+                            if (!vps) {
+                                Swal.showValidationMessage('VPS server is required');
                                 return false;
                             }
                             if (!subdomain) {
@@ -727,54 +424,17 @@
                             
                             return { 
                                 name, 
+                                vps, 
                                 subdomain, 
                                 domain, 
-                                vps: this.wizardData.selectedVPS,
-                                chart: `${this.wizardData.selectedRepo}/${this.wizardData.selectedChart}`,
-                                version, 
-                                description 
+                                description,
+                                app_type: predefinedApp.id
                             };
                         }
                     });
 
                     if (formValues) {
                         await this.createApplication(formValues);
-                        // Close SSH session after application creation
-                        await this.closeSSHSession();
-                    } else {
-                        // Back button pressed
-                        await this.showWizardStep3();
-                    }
-                },
-
-                async addHelmRepository(name, url) {
-                    this.setLoadingState('Adding Repository', `Adding ${name} repository to VPS...`);
-                    try {
-                        const headers = {
-                            'Content-Type': 'application/json'
-                        };
-                        
-                        // Include session header if available
-                        if (this.wizardData.sessionID) {
-                            headers['X-SSH-Session-ID'] = this.wizardData.sessionID;
-                        }
-                        
-                        const response = await fetch(`/applications/vps/${this.wizardData.selectedVPS}/repositories`, {
-                            method: 'POST',
-                            headers: headers,
-                            body: JSON.stringify({ name, url })
-                        });
-                        
-                        if (!response.ok) {
-                            const data = await response.json();
-                            throw new Error(data.error || 'Failed to add repository');
-                        }
-                    } catch (error) {
-                        console.error('Error adding repository:', error);
-                        Swal.fire('Error', `Failed to add repository: ${error.message}`, 'error');
-                        throw error;
-                    } finally {
-                        this.loading = false;
                     }
                 },
 
@@ -811,8 +471,7 @@
                 },
 
                 visitApplication(app) {
-                    const url = `https://${app.subdomain}.${app.domain}`;
-                    window.open(url, '_blank');
+                    window.open(app.url, '_blank');
                 },
 
                 async showUpgradeModal(app) {
@@ -823,7 +482,7 @@
                                 <p class="mb-4">Upgrade <strong>${app.name}</strong> to a new version:</p>
                                 <div class="mb-4">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Current Version:</label>
-                                    <div class="p-2 bg-gray-100 rounded text-sm">${app.chart_version}</div>
+                                    <div class="p-2 bg-gray-100 rounded text-sm">${app.app_version}</div>
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">New Version:</label>
@@ -931,49 +590,14 @@
                     this.loading = true;
                 },
 
-                async createSSHSession(vpsID) {
-                    this.setLoadingState('Connecting', 'Establishing secure connection to VPS...');
-                    try {
-                        const response = await fetch('/applications/create-session', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ vps_id: vpsID })
-                        });
-                        
-                        const data = await response.json();
-                        
-                        if (response.ok) {
-                            this.wizardData.sessionID = data.session_id;
-                            console.log('SSH session created:', data.session_id);
-                        } else {
-                            console.warn('Failed to create SSH session:', data.error);
-                            // Continue without session - fallback will be used
-                        }
-                    } catch (error) {
-                        console.warn('Error creating SSH session:', error);
-                        // Continue without session - fallback will be used
-                    } finally {
-                        this.loading = false;
-                    }
+                getPredefinedAppIcon(appType) {
+                    const app = this.predefinedApps.find(a => a.id === appType);
+                    return app ? app.icon : '📦';
                 },
 
-                async closeSSHSession() {
-                    if (!this.wizardData.sessionID) {
-                        return;
-                    }
-                    
-                    try {
-                        await fetch(`/applications/session/${this.wizardData.sessionID}`, {
-                            method: 'DELETE'
-                        });
-                        console.log('SSH session closed:', this.wizardData.sessionID);
-                    } catch (error) {
-                        console.warn('Error closing SSH session:', error);
-                    }
-                    
-                    this.wizardData.sessionID = null;
+                getPredefinedAppName(appType) {
+                    const app = this.predefinedApps.find(a => a.id === appType);
+                    return app ? app.name : appType;
                 }
             }
         }

@@ -119,16 +119,21 @@ type CloudflareDomainsResponse struct {
 
 // Application represents a deployed application
 type Application struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Subdomain    string `json:"subdomain"`
-	Domain       string `json:"domain"`
-	VPSID        string `json:"vps_id"`
-	VPSName      string `json:"vps_name"`
-	ChartName    string `json:"chart_name"`
-	ChartVersion string `json:"chart_version"`
-	Namespace    string `json:"namespace"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"created_at"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	AppType     string `json:"app_type"`    // ID of predefined application
+	AppVersion  string `json:"app_version"` // Version of the predefined app
+	Subdomain   string `json:"subdomain"`
+	Domain      string `json:"domain"`
+	VPSID       string `json:"vps_id"`
+	VPSName     string `json:"vps_name"`
+	Namespace   string `json:"namespace"`
+	Status      string `json:"status"`
+	URL         string `json:"url"` // Full URL to access the application
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+	// Legacy fields for backward compatibility
+	ChartName    string `json:"chart_name,omitempty"`
+	ChartVersion string `json:"chart_version,omitempty"`
 }
