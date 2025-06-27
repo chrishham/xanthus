@@ -1,0 +1,214 @@
+{
+  "zones": {
+    "list_zones": {
+      "result": [
+        {
+          "id": "abc123def456",
+          "name": "xanthus-test.com",
+          "status": "active",
+          "type": "full",
+          "development_mode": 0,
+          "name_servers": [
+            "alice.ns.cloudflare.com",
+            "bob.ns.cloudflare.com"
+          ],
+          "created_on": "2025-01-01T00:00:00.000000Z",
+          "modified_on": "2025-01-01T12:00:00.000000Z"
+        }
+      ],
+      "success": true,
+      "errors": [],
+      "messages": []
+    }
+  },
+  "dns_records": {
+    "list_dns_records": {
+      "result": [
+        {
+          "id": "dns123abc456",
+          "type": "A",
+          "name": "test.xanthus-test.com",
+          "content": "192.168.1.100",
+          "ttl": 300,
+          "proxied": false,
+          "created_on": "2025-01-01T10:00:00.000000Z",
+          "modified_on": "2025-01-01T10:00:00.000000Z"
+        }
+      ],
+      "success": true,
+      "errors": [],
+      "messages": []
+    },
+    "create_dns_record": {
+      "result": {
+        "id": "dns789xyz012",
+        "type": "A",
+        "name": "e2e-test.xanthus-test.com",
+        "content": "192.168.1.101",
+        "ttl": 300,
+        "proxied": false,
+        "created_on": "2025-01-01T10:30:00.000000Z",
+        "modified_on": "2025-01-01T10:30:00.000000Z"
+      },
+      "success": true,
+      "errors": [],
+      "messages": []
+    }
+  },
+  "ssl": {
+    "ssl_settings": {
+      "get_ssl_setting": {
+        "result": {
+          "id": "ssl_mode",
+          "value": "strict",
+          "editable": true,
+          "modified_on": "2025-01-01T10:00:00.000000Z"
+        },
+        "success": true,
+        "errors": [],
+        "messages": []
+      },
+      "update_ssl_setting": {
+        "result": {
+          "id": "ssl_mode",
+          "value": "strict",
+          "editable": true,
+          "modified_on": "2025-01-01T10:35:00.000000Z"
+        },
+        "success": true,
+        "errors": [],
+        "messages": []
+      }
+    },
+    "origin_certificates": {
+      "create_origin_certificate": {
+        "result": {
+          "id": "cert123origin456",
+          "certificate": "-----BEGIN CERTIFICATE-----\nMIIEXXXXXX...\n-----END CERTIFICATE-----",
+          "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----",
+          "expires_on": "2025-12-31T23:59:59.000000Z",
+          "hostnames": [
+            "*.e2e.xanthus-test.com",
+            "e2e.xanthus-test.com"
+          ],
+          "created_on": "2025-01-01T10:40:00.000000Z"
+        },
+        "success": true,
+        "errors": [],
+        "messages": []
+      }
+    }
+  },
+  "kv": {
+    "namespaces": {
+      "list_namespaces": {
+        "result": [
+          {
+            "id": "kv123namespace456",
+            "title": "xanthus-e2e-test",
+            "supports_url_encoding": true
+          }
+        ],
+        "success": true,
+        "errors": [],
+        "messages": []
+      },
+      "create_namespace": {
+        "result": {
+          "id": "kv789namespace012",
+          "title": "xanthus-e2e-test-new",
+          "supports_url_encoding": true
+        },
+        "success": true,
+        "errors": [],
+        "messages": []
+      }
+    },
+    "key_value": {
+      "put_value": {
+        "success": true,
+        "errors": [],
+        "messages": []
+      },
+      "get_value": {
+        "result": {
+          "vps_config": {
+            "name": "test-vps-e2e-001",
+            "server_id": "12345",
+            "ip": "192.168.1.100",
+            "created_at": "2025-01-01T10:00:00Z",
+            "server_type": "cx11",
+            "location": "nbg1",
+            "status": "running"
+          }
+        },
+        "success": true,
+        "errors": [],
+        "messages": []
+      }
+    }
+  },
+  "page_rules": {
+    "create_page_rule": {
+      "result": {
+        "id": "rule123page456",
+        "targets": [
+          {
+            "target": "url",
+            "constraint": {
+              "operator": "matches",
+              "value": "*.e2e.xanthus-test.com/*"
+            }
+          }
+        ],
+        "actions": [
+          {
+            "id": "always_use_https"
+          }
+        ],
+        "priority": 1,
+        "status": "active",
+        "created_on": "2025-01-01T10:45:00.000000Z",
+        "modified_on": "2025-01-01T10:45:00.000000Z"
+      },
+      "success": true,
+      "errors": [],
+      "messages": []
+    }
+  },
+  "errors": {
+    "invalid_token": {
+      "success": false,
+      "errors": [
+        {
+          "code": 9103,
+          "message": "Unknown X-Auth-Email or X-Auth-Key"
+        }
+      ],
+      "messages": [],
+      "result": null
+    },
+    "rate_limit": {
+      "success": false,
+      "errors": [
+        {
+          "code": 10013,
+          "message": "Rate limit exceeded"
+        }
+      ],
+      "messages": [],
+      "result": null
+    },
+    "zone_not_found": {
+      "success": false,
+      "errors": [
+        {
+          "code": 1001,
+          "message": "DNS zone not found"
+        }
+      ],
+      "messages": [],
+      "result": null
+    }
+  }
+}
