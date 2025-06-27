@@ -1,8 +1,17 @@
 ## VPS
 argocd admin initial-password -n argocd
-download approriate binaries for argocd depending on vps architecture
 
-streamline @internal/services/cloudinit.yaml with @internal/handlers/vps.go, is there anything that can be moved to the cloudinit?
+
+ArgoCD: View Credentials 
+ArgoCD Not Ready
+ArgoCD credentials are not yet available. This could mean:
+
+    The server is still initializing
+    ArgoCD installation is in progress
+    No domain was configured for this VPS
+
+Please wait a few minutes and try again.
+
 
 give the user the initial password for argocd :
 
