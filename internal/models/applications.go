@@ -42,27 +42,25 @@ func GetPredefinedApplications() []PredefinedApplication {
 			Category:    "Development",
 			Version:     "4.20.0",
 			HelmChart: HelmChartConfig{
-				Repository: "https://helm.coder.com/v2",
-				Chart:      "code-server",
-				Version:    "3.0.0",
+				Repository: "https://github.com/coder/code-server",
+				Chart:      "ci/helm-chart",
+				Version:    "main",
 				Namespace:  "code-server",
 				Values: map[string]interface{}{
 					// Basic configuration
 					"image.repository": "codercom/code-server",
-					"image.tag":        "4.20.0",
+					"image.tag":        "4.101.1",
 					"service.type":     "ClusterIP",
 					"service.port":     8080,
 
 					// Ingress configuration with Traefik
-					"ingress.enabled": true,
+					"ingress.enabled":                                                            true,
 					"ingress.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.entrypoints": "websecure",
 					"ingress.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.tls":         "true",
-					"ingress.annotations.cert-manager\\.io/cluster-issuer":                         "letsencrypt-prod",
-					"ingress.hosts[0].host":              "{{SUBDOMAIN}}.{{DOMAIN}}",
-					"ingress.hosts[0].paths[0].path":     "/",
-					"ingress.hosts[0].paths[0].pathType": "Prefix",
-					"ingress.tls[0].secretName":          "{{SUBDOMAIN}}-{{DOMAIN}}-tls",
-					"ingress.tls[0].hosts[0]":            "{{SUBDOMAIN}}.{{DOMAIN}}",
+					"ingress.hosts[0].host":    "{{SUBDOMAIN}}.{{DOMAIN}}",
+					"ingress.hosts[0].paths[0]": "/",
+					"ingress.tls[0].secretName": "{{DOMAIN}}-tls",
+					"ingress.tls[0].hosts[0]":   "{{SUBDOMAIN}}.{{DOMAIN}}",
 
 					// Persistence
 					"persistence.enabled": true,
@@ -81,14 +79,6 @@ func GetPredefinedApplications() []PredefinedApplication {
 
 					// Authentication disabled for simplicity
 					"extraArgs[0]": "--auth=none",
-
-					// Docker integration
-					"extraEnvs[0].name":              "DOCKER_HOST",
-					"extraEnvs[0].value":             "unix:///var/run/docker.sock",
-					"extraVolumeMounts[0].name":      "docker-sock",
-					"extraVolumeMounts[0].mountPath": "/var/run/docker.sock",
-					"extraVolumes[0].name":           "docker-sock",
-					"extraVolumes[0].hostPath.path":  "/var/run/docker.sock",
 				},
 			},
 			DefaultPort: 8080,

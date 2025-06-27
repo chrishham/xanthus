@@ -120,7 +120,8 @@ func (h *ApplicationsHandler) HandleApplicationsPrerequisites(c *gin.Context) {
 	// Get managed VPS from KV (those with VPS config)
 	vpsConfigs, err := kvService.ListVPSConfigs(token, accountID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get VPS configs"})
+		log.Printf("Error getting VPS configs: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to get VPS configs: %v", err)})
 		return
 	}
 
@@ -434,7 +435,6 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		return fmt.Errorf("failed to get SSH private key: %v", err)
 	}
 
-	// First, add the Helm repository if needed
 	sshService := services.NewSSHService()
 	vpsID, _ := strconv.Atoi(data.VPS)
 	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, vpsID)
@@ -442,10 +442,11 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		return fmt.Errorf("failed to connect to VPS: %v", err)
 	}
 
-	// Add Helm repository for Code Server
-	repoName := "coder"
-	if err := sshService.AddHelmRepository(conn, repoName, predefinedApp.HelmChart.Repository); err != nil {
-		log.Printf("Warning: Failed to add Helm repository (may already exist): %v", err)
+	// Clone GitHub repository for code-server chart
+	repoDir := "/tmp/code-server-chart"
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, predefinedApp.HelmChart.Repository, repoDir))
+	if err != nil {
+		return fmt.Errorf("failed to clone chart repository: %v", err)
 	}
 
 	// Prepare Helm values, replacing placeholders
@@ -460,7 +461,7 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 
 	// Install Helm chart
 	releaseName := fmt.Sprintf("%s-%s", data.Subdomain, appID)
-	chartName := fmt.Sprintf("%s/%s", repoName, predefinedApp.HelmChart.Chart)
+	chartName := fmt.Sprintf("%s/%s", repoDir, predefinedApp.HelmChart.Chart)
 
 	err = helmService.InstallChart(
 		vpsConfig.PublicIPv4,
