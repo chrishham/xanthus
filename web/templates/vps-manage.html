@@ -15,23 +15,7 @@
     <script src="/static/js/vendor/sweetalert2.min.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
-    <!-- Navigation -->
-    <nav class="bg-white shadow-md border-b">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex items-center">
-                    <img src="/static/icons/logo.png" alt="Xanthus Logo" class="w-8 h-8 mr-3">
-                    <h1 class="text-xl font-semibold text-gray-900">Xanthus</h1>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/main" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
-                    <a href="/dns" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">DNS Config</a>
-                    <a href="/vps" class="text-blue-600 bg-blue-50 px-3 py-2 rounded-md text-sm font-medium">VPS Management</a>
-                    <a href="/logout" class="text-red-600 hover:text-red-800 px-3 py-2 rounded-md text-sm font-medium">Logout</a>
-                </div>
-            </div>
-        </div>
-    </nav>
+    {{template "navbar.html" .}}
 
     <div x-data="vpsManagement()" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- Loading Modal -->

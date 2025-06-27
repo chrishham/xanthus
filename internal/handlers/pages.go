@@ -19,7 +19,9 @@ func NewPagesHandler() *PagesHandler {
 
 // HandleMainPage renders the main application page
 func (h *PagesHandler) HandleMainPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "main.html", nil)
+	c.HTML(http.StatusOK, "main.html", gin.H{
+		"ActivePage": "main",
+	})
 }
 
 // HandleSetupPage renders the setup page with existing Hetzner key info

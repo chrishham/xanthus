@@ -71,7 +71,8 @@ func (h *VPSHandler) HandleVPSManagePage(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "vps-manage.html", gin.H{
-		"Servers": servers,
+		"Servers":    servers,
+		"ActivePage": "vps",
 	})
 }
 
@@ -366,7 +367,9 @@ func (h *VPSHandler) HandleVPSCreatePage(c *gin.Context) {
 		c.Redirect(http.StatusTemporaryRedirect, "/login")
 		return
 	}
-	c.HTML(http.StatusOK, "vps-create.html", nil)
+	c.HTML(http.StatusOK, "vps-create.html", gin.H{
+		"ActivePage": "vps",
+	})
 }
 
 // HandleVPSServerOptions fetches available server types and locations with filtering/sorting

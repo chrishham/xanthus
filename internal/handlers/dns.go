@@ -76,7 +76,8 @@ func (h *DNSHandler) HandleDNSConfigPage(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "dns-config.html", gin.H{
-		"Domains": domains,
+		"Domains":    domains,
+		"ActivePage": "dns",
 	})
 }
 

@@ -49,6 +49,7 @@ func (h *ApplicationsHandler) HandleApplicationsPage(c *gin.Context) {
 
 	c.HTML(http.StatusOK, "applications.html", gin.H{
 		"Applications": applications,
+		"ActivePage":   "applications",
 	})
 }
 
