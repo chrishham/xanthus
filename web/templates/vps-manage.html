@@ -783,32 +783,61 @@
                                             ${showAutoRefresh ? '<div class="text-xs text-blue-600 mt-2">💡 This dialog will auto-refresh every 5 seconds while setup is in progress</div>' : ''}
                                         </div>
                                         
-                                        <div class="grid grid-cols-2 gap-2 mb-4">
-                                            <div><strong>SSH:</strong> ${data.reachable ? '✅ Connected' : '❌ Failed'}</div>
-                                            <div><strong>K3s:</strong> ${k3sStatus}</div>
+                                        <div class="grid grid-cols-2 gap-4 mb-6">
+                                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                                <span class="font-medium text-gray-700">SSH Status:</span>
+                                                <span class="font-semibold">${data.reachable ? '✅ Connected' : '❌ Failed'}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                                <span class="font-medium text-gray-700">K3s Service:</span>
+                                                <span class="font-semibold">${k3sStatus}</span>
+                                            </div>
                                         </div>
                                         
                                         <div class="mb-4">
-                                            <h4 class="font-semibold mb-2">🖥️ System Load:</h4>
-                                            <pre class="text-xs bg-gray-100 p-2 rounded">${data.system_load?.uptime || 'N/A'}</pre>
+                                            <h4 class="font-semibold mb-3 flex items-center">
+                                                <span class="mr-2">🖥️</span>
+                                                System Load
+                                            </h4>
+                                            <div class="bg-gray-50 p-3 rounded-lg border">
+                                                <pre class="text-xs font-mono text-gray-700 whitespace-pre overflow-x-auto leading-relaxed">${data.system_load?.uptime || 'N/A'}</pre>
+                                            </div>
                                         </div>
                                         
                                         <div class="mb-4">
-                                            <h4 class="font-semibold mb-2">💾 Memory:</h4>
-                                            <pre class="text-xs bg-gray-100 p-2 rounded">${data.system_load?.memory || 'N/A'}</pre>
+                                            <h4 class="font-semibold mb-3 flex items-center">
+                                                <span class="mr-2">💾</span>
+                                                Memory Usage
+                                            </h4>
+                                            <div class="bg-gray-50 p-3 rounded-lg border">
+                                                ${formatMemoryTable(data.system_load?.memory)}
+                                            </div>
                                         </div>
                                         
                                         <div class="mb-4">
-                                            <h4 class="font-semibold mb-2">💿 Disk Usage:</h4>
-                                            <pre class="text-xs bg-gray-100 p-2 rounded">${data.disk_usage?.root || 'N/A'}</pre>
+                                            <h4 class="font-semibold mb-3 flex items-center">
+                                                <span class="mr-2">💿</span>
+                                                Disk Usage
+                                            </h4>
+                                            <div class="bg-gray-50 p-3 rounded-lg border">
+                                                ${formatDiskTable(data.disk_usage?.root)}
+                                            </div>
                                         </div>
                                         
                                         <div>
-                                            <h4 class="font-semibold mb-2">🔧 Services:</h4>
-                                            <div class="text-xs">
-                                                ${Object.entries(data.services || {}).map(([service, status]) => 
-                                                    `<div>${service}: ${status === 'active' ? '✅' : '❌'} ${status}</div>`
-                                                ).join('')}
+                                            <h4 class="font-semibold mb-3 flex items-center">
+                                                <span class="mr-2">🔧</span>
+                                                Services Status
+                                            </h4>
+                                            <div class="bg-gray-50 p-3 rounded-lg border">
+                                                <div class="space-y-2">
+                                                    ${Object.entries(data.services || {}).map(([service, status]) => 
+                                                        `<div class="flex items-center justify-between text-sm">
+                                                            <span class="font-medium text-gray-700">${service}:</span>
+                                                            <span class="font-semibold">${status === 'active' ? '✅ Active' : '❌ ' + status}</span>
+                                                        </div>`
+                                                    ).join('')}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1238,6 +1267,147 @@
                     this.stopAutoRefresh();
                 }
             }
+        }
+
+        // Helper function to format memory table output
+        function formatMemoryTable(memoryOutput) {
+            if (!memoryOutput || memoryOutput === 'N/A') {
+                return '<div class="text-xs text-gray-500">No memory data available</div>';
+            }
+
+            const lines = memoryOutput.trim().split('\n');
+            if (lines.length < 2) {
+                return `<pre class="text-xs font-mono text-gray-700">${memoryOutput}</pre>`;
+            }
+
+            // Parse header and data lines
+            const headerLine = lines[0];
+            const dataLines = lines.slice(1);
+
+            // Expected headers for free -h output
+            const expectedHeaders = ['total', 'used', 'free', 'shared', 'buff/cache', 'available'];
+            const headers = headerLine.trim().split(/\s+/);
+            
+            let tableHTML = '<table class="w-full text-xs">';
+            
+            // Add header row
+            tableHTML += '<thead><tr class="border-b border-gray-300">';
+            headers.forEach(header => {
+                tableHTML += `<th class="text-left py-1 px-2 font-semibold text-gray-700">${header}</th>`;
+            });
+            tableHTML += '</tr></thead>';
+
+            // Add data rows
+            tableHTML += '<tbody>';
+            dataLines.forEach(line => {
+                const cells = line.trim().split(/\s+/);
+                if (cells.length > 0) {
+                    tableHTML += '<tr class="border-b border-gray-200">';
+                    
+                    const rowName = cells[0]; // "Mem:" or "Swap:"
+                    
+                    // For each expected column
+                    for (let i = 0; i < headers.length; i++) {
+                        const isFirstCol = i === 0;
+                        const cellClass = isFirstCol ? 'font-medium text-gray-800' : 'text-gray-600';
+                        
+                        if (i < cells.length) {
+                            // We have data for this column
+                            tableHTML += `<td class="py-1 px-2 ${cellClass}">${cells[i]}</td>`;
+                        } else {
+                            // No data for this column
+                            if (rowName === 'Swap:' && (headers[i] === 'shared' || headers[i] === 'buff/cache')) {
+                                // Swap doesn't have shared or buff/cache
+                                tableHTML += '<td class="py-1 px-2 text-gray-400 text-center">-</td>';
+                            } else {
+                                // Missing data
+                                tableHTML += '<td class="py-1 px-2 text-gray-400 text-center">-</td>';
+                            }
+                        }
+                    }
+                    
+                    tableHTML += '</tr>';
+                }
+            });
+            tableHTML += '</tbody></table>';
+
+            return tableHTML;
+        }
+
+        // Helper function to format disk table output  
+        function formatDiskTable(diskOutput) {
+            if (!diskOutput || diskOutput === 'N/A') {
+                return '<div class="text-xs text-gray-500">No disk data available</div>';
+            }
+
+            const lines = diskOutput.trim().split('\n');
+            if (lines.length < 2) {
+                return `<pre class="text-xs font-mono text-gray-700">${diskOutput}</pre>`;
+            }
+
+            // Parse header and data lines
+            const headerLine = lines[0];
+            const dataLines = lines.slice(1);
+
+            // Handle "Mounted on" as a single column
+            let headers;
+            if (headerLine.includes('Mounted on')) {
+                // Split carefully to keep "Mounted on" together
+                const parts = headerLine.trim().split(/\s+/);
+                const mountedIndex = parts.findIndex(part => part === 'Mounted');
+                if (mountedIndex !== -1 && parts[mountedIndex + 1] === 'on') {
+                    headers = [...parts.slice(0, mountedIndex), 'Mounted on', ...parts.slice(mountedIndex + 2)];
+                } else {
+                    headers = parts;
+                }
+            } else {
+                headers = headerLine.trim().split(/\s+/);
+            }
+            
+            let tableHTML = '<table class="w-full text-xs">';
+            
+            // Add header row
+            tableHTML += '<thead><tr class="border-b border-gray-300">';
+            headers.forEach(header => {
+                tableHTML += `<th class="text-left py-1 px-2 font-semibold text-gray-700">${header}</th>`;
+            });
+            tableHTML += '</tr></thead>';
+
+            // Add data rows
+            tableHTML += '<tbody>';
+            dataLines.forEach(line => {
+                const cells = line.trim().split(/\s+/);
+                if (cells.length > 0) {
+                    tableHTML += '<tr class="border-b border-gray-200">';
+                    
+                    // Handle cells to match header count
+                    let processedCells = [];
+                    if (headers.includes('Mounted on') && cells.length >= 6) {
+                        // For disk output, typically: Filesystem Size Used Avail Use% MountPoint
+                        processedCells = [
+                            cells[0], // Filesystem
+                            cells[1], // Size
+                            cells[2], // Used
+                            cells[3], // Avail
+                            cells[4], // Use%
+                            cells.slice(5).join(' ') // Mounted on (join remaining parts)
+                        ];
+                    } else {
+                        processedCells = cells;
+                    }
+
+                    processedCells.forEach((cell, index) => {
+                        const isFirstCol = index === 0;
+                        const cellClass = isFirstCol ? 'font-medium text-gray-800' : 'text-gray-600';
+                        tableHTML += `<td class="py-1 px-2 ${cellClass}">${cell}</td>`;
+                    });
+                    
+                    tableHTML += '</tr>';
+                }
+            });
+            tableHTML += '</tbody></table>';
+
+            return tableHTML;
         }
     </script>
 </body>
