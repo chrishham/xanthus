@@ -38,47 +38,59 @@
         <div class="mb-8">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
-                    <!-- Step 1: Hetzner Key -->
+                    <!-- Step 1: Domain Check -->
                     <div class="flex items-center" :class="currentStep >= 1 ? 'text-blue-600' : 'text-gray-400'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 1 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
                             <span x-show="currentStep > 1" class="text-sm">✓</span>
                             <span x-show="currentStep <= 1" class="text-sm">1</span>
                         </div>
-                        <span class="ml-2 text-sm font-medium">Hetzner API</span>
+                        <span class="ml-2 text-sm font-medium">Domain</span>
                     </div>
                     
                     <div class="flex-1 h-0.5" :class="currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-300'"></div>
                     
-                    <!-- Step 2: Location -->
+                    <!-- Step 2: Hetzner Key -->
                     <div class="flex items-center" :class="currentStep >= 2 ? 'text-blue-600' : 'text-gray-400'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 2 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
                             <span x-show="currentStep > 2" class="text-sm">✓</span>
                             <span x-show="currentStep <= 2" class="text-sm">2</span>
                         </div>
-                        <span class="ml-2 text-sm font-medium">Location</span>
+                        <span class="ml-2 text-sm font-medium">Hetzner API</span>
                     </div>
                     
                     <div class="flex-1 h-0.5" :class="currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-300'"></div>
                     
-                    <!-- Step 3: Server Type -->
+                    <!-- Step 3: Location -->
                     <div class="flex items-center" :class="currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 3 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
                             <span x-show="currentStep > 3" class="text-sm">✓</span>
                             <span x-show="currentStep <= 3" class="text-sm">3</span>
                         </div>
-                        <span class="ml-2 text-sm font-medium">Server Type</span>
+                        <span class="ml-2 text-sm font-medium">Location</span>
                     </div>
                     
                     <div class="flex-1 h-0.5" :class="currentStep >= 4 ? 'bg-blue-600' : 'bg-gray-300'"></div>
                     
-                    <!-- Step 4: Review -->
+                    <!-- Step 4: Server Type -->
                     <div class="flex items-center" :class="currentStep >= 4 ? 'text-blue-600' : 'text-gray-400'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 4 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
-                            <span class="text-sm">4</span>
+                            <span x-show="currentStep > 4" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 4" class="text-sm">4</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Server Type</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 5 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+                    
+                    <!-- Step 5: Review -->
+                    <div class="flex items-center" :class="currentStep >= 5 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 5 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span class="text-sm">5</span>
                         </div>
                         <span class="ml-2 text-sm font-medium">Review</span>
                     </div>
@@ -92,9 +104,77 @@
             <p class="mt-2 text-gray-600" x-text="loadingMessage">Loading...</p>
         </div>
 
-        <!-- Step 1: Hetzner API Key -->
+        <!-- Step 1: Domain Selection -->
         <div x-show="currentStep === 1 && !loading" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 1: Hetzner Cloud API Key</h3>
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 1: Select Domain</h3>
+            
+            <div x-show="!hasManagedDomains && !checkingDomains" class="space-y-4">
+                <div class="p-4 bg-red-50 border border-red-200 rounded-md">
+                    <div class="flex items-center">
+                        <svg class="h-5 w-5 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span class="text-red-800 font-medium">No Managed Domains Found</span>
+                    </div>
+                    <p class="text-red-700 text-sm mt-1">You need to have at least one managed domain before creating a VPS. The VPS will be linked to your selected domain for DNS and SSL configuration.</p>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <a href="/dns" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Manage Domains
+                    </a>
+                    <button @click="checkManagedDomains()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <div x-show="hasManagedDomains && !checkingDomains" class="space-y-4">
+                <p class="text-gray-600 mb-6">Select a domain that will be linked to your VPS for DNS and SSL configuration. The VPS will automatically be configured with SSL certificates for this domain.</p>
+                
+                <div class="space-y-3">
+                    <template x-for="domain in managedDomains" :key="domain.name">
+                        <div @click="selectDomain(domain)" 
+                             class="border-2 rounded-lg p-4 cursor-pointer transition-colors"
+                             :class="selectedDomain?.name === domain.name ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                            <div class="flex items-center justify-between">
+                                <div class="flex-1">
+                                    <h4 class="font-medium text-gray-900" x-text="domain.name"></h4>
+                                    <p class="text-sm text-gray-500" x-text="domain.status === 'active' ? 'Active' : domain.status"></p>
+                                </div>
+                                <div x-show="selectedDomain?.name === domain.name" class="text-blue-500">
+                                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                
+                <div class="flex justify-between mt-6">
+                    <button @click="checkManagedDomains()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                        Refresh Domains
+                    </button>
+                    <button @click="nextStep()" 
+                            :disabled="!selectedDomain"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                        Continue
+                    </button>
+                </div>
+            </div>
+            
+            <div x-show="checkingDomains" class="text-center py-8">
+                <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <p class="mt-2 text-gray-600">Checking managed domains...</p>
+            </div>
+        </div>
+
+        <!-- Step 2: Hetzner API Key -->
+        <div x-show="currentStep === 2 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: Hetzner Cloud API Key</h3>
             
             <div x-show="!existingKey" class="space-y-4">
                 <p class="text-gray-600">Enter your Hetzner Cloud API key to manage VPS instances. You can create one in your Hetzner Cloud Console under "Security" → "API Tokens".</p>
@@ -142,9 +222,9 @@
             </div>
         </div>
 
-        <!-- Step 2: Location Selection -->
-        <div x-show="currentStep === 2 && !loading" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: Select Location</h3>
+        <!-- Step 3: Location Selection -->
+        <div x-show="currentStep === 3 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Select Location</h3>
             <p class="text-gray-600 mb-6">Choose the datacenter location for your VPS. Select based on your target audience location for optimal performance.</p>
             
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -179,9 +259,9 @@
             </div>
         </div>
 
-        <!-- Step 3: Server Type Selection -->
-        <div x-show="currentStep === 3 && !loading" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Choose Server Type</h3>
+        <!-- Step 4: Server Type Selection -->
+        <div x-show="currentStep === 4 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 4: Choose Server Type</h3>
             <p class="text-gray-600 mb-4">Select the server configuration based on your needs. All servers are shared vCPU instances for cost efficiency.</p>
             
             <!-- Filter and Sort Controls -->
@@ -269,9 +349,9 @@
             </div>
         </div>
 
-        <!-- Step 4: Review and Create -->
-        <div x-show="currentStep === 4 && !loading" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 4: Review Configuration</h3>
+        <!-- Step 5: Review and Create -->
+        <div x-show="currentStep === 5 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 5: Review Configuration</h3>
             <p class="text-gray-600 mb-6">Review your VPS configuration before creation. The server will be automatically configured with K3s and SSL certificates.</p>
             
             <div class="space-y-4 mb-6">
@@ -308,6 +388,10 @@
                     <div class="bg-gray-50 p-4 rounded-lg">
                         <h4 class="font-medium text-gray-900 mb-3">Configuration Summary</h4>
                         <dl class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Domain:</dt>
+                                <dd class="font-medium" x-text="selectedDomain?.name"></dd>
+                            </div>
                             <div class="flex justify-between">
                                 <dt class="text-gray-500">Location:</dt>
                                 <dd class="font-medium" x-text="selectedLocation?.description"></dd>
@@ -409,22 +493,28 @@
                 validatingKey: false,
                 creating: false,
                 
-                // Step 1: Hetzner Key
+                // Step 1: Domain Selection
+                managedDomains: [],
+                selectedDomain: null,
+                hasManagedDomains: false,
+                checkingDomains: false,
+                
+                // Step 2: Hetzner Key
                 hetznerKey: '',
                 existingKey: '',
                 
-                // Step 2: Location
+                // Step 3: Location
                 locations: [],
                 selectedLocation: null,
                 
-                // Step 3: Server Type
+                // Step 4: Server Type
                 serverTypes: [],
                 filteredServerTypes: [],
                 selectedServerType: null,
                 architectureFilter: '',
                 sortBy: 'price_asc',
                 
-                // Step 4: Review
+                // Step 5: Review
                 serverName: '',
                 nameValidationState: '', // '', 'checking', 'valid', 'invalid'
                 nameValidationMessage: '',
@@ -432,9 +522,32 @@
                 
                 async init() {
                     this.serverName = `xanthus-k3s-${Date.now()}`;
-                    await this.checkExistingKey();
+                    await this.checkManagedDomains();
                     // Validate initial name
                     await this.validateName();
+                },
+                
+                async checkManagedDomains() {
+                    this.checkingDomains = true;
+                    
+                    try {
+                        const response = await fetch('/dns/list');
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.managedDomains = (data.domains || []).filter(domain => domain.managed);
+                            this.hasManagedDomains = this.managedDomains.length > 0;
+                        }
+                    } catch (error) {
+                        console.error('Error checking managed domains:', error);
+                        this.managedDomains = [];
+                        this.hasManagedDomains = false;
+                    } finally {
+                        this.checkingDomains = false;
+                    }
+                },
+                
+                selectDomain(domain) {
+                    this.selectedDomain = domain;
                 },
                 
                 async checkExistingKey() {
@@ -461,7 +574,7 @@
                 },
                 
                 async useExistingKey() {
-                    this.currentStep = 2;
+                    this.currentStep = 3;
                     await this.loadLocations();
                 },
                 
@@ -481,7 +594,7 @@
                         const data = await response.json();
                         
                         if (response.ok) {
-                            this.currentStep = 2;
+                            this.currentStep = 3;
                             await this.loadLocations();
                         } else {
                             Swal.fire('Invalid Key', data.error || 'The Hetzner API key is invalid', 'error');
@@ -602,11 +715,14 @@
                 },
                 
                 async nextStep() {
-                    if (this.currentStep === 2 && this.selectedLocation) {
-                        this.currentStep = 3;
-                        await this.loadServerTypes();
-                    } else if (this.currentStep === 3 && this.selectedServerType) {
+                    if (this.currentStep === 1 && this.selectedDomain) {
+                        this.currentStep = 2;
+                        await this.checkExistingKey();
+                    } else if (this.currentStep === 3 && this.selectedLocation) {
                         this.currentStep = 4;
+                        await this.loadServerTypes();
+                    } else if (this.currentStep === 4 && this.selectedServerType) {
+                        this.currentStep = 5;
                     }
                 },
                 
@@ -689,7 +805,7 @@
                 },
                 
                 async createVPS() {
-                    if (!this.serverName || !this.selectedLocation || !this.selectedServerType || this.nameValidationState !== 'valid') return;
+                    if (!this.serverName || !this.selectedDomain || !this.selectedLocation || !this.selectedServerType || this.nameValidationState !== 'valid') return;
                     
                     this.creating = true;
                     try {
@@ -698,7 +814,7 @@
                             headers: {
                                 'Content-Type': 'application/x-www-form-urlencoded',
                             },
-                            body: `name=${encodeURIComponent(this.serverName)}&location=${encodeURIComponent(this.selectedLocation.name)}&server_type=${encodeURIComponent(this.selectedServerType.name)}`
+                            body: `name=${encodeURIComponent(this.serverName)}&domain=${encodeURIComponent(this.selectedDomain.name)}&location=${encodeURIComponent(this.selectedLocation.name)}&server_type=${encodeURIComponent(this.selectedServerType.name)}`
                         });
                         
                         const data = await response.json();

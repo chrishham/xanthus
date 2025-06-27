@@ -270,6 +270,7 @@ func (kvs *KVService) DeleteDomainSSLConfig(token, accountID, domain string) err
 type VPSConfig struct {
 	ServerID      int     `json:"server_id"`
 	Name          string  `json:"name"`
+	Domain        string  `json:"domain"` // Associated domain for DNS/SSL
 	ServerType    string  `json:"server_type"`
 	Location      string  `json:"location"`
 	PublicIPv4    string  `json:"public_ipv4"`

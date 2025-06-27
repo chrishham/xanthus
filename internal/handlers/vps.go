@@ -132,11 +132,16 @@ func (h *VPSHandler) HandleVPSCreate(c *gin.Context) {
 	}
 
 	name := c.PostForm("name")
+	domain := c.PostForm("domain")
 	location := c.PostForm("location")
 	serverType := c.PostForm("server_type")
 
 	if name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Server name is required"})
+		return
+	}
+	if domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Domain is required"})
 		return
 	}
 	if location == "" {
@@ -283,10 +288,64 @@ func (h *VPSHandler) HandleVPSCreate(c *gin.Context) {
 		// Don't fail the creation, just log the error
 	}
 
+	// Configure DNS records for the VPS
+	log.Printf("🔧 Starting DNS configuration for domain: %s, VPS IP: %s", domain, server.PublicNet.IPv4.IP)
+	cfService = services.NewCloudflareService()
+	if err := cfService.ConfigureDNSForVPS(token, domain, server.PublicNet.IPv4.IP); err != nil {
+		log.Printf("❌ Failed to configure DNS for domain %s: %v", domain, err)
+		// Don't fail the creation, but log the warning
+	} else {
+		log.Printf("✅ DNS configured for domain %s pointing to %s", domain, server.PublicNet.IPv4.IP)
+	}
+
+	// Configure TLS certificates and ArgoCD ingress (async operation)
+	go func() {
+		// Wait a bit for the server to be fully ready
+		time.Sleep(2 * time.Minute)
+
+		// Get domain SSL configuration
+		domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain)
+		if err != nil {
+			log.Printf("Warning: Could not get SSL config for domain %s: %v", domain, err)
+			return
+		}
+
+		// Connect to VPS via SSH
+		sshService := services.NewSSHService()
+		conn, err := sshService.ConnectToVPS(server.PublicNet.IPv4.IP, "root", csrConfig.PrivateKey)
+		if err != nil {
+			log.Printf("Warning: Could not connect to VPS for TLS setup: %v", err)
+			return
+		}
+		defer conn.Close()
+
+		// Create TLS secret for the domain
+		if err := sshService.CreateTLSSecret(conn, domain, domainConfig.Certificate, domainConfig.PrivateKey); err != nil {
+			log.Printf("Warning: Failed to create TLS secret for domain %s: %v", domain, err)
+		} else {
+			log.Printf("✅ TLS secret created for domain %s", domain)
+		}
+
+		// Create ArgoCD ingress
+		if err := sshService.CreateArgoCDIngress(conn, domain); err != nil {
+			log.Printf("Warning: Failed to create ArgoCD ingress for domain %s: %v", domain, err)
+		} else {
+			log.Printf("✅ ArgoCD ingress configured for https://argocd.%s", domain)
+		}
+	}()
+
+	// Update VPS config to include domain
+	vpsConfig.Domain = domain
+
+	// Update stored VPS configuration with domain
+	if err := kvService.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
+		log.Printf("Warning: Error updating VPS config with domain: %v", err)
+	}
+
 	log.Printf("✅ Created server: %s (ID: %d) with IPv4: %s", server.Name, server.ID, server.PublicNet.IPv4.IP)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Server created successfully with K3s, Helm, and ArgoCD",
+		"message": "Server created successfully with K3s, Helm, ArgoCD, and DNS configuration",
 		"server":  server,
 		"config":  vpsConfig,
 	})

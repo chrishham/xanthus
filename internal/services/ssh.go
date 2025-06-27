@@ -712,3 +712,76 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// CreateTLSSecret creates a Kubernetes TLS secret using Cloudflare certificates
+func (ss *SSHService) CreateTLSSecret(conn *SSHConnection, domain, certificate, privateKey string) error {
+	// Generate secret name based on domain
+	secretName := strings.ReplaceAll(domain, ".", "-") + "-cloudflare-tls"
+
+	// Write certificate to temporary file
+	certPath := fmt.Sprintf("/tmp/%s-cert.crt", secretName)
+	certCommand := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", certPath, certificate)
+	if result, err := ss.ExecuteCommand(conn, certCommand); err != nil || result.ExitCode != 0 {
+		return fmt.Errorf("failed to write certificate: %v", err)
+	}
+
+	// Write private key to temporary file
+	keyPath := fmt.Sprintf("/tmp/%s-key.key", secretName)
+	keyCommand := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", keyPath, privateKey)
+	if result, err := ss.ExecuteCommand(conn, keyCommand); err != nil || result.ExitCode != 0 {
+		return fmt.Errorf("failed to write private key: %v", err)
+	}
+
+	// Delete existing secret if it exists (ignore errors)
+	deleteCommand := fmt.Sprintf("kubectl delete secret %s -n default --ignore-not-found=true", secretName)
+	ss.ExecuteCommand(conn, deleteCommand)
+
+	// Create the TLS secret
+	createSecretCommand := fmt.Sprintf("kubectl create secret tls %s --cert=%s --key=%s -n default",
+		secretName, certPath, keyPath)
+	if result, err := ss.ExecuteCommand(conn, createSecretCommand); err != nil || result.ExitCode != 0 {
+		return fmt.Errorf("failed to create TLS secret: %s", result.Output)
+	}
+
+	// Clean up temporary files
+	ss.ExecuteCommand(conn, fmt.Sprintf("rm -f %s %s", certPath, keyPath))
+
+	return nil
+}
+
+// CreateArgoCDIngress creates an ingress configuration for ArgoCD
+func (ss *SSHService) CreateArgoCDIngress(conn *SSHConnection, domain string) error {
+	secretName := strings.ReplaceAll(domain, ".", "-") + "-cloudflare-tls"
+	argoCDSubdomain := "argocd." + domain
+
+	ingressManifest := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: %s-argocd-ingress
+  namespace: argocd
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
+spec:
+  ingressClassName: traefik
+  rules:
+  - host: "%s"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: argocd-server
+            port:
+              number: 80
+  tls:
+  - hosts:
+    - "%s"
+    secretName: %s
+`, strings.ReplaceAll(domain, ".", "-"), argoCDSubdomain, argoCDSubdomain, secretName)
+
+	// Deploy the ingress manifest
+	return ss.DeployManifest(conn, ingressManifest, "argocd-ingress")
+}
