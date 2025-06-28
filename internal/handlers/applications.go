@@ -460,7 +460,7 @@ func (h *ApplicationsHandler) HandleApplicationDelete(c *gin.Context) {
 	})
 }
 
-// getApplicationsList retrieves all applications from Cloudflare KV
+// getApplicationsList retrieves all applications from Cloudflare KV with real-time status
 func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]models.Application, error) {
 	kvService := services.NewKVService()
 
@@ -514,6 +514,12 @@ func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]mo
 
 		var app models.Application
 		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
+			// Update application status with real-time Helm status
+			if realTimeStatus, statusErr := h.getRealTimeStatus(token, accountID, &app); statusErr == nil {
+				app.Status = realTimeStatus
+			}
+			// If we can't get real-time status, keep the cached status
+
 			applications = append(applications, app)
 		}
 	}
@@ -1104,4 +1110,47 @@ func (h *ApplicationsHandler) validateCodeServerVersion(version string) (bool, e
 	}
 
 	return false, nil
+}
+
+// getRealTimeStatus fetches the current Helm deployment status for an application
+func (h *ApplicationsHandler) getRealTimeStatus(token, accountID string, app *models.Application) (string, error) {
+	kvService := services.NewKVService()
+	helmService := services.NewHelmService()
+
+	// Get VPS configuration for SSH details
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s", app.VPSID), &vpsConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+
+	// Get SSH private key
+	var privateKeyData map[string]string
+	err = kvService.GetValue(token, accountID, "ssh_private_key", &privateKeyData)
+	if err != nil {
+		return "", fmt.Errorf("failed to get SSH private key: %v", err)
+	}
+
+	privateKey, ok := privateKeyData["private_key"]
+	if !ok {
+		return "", fmt.Errorf("SSH private key not found")
+	}
+
+	// Get real-time Helm status
+	status, err := helmService.GetReleaseStatus(
+		vpsConfig.PublicIPv4,
+		vpsConfig.SSHUser,
+		privateKey,
+		app.Name,      // release name
+		app.Namespace, // namespace
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to get release status: %v", err)
+	}
+
+	return status, nil
 }
