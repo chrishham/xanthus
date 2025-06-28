@@ -62,9 +62,14 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 	if len(values) > 0 {
 		var setArgs []string
 		for key, value := range values {
-			setArgs = append(setArgs, fmt.Sprintf("%s=%s", key, value))
+			// Escape string values that might be interpreted as booleans or numbers
+			if value == "true" || value == "false" {
+				setArgs = append(setArgs, fmt.Sprintf("'%s=\"%s\"'", key, value))
+			} else {
+				setArgs = append(setArgs, fmt.Sprintf("'%s=%s'", key, value))
+			}
 		}
-		helmCmd += " --set " + strings.Join(setArgs, ",")
+		helmCmd += " --set " + strings.Join(setArgs, " --set ")
 	}
 
 	// Execute Helm install
@@ -114,9 +119,14 @@ func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, char
 	if len(values) > 0 {
 		var setArgs []string
 		for key, value := range values {
-			setArgs = append(setArgs, fmt.Sprintf("%s=%s", key, value))
+			// Escape string values that might be interpreted as booleans or numbers
+			if value == "true" || value == "false" {
+				setArgs = append(setArgs, fmt.Sprintf("'%s=\"%s\"'", key, value))
+			} else {
+				setArgs = append(setArgs, fmt.Sprintf("'%s=%s'", key, value))
+			}
 		}
-		helmCmd += " --set " + strings.Join(setArgs, ",")
+		helmCmd += " --set " + strings.Join(setArgs, " --set ")
 	}
 
 	// Execute Helm upgrade

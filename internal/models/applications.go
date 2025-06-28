@@ -57,10 +57,10 @@ func GetPredefinedApplications() []PredefinedApplication {
 					"ingress.enabled":                                                            true,
 					"ingress.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.entrypoints": "websecure",
 					"ingress.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.tls":         "true",
-					"ingress.hosts[0].host":    "{{SUBDOMAIN}}.{{DOMAIN}}",
-					"ingress.hosts[0].paths[0]": "/",
+					"ingress.hosts[0].host":     "{{SUBDOMAIN}}.{{DOMAIN}}",
+					"ingress.hosts[0].paths":    []string{"/"},
 					"ingress.tls[0].secretName": "{{DOMAIN}}-tls",
-					"ingress.tls[0].hosts[0]":   "{{SUBDOMAIN}}.{{DOMAIN}}",
+					"ingress.tls[0].hosts":      []string{"{{SUBDOMAIN}}.{{DOMAIN}}"},
 
 					// Persistence
 					"persistence.enabled": true,

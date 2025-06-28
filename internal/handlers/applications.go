@@ -496,9 +496,21 @@ func (h *ApplicationsHandler) convertValueToString(value interface{}) string {
 		jsonBytes, _ := json.Marshal(v)
 		return string(jsonBytes)
 	case []interface{}:
-		// For arrays, convert to JSON
-		jsonBytes, _ := json.Marshal(v)
-		return string(jsonBytes)
+		// For arrays, convert to Helm --set format: {value1,value2}
+		if len(v) == 0 {
+			return "{}"
+		}
+		var items []string
+		for _, item := range v {
+			items = append(items, fmt.Sprintf("%v", item))
+		}
+		return "{" + strings.Join(items, ",") + "}"
+	case []string:
+		// For string arrays, convert to Helm --set format: {value1,value2}
+		if len(v) == 0 {
+			return "{}"
+		}
+		return "{" + strings.Join(v, ",") + "}"
 	default:
 		return fmt.Sprintf("%v", v)
 	}

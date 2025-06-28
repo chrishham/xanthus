@@ -283,6 +283,7 @@ func (ss *SSHService) ExecuteCommand(conn *SSHConnection, command string) (*Comm
 		} else {
 			result.ExitCode = -1
 		}
+		return result, fmt.Errorf("command failed: %s", err.Error())
 	}
 
 	return result, nil
