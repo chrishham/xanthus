@@ -436,7 +436,7 @@ func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]mo
 		if strings.HasSuffix(key.Name, ":password") {
 			continue
 		}
-		
+
 		var app models.Application
 		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
 			applications = append(applications, app)
@@ -747,7 +747,7 @@ func (h *ApplicationsHandler) retrieveAndStoreCodeServerPassword(token, accountI
 	// Retrieve password from Kubernetes secret
 	// The secret name follows the pattern: {release-name}-code-server
 	secretName := fmt.Sprintf("%s-code-server", releaseName)
-	
+
 	// First, let's check if the secret exists and list available secrets for debugging
 	listCmd := fmt.Sprintf("kubectl get secrets --namespace %s", namespace)
 	listResult, err := sshService.ExecuteCommand(conn, listCmd)
@@ -756,7 +756,7 @@ func (h *ApplicationsHandler) retrieveAndStoreCodeServerPassword(token, accountI
 	} else {
 		log.Printf("Debug: Available secrets in namespace %s: %s", namespace, listResult.Output)
 	}
-	
+
 	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
 	result, err := sshService.ExecuteCommand(conn, cmd)
 	if err != nil {
@@ -843,7 +843,9 @@ func (h *ApplicationsHandler) updateCodeServerPassword(token, accountID, appID, 
 	}
 
 	// Restart the code-server deployment to pick up the new password
-	restartCmd := fmt.Sprintf("kubectl rollout restart deployment --namespace %s %s", app.Namespace, releaseName)
+	// The deployment name follows the pattern: {release-name}-code-server
+	deploymentName := fmt.Sprintf("%s-code-server", releaseName)
+	restartCmd := fmt.Sprintf("kubectl rollout restart deployment --namespace %s %s", app.Namespace, deploymentName)
 	_, err = sshService.ExecuteCommand(conn, restartCmd)
 	if err != nil {
 		return fmt.Errorf("failed to restart deployment: %v", err)
