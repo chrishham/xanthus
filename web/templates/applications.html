@@ -579,6 +579,37 @@
                 },
 
                 async showUpgradeModal(app) {
+                    // Fetch available versions if it's a code-server app
+                    let versionsHtml = '';
+                    if (app.app_type === 'code-server') {
+                        try {
+                            const versionsResponse = await fetch(`/applications/versions/code-server`);
+                            if (versionsResponse.ok) {
+                                const versionsData = await versionsResponse.json();
+                                if (versionsData.success && versionsData.versions.length > 0) {
+                                    const options = versionsData.versions.map(v => 
+                                        `<option value="${v.version}" ${v.is_latest ? 'selected' : ''}>${v.version}${v.is_latest ? ' (Latest)' : ''}${!v.is_stable ? ' (Pre-release)' : ''}</option>`
+                                    ).join('');
+                                    versionsHtml = `
+                                        <select id="version-select" class="swal2-input w-full">
+                                            <option value="latest">latest (Automatic)</option>
+                                            ${options}
+                                        </select>
+                                        <div class="text-xs text-gray-500 mt-1">Or enter custom version below:</div>
+                                        <input id="custom-version" class="swal2-input w-full mt-1" placeholder="Custom version (optional)">
+                                    `;
+                                }
+                            }
+                        } catch (error) {
+                            console.warn('Failed to fetch versions:', error);
+                        }
+                    }
+
+                    // Fallback to manual input if versions not available
+                    if (!versionsHtml) {
+                        versionsHtml = `<input id="new-version" class="swal2-input w-full" placeholder="Enter new version" value="latest">`;
+                    }
+
                     const { value: newVersion } = await Swal.fire({
                         title: 'Upgrade Application',
                         html: `
@@ -590,7 +621,7 @@
                                 </div>
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">New Version:</label>
-                                    <input id="new-version" class="swal2-input w-full" placeholder="Enter new version" value="latest">
+                                    ${versionsHtml}
                                 </div>
                             </div>
                         `,
@@ -598,7 +629,19 @@
                         confirmButtonText: 'Upgrade',
                         confirmButtonColor: '#2563eb',
                         preConfirm: () => {
-                            const version = document.getElementById('new-version').value.trim();
+                            // Check if we have version dropdown or manual input
+                            const versionSelect = document.getElementById('version-select');
+                            const customVersionInput = document.getElementById('custom-version');
+                            const manualVersionInput = document.getElementById('new-version');
+                            
+                            let version;
+                            if (versionSelect) {
+                                const customVersion = customVersionInput?.value?.trim();
+                                version = customVersion || versionSelect.value;
+                            } else {
+                                version = manualVersionInput?.value?.trim();
+                            }
+                            
                             if (!version) {
                                 Swal.showValidationMessage('Version is required');
                                 return false;

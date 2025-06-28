@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // CloudflareResponse represents the API response structure
 type CloudflareResponse struct {
 	Success bool `json:"success"`
@@ -136,4 +138,33 @@ type Application struct {
 	// Legacy fields for backward compatibility
 	ChartName    string `json:"chart_name,omitempty"`
 	ChartVersion string `json:"chart_version,omitempty"`
+}
+
+// GitHubRelease represents a GitHub release with version information
+type GitHubRelease struct {
+	TagName     string    `json:"tag_name"`
+	Name        string    `json:"name"`
+	Body        string    `json:"body"`
+	Draft       bool      `json:"draft"`
+	Prerelease  bool      `json:"prerelease"`
+	CreatedAt   time.Time `json:"created_at"`
+	PublishedAt time.Time `json:"published_at"`
+	HTMLURL     string    `json:"html_url"`
+}
+
+// VersionInfo represents simplified version information for the frontend
+type VersionInfo struct {
+	Version     string    `json:"version"`
+	Name        string    `json:"name"`
+	IsLatest    bool      `json:"is_latest"`
+	IsStable    bool      `json:"is_stable"`
+	PublishedAt time.Time `json:"published_at"`
+	URL         string    `json:"url"`
+}
+
+// VersionsResponse represents the API response for application versions
+type VersionsResponse struct {
+	Success  bool          `json:"success"`
+	Versions []VersionInfo `json:"versions"`
+	Error    string        `json:"error,omitempty"`
 }

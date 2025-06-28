@@ -112,8 +112,17 @@ func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, char
 	}
 
 	// Build Helm upgrade command
-	helmCmd := fmt.Sprintf("helm upgrade %s %s --version %s --namespace %s",
-		releaseName, chartName, chartVersion, namespace)
+	// For local charts, don't use --version flag
+	var helmCmd string
+	if strings.HasPrefix(chartName, "/") || strings.HasPrefix(chartName, "./") {
+		// Local chart path
+		helmCmd = fmt.Sprintf("helm upgrade %s %s --namespace %s",
+			releaseName, chartName, namespace)
+	} else {
+		// Repository chart
+		helmCmd = fmt.Sprintf("helm upgrade %s %s --version %s --namespace %s",
+			releaseName, chartName, chartVersion, namespace)
+	}
 
 	// Add custom values if provided
 	if len(values) > 0 {
@@ -130,8 +139,9 @@ func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, char
 	}
 
 	// Execute Helm upgrade
-	if _, err := h.sshService.ExecuteCommand(conn, helmCmd); err != nil {
-		return fmt.Errorf("failed to upgrade Helm chart: %v", err)
+	result, err := h.sshService.ExecuteCommand(conn, helmCmd)
+	if err != nil {
+		return fmt.Errorf("failed to upgrade Helm chart: command failed: %v, output: %s", err, result.Output)
 	}
 
 	return nil

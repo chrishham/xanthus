@@ -237,6 +237,29 @@ func (h *ApplicationsHandler) HandleApplicationUpgrade(c *gin.Context) {
 		return
 	}
 
+	// Get application details to determine app type
+	kvService := services.NewKVService()
+	var app models.Application
+	err = kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Application not found"})
+		return
+	}
+
+	// Validate version for code-server applications
+	if app.AppType == "code-server" && upgradeData.Version != "latest" {
+		valid, err := h.validateCodeServerVersion(upgradeData.Version)
+		if err != nil {
+			log.Printf("Error validating version: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate version"})
+			return
+		}
+		if !valid {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid version specified"})
+			return
+		}
+	}
+
 	// Upgrade application
 	err = h.upgradeApplication(token, accountID, appID, upgradeData.Version)
 	if err != nil {
@@ -249,6 +272,59 @@ func (h *ApplicationsHandler) HandleApplicationUpgrade(c *gin.Context) {
 		"success": true,
 		"message": "Application upgraded successfully",
 	})
+}
+
+// HandleApplicationVersions returns available versions for an application type
+func (h *ApplicationsHandler) HandleApplicationVersions(c *gin.Context) {
+	appType := c.Param("app_type")
+
+	// Currently only supporting code-server version lookup
+	if appType != "code-server" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Version lookup only supported for code-server applications",
+		})
+		return
+	}
+
+	githubService := services.NewGitHubService()
+	releases, err := githubService.GetCodeServerVersions(20) // Get last 20 releases
+	if err != nil {
+		log.Printf("Error fetching code-server versions: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to fetch version information",
+		})
+		return
+	}
+
+	// Convert to VersionInfo format
+	var versions []models.VersionInfo
+	for i, release := range releases {
+		// GitHub releases use tags like "v4.101.2", but Docker images use "4.101.2"
+		// Strip the "v" prefix for Docker compatibility
+		dockerTag := release.TagName
+		if strings.HasPrefix(dockerTag, "v") {
+			dockerTag = dockerTag[1:]
+		}
+		
+		versionInfo := models.VersionInfo{
+			Version:     dockerTag, // Use Docker-compatible version
+			Name:        release.Name,
+			IsLatest:    i == 0, // First release is latest
+			IsStable:    !release.Prerelease,
+			PublishedAt: release.PublishedAt,
+			URL:         release.HTMLURL,
+		}
+		versions = append(versions, versionInfo)
+	}
+
+	response := models.VersionsResponse{
+		Success:  true,
+		Versions: versions,
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // HandleApplicationPasswordChange changes the password for code-server applications
@@ -695,7 +771,21 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 		return fmt.Errorf("failed to get SSH private key: %v", err)
 	}
 
-	// Prepare Helm values
+	// Clone GitHub repository for code-server chart (needed for upgrade)
+	repoDir := "/tmp/code-server-chart-upgrade"
+	sshService := services.NewSSHService()
+	vpsIDInt, _ := strconv.Atoi(app.VPSID)
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, vpsIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, predefinedApp.HelmChart.Repository, repoDir))
+	if err != nil {
+		return fmt.Errorf("failed to clone chart repository for upgrade: %v", err)
+	}
+
+	// Prepare Helm values with updated version
 	values := make(map[string]string)
 	for key, value := range predefinedApp.HelmChart.Values {
 		valueStr := h.convertValueToString(value)
@@ -705,9 +795,25 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 		values[key] = valueStr
 	}
 
+	// Update the image tag with the new version for code-server
+	if app.AppType == "code-server" && version != "latest" {
+		values["image.tag"] = version
+	} else if version == "latest" {
+		// For "latest", we can remove the explicit tag to use chart default
+		// or fetch the actual latest version
+		githubService := services.NewGitHubService()
+		if latestRelease, err := githubService.GetCodeServerLatestVersion(); err == nil {
+			latestTag := latestRelease.TagName
+			if strings.HasPrefix(latestTag, "v") {
+				latestTag = latestTag[1:]
+			}
+			values["image.tag"] = latestTag
+		}
+	}
+
 	// Upgrade Helm chart
 	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.ID)
-	chartName := fmt.Sprintf("coder/%s", predefinedApp.HelmChart.Chart)
+	chartName := fmt.Sprintf("%s/%s", repoDir, predefinedApp.HelmChart.Chart)
 
 	err = helmService.UpgradeChart(
 		vpsConfig.PublicIPv4,
@@ -715,7 +821,7 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 		csrConfig.PrivateKey,
 		releaseName,
 		chartName,
-		version,
+		predefinedApp.HelmChart.Version, // Use chart version, not app version
 		app.Namespace,
 		values,
 	)
@@ -928,4 +1034,28 @@ func (h *ApplicationsHandler) deleteApplication(token, accountID, appID string) 
 	}
 
 	return nil
+}
+
+// validateCodeServerVersion checks if a given version exists in GitHub releases
+func (h *ApplicationsHandler) validateCodeServerVersion(version string) (bool, error) {
+	githubService := services.NewGitHubService()
+	releases, err := githubService.GetCodeServerVersions(50) // Check last 50 releases
+	if err != nil {
+		return false, err
+	}
+
+	// Check if the version exists in the releases
+	// Handle both Docker format (4.101.2) and GitHub format (v4.101.2)
+	for _, release := range releases {
+		dockerTag := release.TagName
+		if strings.HasPrefix(dockerTag, "v") {
+			dockerTag = dockerTag[1:]
+		}
+		
+		if dockerTag == version || release.TagName == version {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

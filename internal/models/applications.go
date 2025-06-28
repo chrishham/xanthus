@@ -40,7 +40,7 @@ func GetPredefinedApplications() []PredefinedApplication {
 			Description: "VS Code in your browser - a full development environment accessible from anywhere",
 			Icon:        "💻",
 			Category:    "Development",
-			Version:     "4.20.0",
+			Version:     "4.101.1",
 			HelmChart: HelmChartConfig{
 				Repository: "https://github.com/coder/code-server",
 				Chart:      "ci/helm-chart",
