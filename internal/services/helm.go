@@ -56,7 +56,7 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 
 	// Build Helm install command
 	var helmCmd string
-	
+
 	// For ArgoCD charts, remove any existing CRDs to avoid ownership conflicts
 	if strings.Contains(chartName, "argo-cd") {
 		// Remove existing ArgoCD CRDs if they exist (they're tied to other deployments)
@@ -71,7 +71,7 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 		}
 		// Now let Helm install fresh CRDs with the new deployment
 	}
-	
+
 	if strings.HasPrefix(chartName, "/") || strings.HasPrefix(chartName, "./") {
 		// Local chart path - don't use --version flag
 		helmCmd = fmt.Sprintf("helm install %s %s --namespace %s --create-namespace",

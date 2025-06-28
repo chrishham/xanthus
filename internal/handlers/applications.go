@@ -1367,21 +1367,24 @@ func (h *ApplicationsHandler) updateArgoCDPassword(token, accountID, appID, newP
 		return fmt.Errorf("failed to connect to VPS: %v", err)
 	}
 
-	// Update the ArgoCD admin password
-	// ArgoCD stores the admin password in a secret named "argocd-initial-admin-secret"
-	encodedPassword := utils.Base64Encode(newPassword)
-	cmd := fmt.Sprintf("kubectl patch secret --namespace %s argocd-initial-admin-secret -p '{\"data\":{\"password\":\"%s\"}}'", app.Namespace, encodedPassword)
-	_, err = sshService.ExecuteCommand(conn, cmd)
+	// Update the ArgoCD admin password using Helm values
+	// Generate bcrypt hash of the new password using htpasswd
+	hashCmd := fmt.Sprintf("htpasswd -nbBC 10 \"\" %s | tr -d ':\\n' | sed 's/$2y/$2a/'", newPassword)
+	hashResult, err := sshService.ExecuteCommand(conn, hashCmd)
 	if err != nil {
-		return fmt.Errorf("failed to update ArgoCD admin secret: %v", err)
+		return fmt.Errorf("failed to generate password hash: %v", err)
 	}
-
-	// ArgoCD automatically picks up password changes, but we can restart the server to be sure
-	restartCmd := fmt.Sprintf("kubectl rollout restart deployment --namespace %s argocd-server", app.Namespace)
-	_, err = sshService.ExecuteCommand(conn, restartCmd)
+	hashedPassword := strings.TrimSpace(hashResult.Output)
+	
+	// Get the Helm release name from the application namespace (it should match the app ID pattern)
+	releaseName := fmt.Sprintf("%s-app-%s", app.Subdomain, strings.Split(app.ID, "-")[1])
+	
+	// Update ArgoCD using Helm values
+	upgradeCmd := fmt.Sprintf("helm upgrade %s oci://ghcr.io/argoproj/argo-helm/argo-cd --version 8.1.2 --namespace %s --set configs.secret.argocdServerAdminPassword=%s --reuse-values", 
+		releaseName, app.Namespace, hashedPassword)
+	_, err = sshService.ExecuteCommand(conn, upgradeCmd)
 	if err != nil {
-		log.Printf("Warning: Failed to restart ArgoCD server deployment: %v", err)
-		// Don't fail the whole operation if restart fails
+		return fmt.Errorf("failed to update ArgoCD with new password: %v", err)
 	}
 
 	// Update stored password in KV
