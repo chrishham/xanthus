@@ -730,18 +730,20 @@ func min(a, b int) int {
 
 // CreateTLSSecret creates a Kubernetes TLS secret in the specified namespace
 func (ss *SSHService) CreateTLSSecret(conn *SSHConnection, domain, certificate, privateKey, namespace string) error {
-	// Generate secret name based on domain
-	secretName := strings.ReplaceAll(domain, ".", "-") + "-tls"
+	// Generate secret name based on domain (keep dots to match template expectation)
+	secretName := domain + "-tls"
+	// For file paths, we need to sanitize the name
+	filePrefix := strings.ReplaceAll(domain, ".", "-")
 
 	// Write certificate to temporary file
-	certPath := fmt.Sprintf("/tmp/%s-cert.crt", secretName)
+	certPath := fmt.Sprintf("/tmp/%s-cert.crt", filePrefix)
 	certCommand := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", certPath, certificate)
 	if result, err := ss.ExecuteCommand(conn, certCommand); err != nil || result.ExitCode != 0 {
 		return fmt.Errorf("failed to write certificate: %v", err)
 	}
 
 	// Write private key to temporary file
-	keyPath := fmt.Sprintf("/tmp/%s-key.key", secretName)
+	keyPath := fmt.Sprintf("/tmp/%s-key.key", filePrefix)
 	keyCommand := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", keyPath, privateKey)
 	if result, err := ss.ExecuteCommand(conn, keyCommand); err != nil || result.ExitCode != 0 {
 		return fmt.Errorf("failed to write private key: %v", err)
