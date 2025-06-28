@@ -31,6 +31,8 @@ server:
     type: ClusterIP
     port: 80
     portName: http
+    servicePortHttp: 80
+    servicePortHttpName: http
   
   # Resources
   resources:

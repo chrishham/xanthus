@@ -55,8 +55,36 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 	}
 
 	// Build Helm install command
-	helmCmd := fmt.Sprintf("helm install %s %s --version %s --namespace %s --create-namespace",
-		releaseName, chartName, chartVersion, namespace)
+	var helmCmd string
+	
+	// For ArgoCD charts, remove any existing CRDs to avoid ownership conflicts
+	if strings.Contains(chartName, "argo-cd") {
+		// Remove existing ArgoCD CRDs if they exist (they're tied to other deployments)
+		removeCRDsCmd := `
+		kubectl delete crd applications.argoproj.io --ignore-not-found=true
+		kubectl delete crd appprojects.argoproj.io --ignore-not-found=true 
+		kubectl delete crd applicationsets.argoproj.io --ignore-not-found=true
+		`
+		if _, err := h.sshService.ExecuteCommand(conn, removeCRDsCmd); err != nil {
+			// Log warning but don't fail deployment - CRDs might not exist
+			fmt.Printf("Warning: Failed to remove existing ArgoCD CRDs: %v\n", err)
+		}
+		// Now let Helm install fresh CRDs with the new deployment
+	}
+	
+	if strings.HasPrefix(chartName, "/") || strings.HasPrefix(chartName, "./") {
+		// Local chart path - don't use --version flag
+		helmCmd = fmt.Sprintf("helm install %s %s --namespace %s --create-namespace",
+			releaseName, chartName, namespace)
+	} else if chartVersion == "stable" || chartVersion == "latest" || chartVersion == "" {
+		// Repository chart with stable/latest version - omit --version flag to get latest
+		helmCmd = fmt.Sprintf("helm install %s %s --namespace %s --create-namespace",
+			releaseName, chartName, namespace)
+	} else {
+		// Repository chart with specific version
+		helmCmd = fmt.Sprintf("helm install %s %s --version %s --namespace %s --create-namespace",
+			releaseName, chartName, chartVersion, namespace)
+	}
 
 	// Add values file if provided
 	if valuesFile != "" {
@@ -64,8 +92,9 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 	}
 
 	// Execute Helm install
-	if _, err := h.sshService.ExecuteCommand(conn, helmCmd); err != nil {
-		return fmt.Errorf("failed to install Helm chart: %v", err)
+	result, err := h.sshService.ExecuteCommand(conn, helmCmd)
+	if err != nil {
+		return fmt.Errorf("failed to install Helm chart: command failed: %v, output: %s", err, result.Output)
 	}
 
 	return nil

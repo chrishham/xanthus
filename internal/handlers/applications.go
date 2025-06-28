@@ -642,13 +642,6 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		return fmt.Errorf("failed to connect to VPS: %v", err)
 	}
 
-	// Clone GitHub repository for code-server chart
-	repoDir := "/tmp/code-server-chart"
-	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, predefinedApp.HelmChart.Repository, repoDir))
-	if err != nil {
-		return fmt.Errorf("failed to clone chart repository: %v", err)
-	}
-
 	// Generate values file from template with placeholder substitution
 	releaseName := fmt.Sprintf("%s-%s", data.Subdomain, appID)
 	valuesFilePath, err := h.generateValuesFile(conn, predefinedApp, data.Subdomain, data.Domain, releaseName)
@@ -656,16 +649,60 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		return fmt.Errorf("failed to generate values file: %v", err)
 	}
 
-	// For code-server apps, create VS Code settings ConfigMap
-	if data.AppType == "code-server" {
+	var chartName string
+
+	// Handle different application deployment types
+	switch data.AppType {
+	case "code-server":
+		// Clone GitHub repository for code-server chart
+		repoDir := "/tmp/code-server-chart"
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, predefinedApp.HelmChart.Repository, repoDir))
+		if err != nil {
+			return fmt.Errorf("failed to clone chart repository: %v", err)
+		}
+		chartName = fmt.Sprintf("%s/%s", repoDir, predefinedApp.HelmChart.Chart)
+
+		// Create VS Code settings ConfigMap
 		err = h.createVSCodeSettingsConfigMap(conn, releaseName, predefinedApp.HelmChart.Namespace)
 		if err != nil {
 			log.Printf("Warning: Failed to create VS Code settings ConfigMap: %v", err)
 		}
-	}
 
-	// Install Helm chart
-	chartName := fmt.Sprintf("%s/%s", repoDir, predefinedApp.HelmChart.Chart)
+	case "argocd":
+		// Add Helm repository for ArgoCD
+		repoName := "argo"
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo add %s %s", repoName, predefinedApp.HelmChart.Repository))
+		if err != nil {
+			return fmt.Errorf("failed to add Helm repository: %v", err)
+		}
+
+		// Update Helm repositories
+		_, err = sshService.ExecuteCommand(conn, "helm repo update")
+		if err != nil {
+			return fmt.Errorf("failed to update Helm repositories: %v", err)
+		}
+		chartName = fmt.Sprintf("%s/%s", repoName, predefinedApp.HelmChart.Chart)
+
+		// Install ArgoCD CLI
+		_, err = sshService.ExecuteCommand(conn, `
+			ARCH=$(uname -m)
+			case $ARCH in
+				x86_64) ARGOCD_ARCH="amd64" ;;
+				aarch64) ARGOCD_ARCH="arm64" ;;
+				armv7l) ARGOCD_ARCH="armv7" ;;
+				*) echo "Warning: Unsupported architecture $ARCH, defaulting to amd64"; ARGOCD_ARCH="amd64" ;;
+			esac
+			curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-${ARGOCD_ARCH}
+			chmod +x /usr/local/bin/argocd
+		`)
+		if err != nil {
+			log.Printf("Warning: Failed to install ArgoCD CLI: %v", err)
+			// Don't fail the deployment, just log the warning
+		}
+
+	default:
+		return fmt.Errorf("unsupported application type: %s", data.AppType)
+	}
 
 	err = helmService.InstallChart(
 		vpsConfig.PublicIPv4,
