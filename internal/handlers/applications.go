@@ -309,6 +309,51 @@ func (h *ApplicationsHandler) HandleApplicationPasswordChange(c *gin.Context) {
 	})
 }
 
+// HandleApplicationPasswordGet retrieves the current password for code-server applications
+func (h *ApplicationsHandler) HandleApplicationPasswordGet(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	appID := c.Param("id")
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+		return
+	}
+
+	// Get application details
+	kvService := services.NewKVService()
+	var app models.Application
+	err = kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Application not found"})
+		return
+	}
+
+	if app.AppType != "code-server" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password retrieval is only supported for code-server applications"})
+		return
+	}
+
+	// Get current password
+	password, err := h.getCodeServerPassword(token, accountID, appID)
+	if err != nil {
+		log.Printf("Error retrieving code-server password: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"password": password,
+	})
+}
+
 // HandleApplicationDelete deletes applications and cleans up resources
 func (h *ApplicationsHandler) HandleApplicationDelete(c *gin.Context) {
 	token, err := c.Cookie("cf_token")

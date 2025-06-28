@@ -191,6 +191,13 @@
                                     Visit
                                 </button>
                                 
+                                <!-- Get Current Password (Code-Server only) -->
+                                <button x-show="app.app_type === 'code-server'" 
+                                        @click="showCurrentPasswordModal(app)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-blue-300 text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    👁️ Get Password
+                                </button>
+                                
                                 <!-- Change Password (Code-Server only) -->
                                 <button x-show="app.app_type === 'code-server'" 
                                         @click="showPasswordChangeModal(app)" 
@@ -676,6 +683,70 @@
 
                     if (newPassword) {
                         await this.changePassword(app.id, app.name, newPassword);
+                    }
+                },
+
+                async showCurrentPasswordModal(app) {
+                    this.setLoadingState('Retrieving Password', `Getting current password for "${app.name}"...`);
+                    try {
+                        const response = await fetch(`/applications/${app.id}/password`, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok && data.password) {
+                            Swal.fire({
+                                title: 'Current Password',
+                                html: `
+                                    <div class="text-left">
+                                        <p class="mb-4">Current password for <strong>${app.name}</strong>:</p>
+                                        
+                                        <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                            <h4 class="font-medium text-blue-900 mb-2">🔐 Password</h4>
+                                            <div class="flex items-center space-x-2">
+                                                <input type="text" value="${data.password}" 
+                                                       class="flex-1 px-3 py-2 border border-blue-300 rounded font-mono text-sm bg-white" 
+                                                       readonly id="current-password-field">
+                                                <button onclick="navigator.clipboard.writeText('${data.password}'); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 1000)" 
+                                                        class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                                                    Copy
+                                                </button>
+                                            </div>
+                                            <p class="text-sm text-blue-700 mt-2">💡 You can use this password to access your code-server instance</p>
+                                        </div>
+                                        
+                                        <div class="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                            <h4 class="font-medium text-green-900 mb-2">🔗 Quick Access</h4>
+                                            <div class="text-center">
+                                                <a href="${app.url}" target="_blank" 
+                                                   class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                                    </svg>
+                                                    Open Code-Server
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `,
+                                icon: 'info',
+                                confirmButtonColor: '#7c3aed',
+                                confirmButtonText: 'Got it!',
+                                width: 600,
+                                allowOutsideClick: true
+                            });
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to retrieve current password', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error retrieving current password:', error);
+                        Swal.fire('Error', 'Failed to retrieve current password', 'error');
+                    } finally {
+                        this.loading = false;
                     }
                 },
 

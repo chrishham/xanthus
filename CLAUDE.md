@@ -85,6 +85,14 @@ Authentication uses token-based validation with Cloudflare KV storage. The `midd
 ### Helm Deployment System
 Real K3s deployments with automatic ingress configuration, SSL termination, and complete application lifecycle management (install/upgrade/uninstall).
 
+### Application Password Management
+For code-server applications, passwords are encrypted and stored in Cloudflare KV storage with full lifecycle management:
+- **Password Retrieval**: `GET /applications/:id/password` - retrieves current password for code-server apps
+- **Password Change**: `POST /applications/:id/password` - updates password with minimum 8 characters
+- **Storage**: Passwords encrypted using `utils.EncryptData()` with user's Cloudflare token as key
+- **UI Features**: "Get Password" and "Change Password" buttons with modal dialogs and copy functionality
+- **Security**: Only available for code-server applications, requires authentication
+
 ## Dependencies
 
 ### Go Modules
@@ -98,7 +106,8 @@ Real K3s deployments with automatic ingress configuration, SSL termination, and 
 - `tailwindcss` - CSS framework
 
 ## Important Notes
-
+- To ssh to the VPS you can use the @xanthus-ssh-key.pem with ssh -i xanthus-ssh-key.pem root@188.245.79.245
+- Code Server installation info is at @plans/code-server.md
 - Server automatically finds available port at startup
 - All responses use standardized helpers from `utils/responses.go`
 - Encryption keys and API tokens stored securely in Cloudflare KV
