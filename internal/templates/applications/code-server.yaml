@@ -21,8 +21,7 @@ ingress:
   hosts:
     - host: "{{SUBDOMAIN}}.{{DOMAIN}}"
       paths:
-        - path: /
-          pathType: Prefix
+        - /
   tls:
     - secretName: "{{DOMAIN}}-tls"
       hosts:
