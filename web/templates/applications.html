@@ -217,10 +217,10 @@
                                     🔑 Change Password
                                 </button>
                                 
-                                <!-- Upgrade -->
+                                <!-- Change Version -->
                                 <button @click="showUpgradeModal(app)" 
                                         class="flex-1 text-xs px-3 py-2 border border-blue-300 text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                    Upgrade
+                                    Change Version
                                 </button>
                                 
                                 <!-- Delete -->
@@ -683,8 +683,8 @@
                                             <option value="latest">latest (Automatic)</option>
                                             ${options}
                                         </select>
-                                        <div class="text-xs text-gray-500 mt-1">Or enter custom version below:</div>
-                                        <input id="custom-version" class="swal2-input w-full mt-1" placeholder="Custom version (optional)">
+                                        <div class="text-xs text-gray-500 mt-1 ml-1">Or enter custom version below:</div>
+                                        <input id="custom-version" class="swal2-input w-1/2 mt-1 ml-1 h-8" placeholder="Custom version (optional)">
                                     `;
                                 }
                             }
@@ -699,10 +699,10 @@
                     }
 
                     const { value: newVersion } = await Swal.fire({
-                        title: 'Upgrade Application',
+                        title: 'Change Application Version',
                         html: `
                             <div class="text-left">
-                                <p class="mb-4">Upgrade <strong>${app.name}</strong> to a new version:</p>
+                                <p class="mb-4">Change <strong>${app.name}</strong> to a different version:</p>
                                 <div class="mb-4">
                                     <label class="block text-sm font-medium text-gray-700 mb-1">Current Version:</label>
                                     <div class="p-2 bg-gray-100 rounded text-sm">${app.app_version}</div>
@@ -714,7 +714,7 @@
                             </div>
                         `,
                         showCancelButton: true,
-                        confirmButtonText: 'Upgrade',
+                        confirmButtonText: 'Change Version',
                         confirmButtonColor: '#2563eb',
                         preConfirm: () => {
                             // Check if we have version dropdown or manual input
@@ -744,7 +744,7 @@
                 },
 
                 async upgradeApplication(appId, version) {
-                    this.setLoadingState('Upgrading Application', 'Upgrading application...');
+                    this.setLoadingState('Changing Version', 'Changing application version...');
                     try {
                         const response = await fetch(`/applications/${appId}/upgrade`, {
                             method: 'POST',
@@ -757,14 +757,14 @@
                         const data = await response.json();
                         
                         if (response.ok) {
-                            Swal.fire('Success!', 'Application upgraded successfully', 'success');
+                            Swal.fire('Success!', 'Application version changed successfully', 'success');
                             await this.refreshApplications();
                         } else {
-                            Swal.fire('Error', data.error || 'Failed to upgrade application', 'error');
+                            Swal.fire('Error', data.error || 'Failed to change application version', 'error');
                         }
                     } catch (error) {
                         console.error('Error upgrading application:', error);
-                        Swal.fire('Error', 'Failed to upgrade application', 'error');
+                        Swal.fire('Error', 'Failed to change application version', 'error');
                     } finally {
                         this.loading = false;
                     }
@@ -788,7 +788,7 @@
                                 
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">New Password:</label>
-                                    <input id="new-password" type="password" class="swal2-input w-full" 
+                                    <input id="new-password" type="password" class="swal2-input w-1/2 h-8 ml-1" 
                                            placeholder="Enter new password (min 8 characters)" minlength="8">
                                     <p class="text-xs text-gray-500 mt-1">Password must be at least 8 characters long</p>
                                 </div>
