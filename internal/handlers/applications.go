@@ -303,10 +303,7 @@ func (h *ApplicationsHandler) HandleApplicationVersions(c *gin.Context) {
 	for i, release := range releases {
 		// GitHub releases use tags like "v4.101.2", but Docker images use "4.101.2"
 		// Strip the "v" prefix for Docker compatibility
-		dockerTag := release.TagName
-		if strings.HasPrefix(dockerTag, "v") {
-			dockerTag = dockerTag[1:]
-		}
+		dockerTag := strings.TrimPrefix(release.TagName, "v")
 		
 		versionInfo := models.VersionInfo{
 			Version:     dockerTag, // Use Docker-compatible version
@@ -803,10 +800,7 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 		// or fetch the actual latest version
 		githubService := services.NewGitHubService()
 		if latestRelease, err := githubService.GetCodeServerLatestVersion(); err == nil {
-			latestTag := latestRelease.TagName
-			if strings.HasPrefix(latestTag, "v") {
-				latestTag = latestTag[1:]
-			}
+			latestTag := strings.TrimPrefix(latestRelease.TagName, "v")
 			values["image.tag"] = latestTag
 		}
 	}
@@ -1047,10 +1041,7 @@ func (h *ApplicationsHandler) validateCodeServerVersion(version string) (bool, e
 	// Check if the version exists in the releases
 	// Handle both Docker format (4.101.2) and GitHub format (v4.101.2)
 	for _, release := range releases {
-		dockerTag := release.TagName
-		if strings.HasPrefix(dockerTag, "v") {
-			dockerTag = dockerTag[1:]
-		}
+		dockerTag := strings.TrimPrefix(release.TagName, "v")
 		
 		if dockerTag == version || release.TagName == version {
 			return true, nil
