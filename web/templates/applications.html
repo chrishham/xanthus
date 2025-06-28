@@ -46,6 +46,18 @@
                     </svg>
                     Refresh
                 </button>
+                <button @click="toggleAutoRefresh()" 
+                        :disabled="loading"
+                        class="inline-flex items-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50"
+                        :class="{'bg-green-50 border-green-300 text-green-700': autoRefreshEnabled, 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50': !autoRefreshEnabled}">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    <span x-text="autoRefreshEnabled ? 'Auto-refresh ON' : 'Auto-refresh OFF'"></span>
+                </button>
+            </div>
+            <div x-show="autoRefreshEnabled" class="text-sm text-gray-500">
+                <span>Refreshing every 15 seconds</span>
             </div>
         </div>
 
@@ -232,10 +244,27 @@
                 loading: false,
                 loadingTitle: 'Processing...',
                 loadingMessage: 'Please wait while the operation completes.',
+                autoRefreshEnabled: true,
+                refreshInterval: 15000, // 15 seconds - reasonable for applications
+                intervalId: null,
 
                 init() {
                     // Initialize applications list
                     this.refreshApplications();
+                    
+                    // Start automatic refresh
+                    this.startAutoRefresh();
+                    
+                    // Stop polling when page is hidden/unfocused
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.hidden) {
+                            this.stopAutoRefresh();
+                        } else {
+                            this.startAutoRefresh();
+                            // Refresh immediately when page becomes visible
+                            this.refreshApplicationsQuietly();
+                        }
+                    });
                 },
 
                 async refreshApplications() {
@@ -275,6 +304,65 @@
                         Swal.fire('Error', 'Failed to refresh application list', 'error');
                     } finally {
                         this.loading = false;
+                    }
+                },
+
+                startAutoRefresh() {
+                    if (this.autoRefreshEnabled && !this.intervalId) {
+                        this.intervalId = setInterval(() => {
+                            this.refreshApplicationsQuietly();
+                        }, this.refreshInterval);
+                    }
+                },
+
+                stopAutoRefresh() {
+                    if (this.intervalId) {
+                        clearInterval(this.intervalId);
+                        this.intervalId = null;
+                    }
+                },
+
+                toggleAutoRefresh() {
+                    this.autoRefreshEnabled = !this.autoRefreshEnabled;
+                    if (this.autoRefreshEnabled) {
+                        this.startAutoRefresh();
+                    } else {
+                        this.stopAutoRefresh();
+                    }
+                },
+
+                async refreshApplicationsQuietly() {
+                    // Refresh without showing loading spinner
+                    try {
+                        const response = await fetch('/applications/list', {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            
+                            // Filter out any invalid applications and deduplicate by ID
+                            const validApps = (data.applications || []).filter(app => this.isValidApplication(app));
+                            
+                            // Deduplicate applications by ID to prevent duplicates
+                            const uniqueApps = [];
+                            const seenIds = new Set();
+                            
+                            for (const app of validApps) {
+                                if (!seenIds.has(app.id)) {
+                                    seenIds.add(app.id);
+                                    uniqueApps.push(app);
+                                }
+                            }
+                            
+                            this.applications = uniqueApps;
+                        }
+                    } catch (error) {
+                        console.log('Background refresh failed:', error);
+                        // Silently fail for background updates
                     }
                 },
 
