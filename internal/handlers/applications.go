@@ -654,12 +654,15 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		values[key] = valueStr
 	}
 
-	// For code-server apps, create VS Code settings ConfigMap for persistence
+	// For code-server apps, create VS Code settings ConfigMap and configure init container
 	if data.AppType == "code-server" {
 		err = h.createVSCodeSettingsConfigMap(conn, releaseName, predefinedApp.HelmChart.Namespace)
 		if err != nil {
 			log.Printf("Warning: Failed to create VS Code settings ConfigMap: %v", err)
 		}
+		
+		// Add init container configuration to copy settings from ConfigMap to persistent volume
+		h.addInitContainerValues(values, releaseName)
 	}
 
 	// Install Helm chart
@@ -766,6 +769,27 @@ func (h *ApplicationsHandler) createVSCodeSettingsConfigMap(conn *services.SSHCo
 	return nil
 }
 
+// addInitContainerValues adds init container configuration for code-server VS Code settings
+func (h *ApplicationsHandler) addInitContainerValues(values map[string]string, releaseName string) {
+	// Configure init container to copy settings from ConfigMap to persistent volume
+	values["extraInitContainers[0].name"] = "init-vscode-settings"
+	values["extraInitContainers[0].image"] = "busybox:latest"
+	values["extraInitContainers[0].imagePullPolicy"] = "IfNotPresent"
+	values["extraInitContainers[0].command[0]"] = "/bin/sh"
+	values["extraInitContainers[0].command[1]"] = "-c"
+	values["extraInitContainers[0].command[2]"] = `chown -R 1000:1000 /home/coder && mkdir -p /home/coder/.local/share/code-server/User && cp /tmp/vscode-settings/settings.json /home/coder/.local/share/code-server/User/settings.json && chown 1000:1000 /home/coder/.local/share/code-server/User/settings.json`
+	values["extraInitContainers[0].securityContext.runAsUser"] = "0"
+	values["extraInitContainers[0].volumeMounts[0].name"] = "data"
+	values["extraInitContainers[0].volumeMounts[0].mountPath"] = "/home/coder"
+	values["extraInitContainers[0].volumeMounts[1].name"] = "vscode-settings"
+	values["extraInitContainers[0].volumeMounts[1].mountPath"] = "/tmp/vscode-settings"
+	
+	// Add ConfigMap volume for init container
+	values["extraVolumes[0].name"] = "vscode-settings"
+	values["extraVolumes[0].configMap.name"] = fmt.Sprintf("%s-vscode-settings", releaseName)
+	values["extraVolumes[0].configMap.defaultMode"] = "420"
+}
+
 // upgradeApplication implements core application upgrade logic
 func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, version string) error {
 	kvService := services.NewKVService()
@@ -842,12 +866,15 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 		values[key] = valueStr
 	}
 
-	// For code-server apps, ensure VS Code settings ConfigMap exists
+	// For code-server apps, ensure VS Code settings ConfigMap exists and configure init container
 	if app.AppType == "code-server" {
 		err = h.createVSCodeSettingsConfigMap(conn, releaseName, app.Namespace)
 		if err != nil {
 			log.Printf("Warning: Failed to create/update VS Code settings ConfigMap: %v", err)
 		}
+		
+		// Add init container configuration to copy settings from ConfigMap to persistent volume
+		h.addInitContainerValues(values, releaseName)
 	}
 
 	// Update the image tag with the new version for code-server
