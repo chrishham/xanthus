@@ -17,8 +17,8 @@ func NewHelmService() *HelmService {
 	}
 }
 
-// InstallChart installs a Helm chart on the specified VPS
-func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, chartName, chartVersion, namespace string, values map[string]string) error {
+// InstallChart installs a Helm chart on the specified VPS using a values file
+func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, chartName, chartVersion, namespace, valuesFile string) error {
 	// Try to get existing connection from session manager
 	sessionManager := GetGlobalSessionManager()
 	var conn *SSHConnection
@@ -58,18 +58,9 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 	helmCmd := fmt.Sprintf("helm install %s %s --version %s --namespace %s --create-namespace",
 		releaseName, chartName, chartVersion, namespace)
 
-	// Add custom values if provided
-	if len(values) > 0 {
-		var setArgs []string
-		for key, value := range values {
-			// Escape string values that might be interpreted as booleans or numbers
-			if value == "true" || value == "false" {
-				setArgs = append(setArgs, fmt.Sprintf("'%s=\"%s\"'", key, value))
-			} else {
-				setArgs = append(setArgs, fmt.Sprintf("'%s=%s'", key, value))
-			}
-		}
-		helmCmd += " --set " + strings.Join(setArgs, " --set ")
+	// Add values file if provided
+	if valuesFile != "" {
+		helmCmd += fmt.Sprintf(" -f %s", valuesFile)
 	}
 
 	// Execute Helm install
@@ -80,8 +71,8 @@ func (h *HelmService) InstallChart(vpsIP, sshUser, privateKey, releaseName, char
 	return nil
 }
 
-// UpgradeChart upgrades an existing Helm release
-func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, chartName, chartVersion, namespace string, values map[string]string) error {
+// UpgradeChart upgrades an existing Helm release using a values file
+func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, chartName, chartVersion, namespace, valuesFile string) error {
 	// Try to get existing connection from session manager
 	sessionManager := GetGlobalSessionManager()
 	var conn *SSHConnection
@@ -124,18 +115,9 @@ func (h *HelmService) UpgradeChart(vpsIP, sshUser, privateKey, releaseName, char
 			releaseName, chartName, chartVersion, namespace)
 	}
 
-	// Add custom values if provided
-	if len(values) > 0 {
-		var setArgs []string
-		for key, value := range values {
-			// Escape string values that might be interpreted as booleans or numbers
-			if value == "true" || value == "false" {
-				setArgs = append(setArgs, fmt.Sprintf("'%s=\"%s\"'", key, value))
-			} else {
-				setArgs = append(setArgs, fmt.Sprintf("'%s=%s'", key, value))
-			}
-		}
-		helmCmd += " --set " + strings.Join(setArgs, " --set ")
+	// Add values file if provided
+	if valuesFile != "" {
+		helmCmd += fmt.Sprintf(" -f %s", valuesFile)
 	}
 
 	// Execute Helm upgrade

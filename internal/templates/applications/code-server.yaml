@@ -1,0 +1,146 @@
+# Code Server Helm Values Template
+# This template supports placeholder substitution for dynamic deployment
+
+# Image configuration
+image:
+  repository: codercom/code-server
+  tag: "{{VERSION}}"
+  pullPolicy: Always
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Ingress configuration with Traefik
+ingress:
+  enabled: true
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - host: "{{SUBDOMAIN}}.{{DOMAIN}}"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: "{{DOMAIN}}-tls"
+      hosts:
+        - "{{SUBDOMAIN}}.{{DOMAIN}}"
+
+# Persistence configuration
+persistence:
+  enabled: true
+  size: 10Gi
+  accessMode: ReadWriteOnce
+
+# Resource configuration
+resources:
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+# Security context
+securityContext:
+  enabled: true
+  fsGroup: 1000
+  runAsUser: 1000
+
+# Volume permissions
+volumePermissions:
+  enabled: true
+  securityContext:
+    runAsUser: 0
+
+# Extra volumes for VS Code settings
+extraVolumes:
+  - name: vscode-settings
+    configMap:
+      name: "{{RELEASE_NAME}}-vscode-settings"
+      optional: true
+
+# Extra volume mounts for VS Code settings
+extraVolumeMounts:
+  - name: vscode-settings
+    mountPath: /tmp/vscode-settings
+    readOnly: true
+
+# Init container to copy VS Code settings to persistent volume
+extraInitContainers: |
+  - name: copy-vscode-settings
+    image: busybox:latest
+    imagePullPolicy: IfNotPresent
+    command:
+      - sh
+      - -c
+      - |
+        if [ -d /tmp/vscode-settings ]; then
+          echo "Copying VS Code settings to persistent volume..."
+          mkdir -p /home/coder/.local/share/code-server/User
+          cp -f /tmp/vscode-settings/settings.json /home/coder/.local/share/code-server/User/settings.json 2>/dev/null || echo "No settings.json found, skipping..."
+          cp -f /tmp/vscode-settings/keybindings.json /home/coder/.local/share/code-server/User/keybindings.json 2>/dev/null || echo "No keybindings.json found, skipping..."
+          chown -R 1000:1000 /home/coder/.local/share/code-server/User
+          echo "VS Code settings copied successfully"
+        else
+          echo "No VS Code settings ConfigMap mounted, skipping..."
+        fi
+    securityContext:
+      runAsUser: 0
+    volumeMounts:
+      - name: data
+        mountPath: /home/coder
+      - name: vscode-settings
+        mountPath: /tmp/vscode-settings
+        readOnly: true
+
+# Pod annotations
+podAnnotations: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Replica count
+replicaCount: 1
+
+# Extra environment variables
+extraVars: []
+
+# Extra arguments
+extraArgs: []
+
+# Extra ports
+extraPorts: []
+
+# Priority class name
+priorityClassName: ""
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Full name override
+fullnameOverride: ""
+
+# Name override
+nameOverride: ""
+
+# Hostname override
+hostnameOverride: ""
+
+# Lifecycle hooks
+lifecycle:
+  enabled: false

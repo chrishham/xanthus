@@ -26,11 +26,12 @@ type PredefinedApplication struct {
 
 // HelmChartConfig contains Helm chart deployment configuration
 type HelmChartConfig struct {
-	Repository string                 `json:"repository"`
-	Chart      string                 `json:"chart"`
-	Version    string                 `json:"version"`
-	Values     map[string]interface{} `json:"values"`
-	Namespace  string                 `json:"namespace"`
+	Repository     string            `json:"repository"`
+	Chart          string            `json:"chart"`
+	Version        string            `json:"version"`
+	ValuesTemplate string            `json:"values_template"` // Path to values template file
+	Placeholders   map[string]string `json:"placeholders"`    // Additional placeholder values
+	Namespace      string            `json:"namespace"`
 }
 
 // ApplicationRequirements defines minimum system requirements
@@ -44,15 +45,15 @@ var (
 	// Cache for the latest code-server version
 	latestCodeServerVersion string
 	lastVersionCheck        time.Time
-	versionMutex           sync.RWMutex
-	versionCacheTTL        = 10 * time.Minute // Cache TTL for version checks
+	versionMutex            sync.RWMutex
+	versionCacheTTL         = 10 * time.Minute // Cache TTL for version checks
 )
 
 // GetPredefinedApplications returns the catalog of available applications
 func GetPredefinedApplications() []PredefinedApplication {
 	// Get the latest code-server version
 	codeServerVersion := getLatestCodeServerVersion()
-	
+
 	return []PredefinedApplication{
 		{
 			ID:          "code-server",
@@ -62,43 +63,13 @@ func GetPredefinedApplications() []PredefinedApplication {
 			Category:    "Development",
 			Version:     codeServerVersion,
 			HelmChart: HelmChartConfig{
-				Repository: "https://github.com/coder/code-server",
-				Chart:      "ci/helm-chart",
-				Version:    "main",
-				Namespace:  "code-server",
-				Values: map[string]interface{}{
-					// Basic configuration
-					"image.repository": "codercom/code-server",
-					"image.tag":        codeServerVersion,
-					"service.type":     "ClusterIP",
-					"service.port":     8080,
-
-					// Ingress configuration with Traefik
-					"ingress.enabled": true,
-					"ingress.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.entrypoints": "websecure",
-					"ingress.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.tls":         "true",
-					"ingress.hosts[0].host":     "{{SUBDOMAIN}}.{{DOMAIN}}",
-					"ingress.hosts[0].paths":    []string{"/"},
-					"ingress.tls[0].secretName": "{{DOMAIN}}-tls",
-					"ingress.tls[0].hosts":      []string{"{{SUBDOMAIN}}.{{DOMAIN}}"},
-
-					// Persistence
-					"persistence.enabled": true,
-					"persistence.size":    "10Gi",
-
-					// Resources
-					"resources.limits.cpu":      "2",
-					"resources.limits.memory":   "4Gi",
-					"resources.requests.cpu":    "100m",
-					"resources.requests.memory": "128Mi",
-
-					// Security
-					"securityContext.enabled":   true,
-					"securityContext.fsGroup":   1000,
-					"securityContext.runAsUser": 1000,
-
-					// VS Code Settings will be handled by init container
-					// (removed extraConfigmapMounts to prevent read-only mount issues)
+				Repository:     "https://github.com/coder/code-server",
+				Chart:          "ci/helm-chart",
+				Version:        "main",
+				Namespace:      "code-server",
+				ValuesTemplate: "code-server.yaml",
+				Placeholders: map[string]string{
+					"VERSION": codeServerVersion,
 				},
 			},
 			DefaultPort: 8080,
@@ -181,7 +152,7 @@ func getLatestCodeServerVersion() string {
 
 	// Convert GitHub tag format (v4.101.2) to Docker format (4.101.2)
 	version := strings.TrimPrefix(release.TagName, "v")
-	
+
 	// Update cache
 	latestCodeServerVersion = version
 	lastVersionCheck = time.Now()
@@ -194,7 +165,7 @@ func getLatestCodeServerVersion() string {
 func RefreshVersionCache() {
 	versionMutex.Lock()
 	defer versionMutex.Unlock()
-	
+
 	// Reset the cache timestamp to force a refresh on next call
 	lastVersionCheck = time.Time{}
 }

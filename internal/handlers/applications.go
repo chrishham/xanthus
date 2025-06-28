@@ -3,8 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -304,7 +306,7 @@ func (h *ApplicationsHandler) HandleApplicationVersions(c *gin.Context) {
 		// GitHub releases use tags like "v4.101.2", but Docker images use "4.101.2"
 		// Strip the "v" prefix for Docker compatibility
 		dockerTag := strings.TrimPrefix(release.TagName, "v")
-		
+
 		versionInfo := models.VersionInfo{
 			Version:     dockerTag, // Use Docker-compatible version
 			Name:        release.Name,
@@ -641,28 +643,19 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		return fmt.Errorf("failed to clone chart repository: %v", err)
 	}
 
-	// Prepare Helm values, replacing placeholders
-	values := make(map[string]string)
+	// Generate values file from template with placeholder substitution
 	releaseName := fmt.Sprintf("%s-%s", data.Subdomain, appID)
-	
-	for key, value := range predefinedApp.HelmChart.Values {
-		valueStr := h.convertValueToString(value)
-		// Replace placeholders
-		valueStr = strings.ReplaceAll(valueStr, "{{SUBDOMAIN}}", data.Subdomain)
-		valueStr = strings.ReplaceAll(valueStr, "{{DOMAIN}}", data.Domain)
-		valueStr = strings.ReplaceAll(valueStr, "{{RELEASE_NAME}}", releaseName)
-		values[key] = valueStr
+	valuesFilePath, err := h.generateValuesFile(conn, predefinedApp, data.Subdomain, data.Domain, releaseName)
+	if err != nil {
+		return fmt.Errorf("failed to generate values file: %v", err)
 	}
 
-	// For code-server apps, create VS Code settings ConfigMap and configure init container
+	// For code-server apps, create VS Code settings ConfigMap
 	if data.AppType == "code-server" {
 		err = h.createVSCodeSettingsConfigMap(conn, releaseName, predefinedApp.HelmChart.Namespace)
 		if err != nil {
 			log.Printf("Warning: Failed to create VS Code settings ConfigMap: %v", err)
 		}
-		
-		// Add init container configuration to copy settings from ConfigMap to persistent volume
-		h.addInitContainerValues(values, releaseName)
 	}
 
 	// Install Helm chart
@@ -676,7 +669,7 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		chartName,
 		predefinedApp.HelmChart.Version,
 		predefinedApp.HelmChart.Namespace,
-		values,
+		valuesFilePath,
 	)
 
 	if err != nil {
@@ -696,45 +689,46 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 	return nil
 }
 
-// convertValueToString converts interface{} to string for Helm values
-func (h *ApplicationsHandler) convertValueToString(value interface{}) string {
-	switch v := value.(type) {
-	case string:
-		return v
-	case bool:
-		if v {
-			return "true"
-		}
-		return "false"
-	case map[string]interface{}:
-		// For nested objects, convert to JSON
-		jsonBytes, _ := json.Marshal(v)
-		return string(jsonBytes)
-	case []interface{}:
-		// For arrays, convert to Helm --set format: {value1,value2}
-		if len(v) == 0 {
-			return "{}"
-		}
-		var items []string
-		for _, item := range v {
-			items = append(items, fmt.Sprintf("%v", item))
-		}
-		return "{" + strings.Join(items, ",") + "}"
-	case []string:
-		// For string arrays, convert to Helm --set format: {value1,value2}
-		if len(v) == 0 {
-			return "{}"
-		}
-		return "{" + strings.Join(v, ",") + "}"
-	default:
-		return fmt.Sprintf("%v", v)
+// generateValuesFile creates a values file from template with placeholder substitution
+func (h *ApplicationsHandler) generateValuesFile(conn *services.SSHConnection, predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
+	sshService := services.NewSSHService()
+
+	// Read the values template file
+	templatePath := filepath.Join("internal/templates/applications", predefinedApp.HelmChart.ValuesTemplate)
+	templateContent, err := ioutil.ReadFile(templatePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read values template: %v", err)
 	}
+
+	// Perform placeholder substitution
+	valuesContent := string(templateContent)
+	valuesContent = strings.ReplaceAll(valuesContent, "{{SUBDOMAIN}}", subdomain)
+	valuesContent = strings.ReplaceAll(valuesContent, "{{DOMAIN}}", domain)
+	valuesContent = strings.ReplaceAll(valuesContent, "{{RELEASE_NAME}}", releaseName)
+
+	// Apply additional placeholders from the predefined app configuration
+	for key, value := range predefinedApp.HelmChart.Placeholders {
+		valuesContent = strings.ReplaceAll(valuesContent, fmt.Sprintf("{{%s}}", key), value)
+	}
+
+	// Create a temporary values file on the VPS
+	valuesFileName := fmt.Sprintf("/tmp/%s-values.yaml", releaseName)
+
+	// Write the values content directly to the VPS using SSH
+	createFileCmd := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", valuesFileName, valuesContent)
+
+	_, err = sshService.ExecuteCommand(conn, createFileCmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to create values file on VPS: %v", err)
+	}
+
+	return valuesFileName, nil
 }
 
 // createVSCodeSettingsConfigMap creates a ConfigMap with default VS Code settings for persistence
 func (h *ApplicationsHandler) createVSCodeSettingsConfigMap(conn *services.SSHConnection, releaseName, namespace string) error {
 	sshService := services.NewSSHService()
-	
+
 	// Default VS Code settings with theme persistence and other user preferences
 	settingsJSON := `{
     "workbench.colorTheme": "Default Dark+",
@@ -759,35 +753,14 @@ func (h *ApplicationsHandler) createVSCodeSettingsConfigMap(conn *services.SSHCo
 	configMapName := fmt.Sprintf("%s-vscode-settings", releaseName)
 	createConfigMapCmd := fmt.Sprintf(`kubectl create configmap %s -n %s --from-literal=settings.json='%s' --dry-run=client -o yaml | kubectl apply -f -`,
 		configMapName, namespace, settingsJSON)
-	
+
 	_, err := sshService.ExecuteCommand(conn, createConfigMapCmd)
 	if err != nil {
 		return fmt.Errorf("failed to create VS Code settings ConfigMap: %v", err)
 	}
-	
+
 	log.Printf("Created VS Code settings ConfigMap: %s in namespace %s", configMapName, namespace)
 	return nil
-}
-
-// addInitContainerValues adds init container configuration for code-server VS Code settings
-func (h *ApplicationsHandler) addInitContainerValues(values map[string]string, releaseName string) {
-	// Configure init container to copy settings from ConfigMap to persistent volume
-	values["extraInitContainers[0].name"] = "init-vscode-settings"
-	values["extraInitContainers[0].image"] = "busybox:latest"
-	values["extraInitContainers[0].imagePullPolicy"] = "IfNotPresent"
-	values["extraInitContainers[0].command[0]"] = "/bin/sh"
-	values["extraInitContainers[0].command[1]"] = "-c"
-	values["extraInitContainers[0].command[2]"] = `chown -R 1000:1000 /home/coder && mkdir -p /home/coder/.local/share/code-server/User && cp /tmp/vscode-settings/settings.json /home/coder/.local/share/code-server/User/settings.json && chown 1000:1000 /home/coder/.local/share/code-server/User/settings.json`
-	values["extraInitContainers[0].securityContext.runAsUser"] = "0"
-	values["extraInitContainers[0].volumeMounts[0].name"] = "data"
-	values["extraInitContainers[0].volumeMounts[0].mountPath"] = "/home/coder"
-	values["extraInitContainers[0].volumeMounts[1].name"] = "vscode-settings"
-	values["extraInitContainers[0].volumeMounts[1].mountPath"] = "/tmp/vscode-settings"
-	
-	// Add ConfigMap volume for init container
-	values["extraVolumes[0].name"] = "vscode-settings"
-	values["extraVolumes[0].configMap.name"] = fmt.Sprintf("%s-vscode-settings", releaseName)
-	values["extraVolumes[0].configMap.defaultMode"] = "420"
 }
 
 // upgradeApplication implements core application upgrade logic
@@ -854,39 +827,37 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 		return fmt.Errorf("failed to clone chart repository for upgrade: %v", err)
 	}
 
-	// Prepare Helm values with updated version
+	// Generate values file from template with placeholder substitution and version update
 	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.ID)
-	values := make(map[string]string)
-	for key, value := range predefinedApp.HelmChart.Values {
-		valueStr := h.convertValueToString(value)
-		// Replace placeholders
-		valueStr = strings.ReplaceAll(valueStr, "{{SUBDOMAIN}}", app.Subdomain)
-		valueStr = strings.ReplaceAll(valueStr, "{{DOMAIN}}", app.Domain)
-		valueStr = strings.ReplaceAll(valueStr, "{{RELEASE_NAME}}", releaseName)
-		values[key] = valueStr
+
+	// Create a modified predefined app with updated version for values generation
+	modifiedPredefinedApp := *predefinedApp
+	if modifiedPredefinedApp.HelmChart.Placeholders == nil {
+		modifiedPredefinedApp.HelmChart.Placeholders = make(map[string]string)
 	}
 
-	// For code-server apps, ensure VS Code settings ConfigMap exists and configure init container
+	// Update the version placeholder for upgrade
+	if app.AppType == "code-server" && version != "latest" {
+		modifiedPredefinedApp.HelmChart.Placeholders["VERSION"] = version
+	} else if version == "latest" {
+		// For "latest", fetch the actual latest version
+		githubService := services.NewGitHubService()
+		if latestRelease, err := githubService.GetCodeServerLatestVersion(); err == nil {
+			latestTag := strings.TrimPrefix(latestRelease.TagName, "v")
+			modifiedPredefinedApp.HelmChart.Placeholders["VERSION"] = latestTag
+		}
+	}
+
+	valuesFilePath, err := h.generateValuesFile(conn, &modifiedPredefinedApp, app.Subdomain, app.Domain, releaseName)
+	if err != nil {
+		return fmt.Errorf("failed to generate values file for upgrade: %v", err)
+	}
+
+	// For code-server apps, ensure VS Code settings ConfigMap exists
 	if app.AppType == "code-server" {
 		err = h.createVSCodeSettingsConfigMap(conn, releaseName, app.Namespace)
 		if err != nil {
 			log.Printf("Warning: Failed to create/update VS Code settings ConfigMap: %v", err)
-		}
-		
-		// Add init container configuration to copy settings from ConfigMap to persistent volume
-		h.addInitContainerValues(values, releaseName)
-	}
-
-	// Update the image tag with the new version for code-server
-	if app.AppType == "code-server" && version != "latest" {
-		values["image.tag"] = version
-	} else if version == "latest" {
-		// For "latest", we can remove the explicit tag to use chart default
-		// or fetch the actual latest version
-		githubService := services.NewGitHubService()
-		if latestRelease, err := githubService.GetCodeServerLatestVersion(); err == nil {
-			latestTag := strings.TrimPrefix(latestRelease.TagName, "v")
-			values["image.tag"] = latestTag
 		}
 	}
 
@@ -901,7 +872,7 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 		chartName,
 		predefinedApp.HelmChart.Version, // Use chart version, not app version
 		app.Namespace,
-		values,
+		valuesFilePath,
 	)
 
 	if err != nil {
@@ -1126,7 +1097,7 @@ func (h *ApplicationsHandler) validateCodeServerVersion(version string) (bool, e
 	// Handle both Docker format (4.101.2) and GitHub format (v4.101.2)
 	for _, release := range releases {
 		dockerTag := strings.TrimPrefix(release.TagName, "v")
-		
+
 		if dockerTag == version || release.TagName == version {
 			return true, nil
 		}
