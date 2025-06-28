@@ -682,6 +682,28 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		return fmt.Errorf("failed to install Helm chart: %v", err)
 	}
 
+	// Create TLS secret for ingress if domain SSL config is available
+	if data.Domain != "" {
+		// Get domain SSL configuration
+		client := &http.Client{Timeout: 10 * time.Second}
+		var domainConfig struct {
+			Certificate string `json:"certificate"`
+			PrivateKey  string `json:"private_key"`
+		}
+		if err := utils.GetKVValue(client, token, accountID, fmt.Sprintf("ssl:%s", data.Domain), &domainConfig); err == nil {
+			// Create TLS secret in the application namespace
+			err = sshService.CreateTLSSecret(conn, data.Domain, domainConfig.Certificate, domainConfig.PrivateKey, predefinedApp.HelmChart.Namespace)
+			if err != nil {
+				log.Printf("Warning: Failed to create TLS secret for domain %s: %v", data.Domain, err)
+				// Don't fail the deployment, but log the warning
+			} else {
+				log.Printf("✅ Created TLS secret for domain %s in namespace %s", data.Domain, predefinedApp.HelmChart.Namespace)
+			}
+		} else {
+			log.Printf("Warning: No SSL configuration found for domain %s", data.Domain)
+		}
+	}
+
 	// For code-server apps, retrieve and store the auto-generated password
 	if data.AppType == "code-server" {
 		// Wait a bit for the secret to be fully created

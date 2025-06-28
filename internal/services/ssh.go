@@ -728,6 +728,46 @@ func min(a, b int) int {
 	return b
 }
 
+// CreateTLSSecret creates a Kubernetes TLS secret in the specified namespace
+func (ss *SSHService) CreateTLSSecret(conn *SSHConnection, domain, certificate, privateKey, namespace string) error {
+	// Generate secret name based on domain
+	secretName := strings.ReplaceAll(domain, ".", "-") + "-tls"
+
+	// Write certificate to temporary file
+	certPath := fmt.Sprintf("/tmp/%s-cert.crt", secretName)
+	certCommand := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", certPath, certificate)
+	if result, err := ss.ExecuteCommand(conn, certCommand); err != nil || result.ExitCode != 0 {
+		return fmt.Errorf("failed to write certificate: %v", err)
+	}
+
+	// Write private key to temporary file
+	keyPath := fmt.Sprintf("/tmp/%s-key.key", secretName)
+	keyCommand := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", keyPath, privateKey)
+	if result, err := ss.ExecuteCommand(conn, keyCommand); err != nil || result.ExitCode != 0 {
+		return fmt.Errorf("failed to write private key: %v", err)
+	}
+
+	// Ensure namespace exists
+	createNSCommand := fmt.Sprintf("kubectl create namespace %s --dry-run=client -o yaml | kubectl apply -f -", namespace)
+	ss.ExecuteCommand(conn, createNSCommand)
+
+	// Delete existing secret if it exists (ignore errors)
+	deleteCommand := fmt.Sprintf("kubectl delete secret %s -n %s --ignore-not-found=true", secretName, namespace)
+	ss.ExecuteCommand(conn, deleteCommand)
+
+	// Create the TLS secret in the specified namespace
+	createSecretCommand := fmt.Sprintf("kubectl create secret tls %s --cert=%s --key=%s -n %s",
+		secretName, certPath, keyPath, namespace)
+	if result, err := ss.ExecuteCommand(conn, createSecretCommand); err != nil || result.ExitCode != 0 {
+		return fmt.Errorf("failed to create TLS secret in namespace %s: %s", namespace, result.Output)
+	}
+
+	// Clean up temporary files
+	ss.ExecuteCommand(conn, fmt.Sprintf("rm -f %s %s", certPath, keyPath))
+
+	return nil
+}
+
 // GetVPSInfo retrieves the VPS information file
 func (ss *SSHService) GetVPSInfo(conn *SSHConnection) (string, error) {
 	result, err := ss.ExecuteCommand(conn, "cat /opt/xanthus/info.txt 2>/dev/null || echo 'Info file not found'")
