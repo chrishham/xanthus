@@ -1,5 +1,14 @@
 package models
 
+import (
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/chrishham/xanthus/internal/services"
+)
+
 // PredefinedApplication represents a curated application available for deployment
 type PredefinedApplication struct {
 	ID            string                  `json:"id"`
@@ -31,8 +40,19 @@ type ApplicationRequirements struct {
 	MinDisk   int     `json:"min_disk_gb"`
 }
 
+var (
+	// Cache for the latest code-server version
+	latestCodeServerVersion string
+	lastVersionCheck        time.Time
+	versionMutex           sync.RWMutex
+	versionCacheTTL        = 10 * time.Minute // Cache TTL for version checks
+)
+
 // GetPredefinedApplications returns the catalog of available applications
 func GetPredefinedApplications() []PredefinedApplication {
+	// Get the latest code-server version
+	codeServerVersion := getLatestCodeServerVersion()
+	
 	return []PredefinedApplication{
 		{
 			ID:          "code-server",
@@ -40,7 +60,7 @@ func GetPredefinedApplications() []PredefinedApplication {
 			Description: "VS Code in your browser - a full development environment accessible from anywhere",
 			Icon:        "💻",
 			Category:    "Development",
-			Version:     "4.101.1",
+			Version:     codeServerVersion,
 			HelmChart: HelmChartConfig{
 				Repository: "https://github.com/coder/code-server",
 				Chart:      "ci/helm-chart",
@@ -49,7 +69,7 @@ func GetPredefinedApplications() []PredefinedApplication {
 				Values: map[string]interface{}{
 					// Basic configuration
 					"image.repository": "codercom/code-server",
-					"image.tag":        "4.101.1",
+					"image.tag":        codeServerVersion,
 					"service.type":     "ClusterIP",
 					"service.port":     8080,
 
@@ -123,4 +143,55 @@ func GetPredefinedApplicationCategories() []string {
 	}
 
 	return categories
+}
+
+// getLatestCodeServerVersion fetches the latest code-server version with caching
+func getLatestCodeServerVersion() string {
+	versionMutex.RLock()
+	// Check if we have a cached version that's still valid
+	if latestCodeServerVersion != "" && time.Since(lastVersionCheck) < versionCacheTTL {
+		defer versionMutex.RUnlock()
+		return latestCodeServerVersion
+	}
+	versionMutex.RUnlock()
+
+	// Need to fetch new version
+	versionMutex.Lock()
+	defer versionMutex.Unlock()
+
+	// Double-check in case another goroutine updated it while we were waiting
+	if latestCodeServerVersion != "" && time.Since(lastVersionCheck) < versionCacheTTL {
+		return latestCodeServerVersion
+	}
+
+	// Fetch latest version from GitHub
+	githubService := services.NewGitHubService()
+	release, err := githubService.GetCodeServerLatestVersion()
+	if err != nil {
+		log.Printf("Warning: Failed to fetch latest code-server version: %v", err)
+		// Return fallback version if we can't fetch from GitHub
+		if latestCodeServerVersion != "" {
+			return latestCodeServerVersion
+		}
+		return "4.101.1" // Fallback version
+	}
+
+	// Convert GitHub tag format (v4.101.2) to Docker format (4.101.2)
+	version := strings.TrimPrefix(release.TagName, "v")
+	
+	// Update cache
+	latestCodeServerVersion = version
+	lastVersionCheck = time.Now()
+
+	log.Printf("Updated code-server version to %s", version)
+	return version
+}
+
+// RefreshVersionCache forces a refresh of the version cache
+func RefreshVersionCache() {
+	versionMutex.Lock()
+	defer versionMutex.Unlock()
+	
+	// Reset the cache timestamp to force a refresh on next call
+	lastVersionCheck = time.Time{}
 }
