@@ -88,6 +88,37 @@ func GetPredefinedApplications() []PredefinedApplication {
 			},
 			Documentation: "https://coder.com/docs/code-server",
 		},
+		{
+			ID:          "argocd",
+			Name:        "Argo CD",
+			Description: "Declarative, GitOps continuous delivery tool for Kubernetes",
+			Icon:        "🚀",
+			Category:    "DevOps",
+			Version:     "stable",
+			HelmChart: HelmChartConfig{
+				Repository:     "https://argoproj.github.io/argo-helm",
+				Chart:          "argo-cd",
+				Version:        "stable",
+				Namespace:      "argocd",
+				ValuesTemplate: "argocd.yaml",
+				Placeholders:   map[string]string{},
+			},
+			DefaultPort: 80,
+			Requirements: ApplicationRequirements{
+				MinCPU:    1.0,
+				MinMemory: 2,
+				MinDisk:   5,
+			},
+			Features: []string{
+				"GitOps application delivery",
+				"Declarative configuration",
+				"Web UI and CLI",
+				"Multi-cluster support",
+				"RBAC and SSO integration",
+				"Automated synchronization",
+			},
+			Documentation: "https://argo-cd.readthedocs.io/",
+		},
 	}
 }
 

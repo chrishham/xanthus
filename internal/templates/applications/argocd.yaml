@@ -1,0 +1,120 @@
+# ArgoCD Helm Values Template
+# This template supports placeholder substitution for dynamic deployment
+
+# Global configuration
+global:
+  # Default domain for ArgoCD
+  domain: "{{SUBDOMAIN}}.{{DOMAIN}}"
+
+# ArgoCD server configuration
+server:
+  # Enable ingress for ArgoCD server
+  ingress:
+    enabled: true
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - "{{SUBDOMAIN}}.{{DOMAIN}}"
+    tls:
+      - secretName: "{{DOMAIN}}-tls"
+        hosts:
+          - "{{SUBDOMAIN}}.{{DOMAIN}}"
+    ingressClassName: ""
+  
+  # Configure server to run behind ingress
+  extraArgs:
+    - --insecure
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+    portName: http
+  
+  # Resources
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# ArgoCD repository server configuration
+repoServer:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# ArgoCD application controller configuration
+controller:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+# Redis configuration
+redis:
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Dex configuration (disable external auth by default)
+dex:
+  enabled: false
+
+# Notifications controller
+notifications:
+  enabled: true
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# ApplicationSet controller
+applicationSet:
+  enabled: true
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Configure RBAC
+configs:
+  rbac:
+    # Default policy for authenticated users
+    policy.default: role:readonly
+    # Admin users (can be configured post-deployment)
+    policy.csv: |
+      p, role:admin, applications, *, */*, allow
+      p, role:admin, clusters, *, *, allow
+      p, role:admin, repositories, *, *, allow
+      g, argocd-admins, role:admin
+
+# Create initial admin secret
+createAggregateRoles: true
+
+# Sync policy
+syncPolicy:
+  # Automatically sync applications
+  automated:
+    prune: false
+    selfHeal: false

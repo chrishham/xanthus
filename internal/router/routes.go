@@ -73,7 +73,6 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.GET("/ssh-key", config.VPSHandler.HandleVPSSSHKey)
 		vps.GET("/:id/status", config.VPSHandler.HandleVPSStatus)
 		vps.GET("/:id/info", config.VPSHandler.HandleVPSInfo)
-		vps.GET("/:id/argocd-credentials", config.VPSHandler.HandleVPSArgoCDCredentials)
 		vps.POST("/:id/configure", config.VPSHandler.HandleVPSConfigure)
 		vps.POST("/:id/deploy", config.VPSHandler.HandleVPSDeploy)
 		vps.GET("/:id/logs", config.VPSHandler.HandleVPSLogs)

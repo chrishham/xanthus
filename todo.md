@@ -2,6 +2,14 @@
 
 @web/templates/vps-manage.html
 ram usage output is problematic
+ArgoCD: View Credentials  delete
+
+- when a vps is deleted , then delete all associated entries from applications.
+- when a vps is created...
+ 
+VPS Status & Health
+k3s status doesnt update succesfully, even after Setup completed! All components are ready.
+ K3s Service: ❌ unknown 
 @web/templates/vps-create.html
 - at vps creation ensure that login without ssh is completely disabled
 - at create a vps, list and the dedicated instances and add an appropriate filter
@@ -11,8 +19,10 @@ headlmamp, openwebui, code-server
 
 ## Applications
 @web/templates/applications.html
+Argocd Installation failed:
+Invalid SSL certificate 
 
-- status of deployed app. From where does the app get this info? I want on refresh to get the current helm status from the server.
+cerfificates stopped working!
 
  deployPredefinedApplication function is too specific for code server or not?
 

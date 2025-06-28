@@ -326,12 +326,6 @@ func (ss *SSHService) CheckVPSHealth(host, user, privateKeyPEM string, serverID 
 			status.SetupMessage = "Waiting for K3s to be ready..."
 		case "INSTALLING_HELM":
 			status.SetupMessage = "Installing Helm package manager..."
-		case "INSTALLING_ARGOCD":
-			status.SetupMessage = "Installing ArgoCD for GitOps..."
-		case "WAITING_ARGOCD":
-			status.SetupMessage = "Waiting for ArgoCD to be ready..."
-		case "INSTALLING_ARGOCD_CLI":
-			status.SetupMessage = "Installing ArgoCD CLI..."
 		case "VERIFYING":
 			status.SetupMessage = "Verifying all components..."
 		case "READY":
@@ -734,79 +728,7 @@ func min(a, b int) int {
 	return b
 }
 
-// CreateTLSSecret creates a Kubernetes TLS secret using Cloudflare certificates
-func (ss *SSHService) CreateTLSSecret(conn *SSHConnection, domain, certificate, privateKey string) error {
-	// Generate secret name based on domain
-	secretName := strings.ReplaceAll(domain, ".", "-") + "-cloudflare-tls"
-
-	// Write certificate to temporary file
-	certPath := fmt.Sprintf("/tmp/%s-cert.crt", secretName)
-	certCommand := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", certPath, certificate)
-	if result, err := ss.ExecuteCommand(conn, certCommand); err != nil || result.ExitCode != 0 {
-		return fmt.Errorf("failed to write certificate: %v", err)
-	}
-
-	// Write private key to temporary file
-	keyPath := fmt.Sprintf("/tmp/%s-key.key", secretName)
-	keyCommand := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", keyPath, privateKey)
-	if result, err := ss.ExecuteCommand(conn, keyCommand); err != nil || result.ExitCode != 0 {
-		return fmt.Errorf("failed to write private key: %v", err)
-	}
-
-	// Delete existing secret if it exists (ignore errors)
-	deleteCommand := fmt.Sprintf("kubectl delete secret %s -n argocd --ignore-not-found=true", secretName)
-	ss.ExecuteCommand(conn, deleteCommand)
-
-	// Create the TLS secret in argocd namespace
-	createSecretCommand := fmt.Sprintf("kubectl create secret tls %s --cert=%s --key=%s -n argocd",
-		secretName, certPath, keyPath)
-	if result, err := ss.ExecuteCommand(conn, createSecretCommand); err != nil || result.ExitCode != 0 {
-		return fmt.Errorf("failed to create TLS secret: %s", result.Output)
-	}
-
-	// Clean up temporary files
-	ss.ExecuteCommand(conn, fmt.Sprintf("rm -f %s %s", certPath, keyPath))
-
-	return nil
-}
-
-// CreateArgoCDIngress creates an ingress configuration for ArgoCD
-func (ss *SSHService) CreateArgoCDIngress(conn *SSHConnection, domain string) error {
-	secretName := strings.ReplaceAll(domain, ".", "-") + "-cloudflare-tls"
-	argoCDSubdomain := "argocd." + domain
-
-	ingressManifest := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: %s-argocd-ingress
-  namespace: argocd
-  annotations:
-    traefik.ingress.kubernetes.io/router.tls: "true"
-    traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
-spec:
-  ingressClassName: traefik
-  rules:
-  - host: "%s"
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: argocd-server
-            port:
-              number: 80
-  tls:
-  - hosts:
-    - "%s"
-    secretName: %s
-`, strings.ReplaceAll(domain, ".", "-"), argoCDSubdomain, argoCDSubdomain, secretName)
-
-	// Deploy the ingress manifest
-	return ss.DeployManifest(conn, ingressManifest, "argocd-ingress")
-}
-
-// GetVPSInfo retrieves the VPS information file that includes ArgoCD credentials
+// GetVPSInfo retrieves the VPS information file
 func (ss *SSHService) GetVPSInfo(conn *SSHConnection) (string, error) {
 	result, err := ss.ExecuteCommand(conn, "cat /opt/xanthus/info.txt 2>/dev/null || echo 'Info file not found'")
 	if err != nil {
@@ -814,34 +736,4 @@ func (ss *SSHService) GetVPSInfo(conn *SSHConnection) (string, error) {
 	}
 
 	return result.Output, nil
-}
-
-// GetArgoCDCredentials fetches ArgoCD credentials directly via SSH command
-func (ss *SSHService) GetArgoCDCredentials(conn *SSHConnection, domain string) (map[string]string, error) {
-	credentials := make(map[string]string)
-
-	// Get ArgoCD admin password using the CLI command
-	result, err := ss.ExecuteCommand(conn, "argocd admin initial-password -n argocd 2>/dev/null")
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute argocd command: %w", err)
-	}
-
-	if result.ExitCode != 0 {
-		return nil, fmt.Errorf("argocd command failed: %s", result.Output)
-	}
-
-	// Parse the password from the output (it's typically the first line)
-	password := strings.TrimSpace(strings.Split(result.Output, "\n")[0])
-	if password == "" {
-		return nil, fmt.Errorf("empty password returned from argocd command")
-	}
-
-	// Build the ArgoCD URL
-	argoCDURL := fmt.Sprintf("https://argocd.%s", domain)
-
-	credentials["url"] = argoCDURL
-	credentials["username"] = "admin"
-	credentials["password"] = password
-
-	return credentials, nil
 }
