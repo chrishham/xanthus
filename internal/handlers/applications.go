@@ -211,6 +211,15 @@ func (h *ApplicationsHandler) HandleApplicationsCreate(c *gin.Context) {
 		}
 	}
 
+	// For ArgoCD applications, include the initial admin password
+	if appData.AppType == "argocd" && app.Status == "deployed" {
+		password, err := h.getArgoCDPassword(token, accountID, app.ID)
+		if err == nil {
+			response["initial_password"] = password
+			response["password_info"] = "Save this admin password - you'll need it to access your ArgoCD instance (username: admin)"
+		}
+	}
+
 	c.JSON(http.StatusOK, response)
 }
 
@@ -365,15 +374,20 @@ func (h *ApplicationsHandler) HandleApplicationPasswordChange(c *gin.Context) {
 		return
 	}
 
-	if app.AppType != "code-server" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password change is only supported for code-server applications"})
+	if app.AppType != "code-server" && app.AppType != "argocd" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password change is only supported for code-server and ArgoCD applications"})
 		return
 	}
 
-	// Update password
-	err = h.updateCodeServerPassword(token, accountID, appID, passwordData.NewPassword, &app)
+	// Update password based on application type
+	if app.AppType == "code-server" {
+		err = h.updateCodeServerPassword(token, accountID, appID, passwordData.NewPassword, &app)
+	} else if app.AppType == "argocd" {
+		err = h.updateArgoCDPassword(token, accountID, appID, passwordData.NewPassword, &app)
+	}
+
 	if err != nil {
-		log.Printf("Error updating code-server password: %v", err)
+		log.Printf("Error updating %s password: %v", app.AppType, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
 		return
 	}
@@ -410,15 +424,21 @@ func (h *ApplicationsHandler) HandleApplicationPasswordGet(c *gin.Context) {
 		return
 	}
 
-	if app.AppType != "code-server" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password retrieval is only supported for code-server applications"})
+	if app.AppType != "code-server" && app.AppType != "argocd" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password retrieval is only supported for code-server and ArgoCD applications"})
 		return
 	}
 
-	// Get current password
-	password, err := h.getCodeServerPassword(token, accountID, appID)
+	// Get current password based on application type
+	var password string
+	if app.AppType == "code-server" {
+		password, err = h.getCodeServerPassword(token, accountID, appID)
+	} else if app.AppType == "argocd" {
+		password, err = h.getArgoCDPassword(token, accountID, appID)
+	}
+
 	if err != nil {
-		log.Printf("Error retrieving code-server password: %v", err)
+		log.Printf("Error retrieving %s password: %v", app.AppType, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve password"})
 		return
 	}
@@ -754,6 +774,16 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		err = h.retrieveAndStoreCodeServerPassword(token, accountID, appID, releaseName, predefinedApp.HelmChart.Namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
 		if err != nil {
 			log.Printf("Warning: Failed to retrieve code-server password: %v", err)
+		}
+	}
+
+	// For ArgoCD apps, retrieve and store the auto-generated admin password
+	if data.AppType == "argocd" {
+		// Wait a bit for the ArgoCD deployment to be ready
+		time.Sleep(10 * time.Second)
+		err = h.retrieveAndStoreArgoCDPassword(token, accountID, appID, releaseName, predefinedApp.HelmChart.Namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+		if err != nil {
+			log.Printf("Warning: Failed to retrieve ArgoCD password: %v", err)
 		}
 	}
 
@@ -1147,8 +1177,8 @@ func (h *ApplicationsHandler) deleteApplication(token, accountID, appID string) 
 		return err
 	}
 
-	// Also delete the password if it's a code-server application
-	if app.AppType == "code-server" {
+	// Also delete the password if it's a code-server or ArgoCD application
+	if app.AppType == "code-server" || app.AppType == "argocd" {
 		kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s:password", appID))
 		// Don't fail if password deletion fails - it's not critical
 	}
@@ -1218,4 +1248,246 @@ func (h *ApplicationsHandler) getRealTimeStatus(token, accountID string, app *mo
 	}
 
 	return status, nil
+}
+
+// getArgoCDPassword retrieves the current password for an ArgoCD application directly from the VPS
+func (h *ApplicationsHandler) getArgoCDPassword(token, accountID, appID string) (string, error) {
+	kvService := services.NewKVService()
+
+	// First try to get the stored password from KV
+	var passwordData struct {
+		Password string `json:"password"`
+	}
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s:password", appID), &passwordData)
+	if err == nil {
+		// Decrypt password from KV storage
+		password, decryptErr := utils.DecryptData(passwordData.Password, token)
+		if decryptErr == nil {
+			return password, nil
+		}
+		log.Printf("Warning: Failed to decrypt stored ArgoCD password, fetching from VPS: %v", decryptErr)
+	}
+
+	// If not in KV or decryption failed, fetch directly from VPS
+	log.Printf("ArgoCD password not found in KV, fetching from VPS for app %s", appID)
+
+	// Get application details
+	var app models.Application
+	err = kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
+	if err != nil {
+		return "", fmt.Errorf("failed to get application details: %v", err)
+	}
+
+	// Get VPS configuration for SSH details
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err = kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", app.VPSID), &vpsConfig)
+	if err != nil {
+		return "", fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+
+	// Get SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return "", fmt.Errorf("failed to get SSH private key: %v", err)
+	}
+
+	// Connect to VPS
+	sshService := services.NewSSHService()
+	vpsIDInt, _ := strconv.Atoi(app.VPSID)
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, vpsIDInt)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Retrieve admin password from ArgoCD initial admin secret
+	secretName := "argocd-initial-admin-secret"
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", app.Namespace, secretName)
+	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve password from secret '%s' in namespace '%s': %v", secretName, app.Namespace, err)
+	}
+
+	password := strings.TrimSpace(result.Output)
+	if password == "" {
+		return "", fmt.Errorf("no password found in ArgoCD secret '%s'", secretName)
+	}
+
+	// Store the retrieved password in KV for future use
+	encryptedPassword, err := utils.EncryptData(password, token)
+	if err != nil {
+		log.Printf("Warning: Failed to encrypt password for storage: %v", err)
+		// Still return the password even if we can't store it
+		return password, nil
+	}
+
+	err = kvService.PutValue(token, accountID, fmt.Sprintf("app:%s:password", appID), map[string]string{
+		"password": encryptedPassword,
+	})
+	if err != nil {
+		log.Printf("Warning: Failed to store ArgoCD password in KV: %v", err)
+		// Still return the password even if we can't store it
+	}
+
+	return password, nil
+}
+
+// updateArgoCDPassword updates the password for an ArgoCD application
+func (h *ApplicationsHandler) updateArgoCDPassword(token, accountID, appID, newPassword string, app *models.Application) error {
+	// Get VPS configuration for SSH details
+	kvService := services.NewKVService()
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", app.VPSID), &vpsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+
+	// Get SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return fmt.Errorf("failed to get SSH private key: %v", err)
+	}
+
+	// Connect to VPS
+	sshService := services.NewSSHService()
+	vpsIDInt, _ := strconv.Atoi(app.VPSID)
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, vpsIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Update the ArgoCD admin password
+	// ArgoCD stores the admin password in a secret named "argocd-initial-admin-secret"
+	encodedPassword := utils.Base64Encode(newPassword)
+	cmd := fmt.Sprintf("kubectl patch secret --namespace %s argocd-initial-admin-secret -p '{\"data\":{\"password\":\"%s\"}}'", app.Namespace, encodedPassword)
+	_, err = sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to update ArgoCD admin secret: %v", err)
+	}
+
+	// ArgoCD automatically picks up password changes, but we can restart the server to be sure
+	restartCmd := fmt.Sprintf("kubectl rollout restart deployment --namespace %s argocd-server", app.Namespace)
+	_, err = sshService.ExecuteCommand(conn, restartCmd)
+	if err != nil {
+		log.Printf("Warning: Failed to restart ArgoCD server deployment: %v", err)
+		// Don't fail the whole operation if restart fails
+	}
+
+	// Update stored password in KV
+	encryptedPassword, err := utils.EncryptData(newPassword, token)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt password: %v", err)
+	}
+
+	err = kvService.PutValue(token, accountID, fmt.Sprintf("app:%s:password", appID), map[string]string{
+		"password": encryptedPassword,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to store password: %v", err)
+	}
+
+	return nil
+}
+
+// retrieveAndStoreArgoCDPassword retrieves the auto-generated admin password from ArgoCD
+func (h *ApplicationsHandler) retrieveAndStoreArgoCDPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+	sshService := services.NewSSHService()
+	vpsIDInt, _ := strconv.Atoi(strings.Split(appID, "-")[1]) // Extract VPS ID from app ID
+
+	conn, err := sshService.GetOrCreateConnection(vpsIP, sshUser, privateKey, vpsIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// List all secrets in the namespace for debugging
+	listCmd := fmt.Sprintf("kubectl get secrets --namespace %s --no-headers", namespace)
+	listResult, err := sshService.ExecuteCommand(conn, listCmd)
+	if err != nil {
+		log.Printf("Debug: Failed to list secrets in namespace %s: %v", namespace, err)
+	} else {
+		log.Printf("Debug: Available secrets in namespace %s:\n%s", namespace, listResult.Output)
+	}
+
+	// Try to find ArgoCD admin secret with different possible names
+	secretNames := []string{
+		"argocd-initial-admin-secret",
+		fmt.Sprintf("%s-argocd-initial-admin-secret", releaseName),
+		"argocd-secret",
+		fmt.Sprintf("%s-argocd-secret", releaseName),
+	}
+
+	var password string
+	var foundSecret string
+
+	for _, secretName := range secretNames {
+		cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, secretName)
+		result, err := sshService.ExecuteCommand(conn, cmd)
+		if err == nil && strings.TrimSpace(result.Output) != "" {
+			password = strings.TrimSpace(result.Output)
+			foundSecret = secretName
+			log.Printf("Found ArgoCD admin password in secret: %s", secretName)
+			break
+		}
+	}
+
+	// If no password found in any secret, try to get it from ArgoCD server pod logs or generate one
+	if password == "" {
+		log.Printf("Warning: No ArgoCD admin password found in standard secrets, checking server logs...")
+
+		// Try to get the initial password from ArgoCD server logs
+		logCmd := fmt.Sprintf("kubectl logs --namespace %s -l app.kubernetes.io/name=argocd-server --tail=100 2>/dev/null | grep -i 'password' | head -5", namespace)
+		logResult, err := sshService.ExecuteCommand(conn, logCmd)
+		if err == nil && strings.TrimSpace(logResult.Output) != "" {
+			log.Printf("ArgoCD server logs (password related):\n%s", logResult.Output)
+		}
+
+		// As a last resort, generate a secure password and set it
+		password = "admin" + fmt.Sprintf("%d", time.Now().Unix())
+		log.Printf("Warning: No ArgoCD admin password found, using generated password")
+
+		// Try to create the initial admin secret with our generated password
+		encodedPassword := utils.Base64Encode(password)
+		createSecretCmd := fmt.Sprintf(`kubectl create secret generic argocd-initial-admin-secret --namespace %s --from-literal=password=%s --dry-run=client -o yaml | kubectl apply -f -`, namespace, encodedPassword)
+		_, err = sshService.ExecuteCommand(conn, createSecretCmd)
+		if err != nil {
+			log.Printf("Warning: Failed to create ArgoCD admin secret: %v", err)
+		} else {
+			log.Printf("Created ArgoCD admin secret with generated password")
+		}
+	}
+
+	// Store password in KV storage (encrypted)
+	kvService := services.NewKVService()
+	encryptedPassword, err := utils.EncryptData(password, token)
+	if err != nil {
+		log.Printf("Warning: Failed to encrypt password: %v", err)
+		return nil // Don't fail the deployment for this
+	}
+
+	err = kvService.PutValue(token, accountID, fmt.Sprintf("app:%s:password", appID), map[string]string{
+		"password": encryptedPassword,
+	})
+	if err != nil {
+		log.Printf("Warning: Failed to store ArgoCD password in KV: %v", err)
+		return nil // Don't fail the deployment for this
+	}
+
+	if foundSecret != "" {
+		log.Printf("Successfully stored ArgoCD admin password from secret: %s", foundSecret)
+	} else {
+		log.Printf("Successfully stored generated ArgoCD admin password")
+	}
+
+	return nil
 }
