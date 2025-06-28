@@ -643,16 +643,26 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 
 	// Prepare Helm values, replacing placeholders
 	values := make(map[string]string)
+	releaseName := fmt.Sprintf("%s-%s", data.Subdomain, appID)
+	
 	for key, value := range predefinedApp.HelmChart.Values {
 		valueStr := h.convertValueToString(value)
 		// Replace placeholders
 		valueStr = strings.ReplaceAll(valueStr, "{{SUBDOMAIN}}", data.Subdomain)
 		valueStr = strings.ReplaceAll(valueStr, "{{DOMAIN}}", data.Domain)
+		valueStr = strings.ReplaceAll(valueStr, "{{RELEASE_NAME}}", releaseName)
 		values[key] = valueStr
 	}
 
+	// For code-server apps, create VS Code settings ConfigMap for persistence
+	if data.AppType == "code-server" {
+		err = h.createVSCodeSettingsConfigMap(conn, releaseName, predefinedApp.HelmChart.Namespace)
+		if err != nil {
+			log.Printf("Warning: Failed to create VS Code settings ConfigMap: %v", err)
+		}
+	}
+
 	// Install Helm chart
-	releaseName := fmt.Sprintf("%s-%s", data.Subdomain, appID)
 	chartName := fmt.Sprintf("%s/%s", repoDir, predefinedApp.HelmChart.Chart)
 
 	err = helmService.InstallChart(
@@ -716,6 +726,44 @@ func (h *ApplicationsHandler) convertValueToString(value interface{}) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// createVSCodeSettingsConfigMap creates a ConfigMap with default VS Code settings for persistence
+func (h *ApplicationsHandler) createVSCodeSettingsConfigMap(conn *services.SSHConnection, releaseName, namespace string) error {
+	sshService := services.NewSSHService()
+	
+	// Default VS Code settings with theme persistence and other user preferences
+	settingsJSON := `{
+    "workbench.colorTheme": "Default Dark+",
+    "workbench.iconTheme": "vs-seti",
+    "editor.fontSize": 14,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": true,
+    "editor.renderWhitespace": "selection",
+    "editor.rulers": [80, 120],
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    "explorer.confirmDelete": false,
+    "explorer.confirmDragAndDrop": false,
+    "git.enableSmartCommit": true,
+    "git.confirmSync": false,
+    "terminal.integrated.fontSize": 14,
+    "workbench.startupEditor": "newUntitledFile"
+}`
+
+	// Create ConfigMap with the settings
+	configMapName := fmt.Sprintf("%s-vscode-settings", releaseName)
+	createConfigMapCmd := fmt.Sprintf(`kubectl create configmap %s -n %s --from-literal=settings.json='%s' --dry-run=client -o yaml | kubectl apply -f -`,
+		configMapName, namespace, settingsJSON)
+	
+	_, err := sshService.ExecuteCommand(conn, createConfigMapCmd)
+	if err != nil {
+		return fmt.Errorf("failed to create VS Code settings ConfigMap: %v", err)
+	}
+	
+	log.Printf("Created VS Code settings ConfigMap: %s in namespace %s", configMapName, namespace)
+	return nil
 }
 
 // upgradeApplication implements core application upgrade logic
@@ -783,13 +831,23 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 	}
 
 	// Prepare Helm values with updated version
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.ID)
 	values := make(map[string]string)
 	for key, value := range predefinedApp.HelmChart.Values {
 		valueStr := h.convertValueToString(value)
 		// Replace placeholders
 		valueStr = strings.ReplaceAll(valueStr, "{{SUBDOMAIN}}", app.Subdomain)
 		valueStr = strings.ReplaceAll(valueStr, "{{DOMAIN}}", app.Domain)
+		valueStr = strings.ReplaceAll(valueStr, "{{RELEASE_NAME}}", releaseName)
 		values[key] = valueStr
+	}
+
+	// For code-server apps, ensure VS Code settings ConfigMap exists
+	if app.AppType == "code-server" {
+		err = h.createVSCodeSettingsConfigMap(conn, releaseName, app.Namespace)
+		if err != nil {
+			log.Printf("Warning: Failed to create/update VS Code settings ConfigMap: %v", err)
+		}
 	}
 
 	// Update the image tag with the new version for code-server
@@ -806,7 +864,6 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 	}
 
 	// Upgrade Helm chart
-	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.ID)
 	chartName := fmt.Sprintf("%s/%s", repoDir, predefinedApp.HelmChart.Chart)
 
 	err = helmService.UpgradeChart(

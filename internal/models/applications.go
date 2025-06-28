@@ -96,6 +96,12 @@ func GetPredefinedApplications() []PredefinedApplication {
 					"securityContext.enabled":   true,
 					"securityContext.fsGroup":   1000,
 					"securityContext.runAsUser": 1000,
+
+					// VS Code Settings Persistence
+					"extraConfigmapMounts[0].name":        "vscode-settings",
+					"extraConfigmapMounts[0].mountPath":   "/home/coder/.local/share/code-server/User",
+					"extraConfigmapMounts[0].configMap":   "{{RELEASE_NAME}}-vscode-settings",
+					"extraConfigmapMounts[0].readOnly":    false,
 				},
 			},
 			DefaultPort: 8080,

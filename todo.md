@@ -15,6 +15,8 @@ headlmamp, openwebui, code-server
 - add new repo doesn't show an input box for user to type
 - when typing into input box in helm chart creation, nothing happens.
 
+ deployPredefinedApplication function is too specific for code server or not?
+
 # Settings
 
 - separate page to update the Hetzner api key ?
