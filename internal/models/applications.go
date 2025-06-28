@@ -54,7 +54,7 @@ func GetPredefinedApplications() []PredefinedApplication {
 					"service.port":     8080,
 
 					// Ingress configuration with Traefik
-					"ingress.enabled":                                                            true,
+					"ingress.enabled": true,
 					"ingress.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.entrypoints": "websecure",
 					"ingress.annotations.traefik\\.ingress\\.kubernetes\\.io/router\\.tls":         "true",
 					"ingress.hosts[0].host":     "{{SUBDOMAIN}}.{{DOMAIN}}",
@@ -76,9 +76,6 @@ func GetPredefinedApplications() []PredefinedApplication {
 					"securityContext.enabled":   true,
 					"securityContext.fsGroup":   1000,
 					"securityContext.runAsUser": 1000,
-
-					// Authentication disabled for simplicity
-					"extraArgs[0]": "--auth=none",
 				},
 			},
 			DefaultPort: 8080,

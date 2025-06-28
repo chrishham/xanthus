@@ -79,3 +79,8 @@ func DecryptData(encryptedData, token string) (string, error) {
 
 	return string(plaintext), nil
 }
+
+// Base64Encode encodes a string to base64
+func Base64Encode(data string) string {
+	return base64.StdEncoding.EncodeToString([]byte(data))
+}

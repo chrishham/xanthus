@@ -194,11 +194,22 @@ func (h *ApplicationsHandler) HandleApplicationsCreate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"success":     true,
 		"message":     "Application created successfully",
 		"application": app,
-	})
+	}
+
+	// For code-server applications, include the initial password
+	if appData.AppType == "code-server" && app.Status == "deployed" {
+		password, err := h.getCodeServerPassword(token, accountID, app.ID)
+		if err == nil {
+			response["initial_password"] = password
+			response["password_info"] = "Save this password - you'll need it to access your code-server instance"
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // HandleApplicationUpgrade upgrades existing applications to new versions
@@ -237,6 +248,64 @@ func (h *ApplicationsHandler) HandleApplicationUpgrade(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Application upgraded successfully",
+	})
+}
+
+// HandleApplicationPasswordChange changes the password for code-server applications
+func (h *ApplicationsHandler) HandleApplicationPasswordChange(c *gin.Context) {
+	token, err := c.Cookie("cf_token")
+	if err != nil || !utils.VerifyCloudflareToken(token) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	appID := c.Param("id")
+	var passwordData struct {
+		NewPassword string `json:"new_password"`
+	}
+
+	if err := c.ShouldBindJSON(&passwordData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	if len(passwordData.NewPassword) < 8 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 8 characters long"})
+		return
+	}
+
+	// Get account ID
+	_, accountID, err := utils.CheckKVNamespaceExists(token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+		return
+	}
+
+	// Get application details
+	kvService := services.NewKVService()
+	var app models.Application
+	err = kvService.GetValue(token, accountID, fmt.Sprintf("app:%s", appID), &app)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Application not found"})
+		return
+	}
+
+	if app.AppType != "code-server" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password change is only supported for code-server applications"})
+		return
+	}
+
+	// Update password
+	err = h.updateCodeServerPassword(token, accountID, appID, passwordData.NewPassword, &app)
+	if err != nil {
+		log.Printf("Error updating code-server password: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Password updated successfully",
 	})
 }
 
@@ -316,8 +385,13 @@ func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]mo
 
 	applications := []models.Application{}
 
-	// Fetch each application
+	// Fetch each application, but skip password keys
 	for _, key := range keysResp.Result {
+		// Skip password keys (they end with ":password")
+		if strings.HasSuffix(key.Name, ":password") {
+			continue
+		}
+		
 		var app models.Application
 		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
 			applications = append(applications, app)
@@ -478,6 +552,16 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 		return fmt.Errorf("failed to install Helm chart: %v", err)
 	}
 
+	// For code-server apps, retrieve and store the auto-generated password
+	if data.AppType == "code-server" {
+		// Wait a bit for the secret to be fully created
+		time.Sleep(5 * time.Second)
+		err = h.retrieveAndStoreCodeServerPassword(token, accountID, appID, releaseName, predefinedApp.HelmChart.Namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+		if err != nil {
+			log.Printf("Warning: Failed to retrieve code-server password: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -605,6 +689,137 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 	return nil
 }
 
+// retrieveAndStoreCodeServerPassword retrieves the auto-generated password from Kubernetes secret
+func (h *ApplicationsHandler) retrieveAndStoreCodeServerPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+	sshService := services.NewSSHService()
+	vpsIDInt, _ := strconv.Atoi(strings.Split(appID, "-")[1]) // Extract VPS ID from app ID
+
+	conn, err := sshService.GetOrCreateConnection(vpsIP, sshUser, privateKey, vpsIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Retrieve password from Kubernetes secret
+	// The secret name follows the pattern: {release-name}-code-server
+	secretName := fmt.Sprintf("%s-code-server", releaseName)
+	
+	// First, let's check if the secret exists and list available secrets for debugging
+	listCmd := fmt.Sprintf("kubectl get secrets --namespace %s", namespace)
+	listResult, err := sshService.ExecuteCommand(conn, listCmd)
+	if err != nil {
+		log.Printf("Debug: Failed to list secrets in namespace %s: %v", namespace, err)
+	} else {
+		log.Printf("Debug: Available secrets in namespace %s: %s", namespace, listResult.Output)
+	}
+	
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
+	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+	}
+
+	// Store password in KV storage (encrypted)
+	kvService := services.NewKVService()
+	encryptedPassword, err := utils.EncryptData(strings.TrimSpace(result.Output), token)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt password: %v", err)
+	}
+
+	err = kvService.PutValue(token, accountID, fmt.Sprintf("app:%s:password", appID), map[string]string{
+		"password": encryptedPassword,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to store password: %v", err)
+	}
+
+	return nil
+}
+
+// getCodeServerPassword retrieves the stored password for a code-server application
+func (h *ApplicationsHandler) getCodeServerPassword(token, accountID, appID string) (string, error) {
+	kvService := services.NewKVService()
+
+	var passwordData struct {
+		Password string `json:"password"`
+	}
+
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s:password", appID), &passwordData)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve password: %v", err)
+	}
+
+	// Decrypt password
+	password, err := utils.DecryptData(passwordData.Password, token)
+	if err != nil {
+		return "", fmt.Errorf("failed to decrypt password: %v", err)
+	}
+
+	return password, nil
+}
+
+// updateCodeServerPassword updates the password for a code-server application
+func (h *ApplicationsHandler) updateCodeServerPassword(token, accountID, appID, newPassword string, app *models.Application) error {
+	// Get VPS configuration for SSH details
+	kvService := services.NewKVService()
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", app.VPSID), &vpsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+
+	// Get SSH private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return fmt.Errorf("failed to get SSH private key: %v", err)
+	}
+
+	// Connect to VPS
+	sshService := services.NewSSHService()
+	vpsIDInt, _ := strconv.Atoi(app.VPSID)
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, vpsIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Update the Kubernetes secret with new password
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.ID)
+	secretName := fmt.Sprintf("%s-code-server", releaseName)
+	encodedPassword := utils.Base64Encode(newPassword)
+	cmd := fmt.Sprintf("kubectl patch secret --namespace %s %s -p '{\"data\":{\"password\":\"%s\"}}'", app.Namespace, secretName, encodedPassword)
+	_, err = sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to update Kubernetes secret: %v", err)
+	}
+
+	// Restart the code-server deployment to pick up the new password
+	restartCmd := fmt.Sprintf("kubectl rollout restart deployment --namespace %s %s", app.Namespace, releaseName)
+	_, err = sshService.ExecuteCommand(conn, restartCmd)
+	if err != nil {
+		return fmt.Errorf("failed to restart deployment: %v", err)
+	}
+
+	// Update stored password in KV
+	encryptedPassword, err := utils.EncryptData(newPassword, token)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt password: %v", err)
+	}
+
+	err = kvService.PutValue(token, accountID, fmt.Sprintf("app:%s:password", appID), map[string]string{
+		"password": encryptedPassword,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to store password: %v", err)
+	}
+
+	return nil
+}
+
 // deleteApplication implements core application deletion logic
 func (h *ApplicationsHandler) deleteApplication(token, accountID, appID string) error {
 	kvService := services.NewKVService()
@@ -654,5 +869,16 @@ func (h *ApplicationsHandler) deleteApplication(token, accountID, appID string) 
 	}
 
 	// Delete from KV
-	return kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s", appID))
+	err = kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s", appID))
+	if err != nil {
+		return err
+	}
+
+	// Also delete the password if it's a code-server application
+	if app.AppType == "code-server" {
+		kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s:password", appID))
+		// Don't fail if password deletion fails - it's not critical
+	}
+
+	return nil
 }

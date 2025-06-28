@@ -124,7 +124,7 @@
             <!-- Applications Grid -->
             <div x-show="applications.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <template x-for="app in applications" :key="app.id">
-                    <div class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
+                    <div x-show="isValidApplication(app)" class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
                         <!-- Application Header -->
                         <div class="p-6 border-b border-gray-200">
                             <div class="flex items-center justify-between">
@@ -183,11 +183,19 @@
 
                         <!-- Actions -->
                         <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
-                            <div class="flex space-x-2">
+                            <div class="flex space-x-2" :class="app.app_type === 'code-server' ? 'flex-wrap gap-2' : ''">
                                 <!-- Visit Application -->
                                 <button @click="visitApplication(app)" 
-                                        class="flex-1 text-xs px-3 py-2 border border-purple-300 text-purple-700 bg-purple-50 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                        :class="app.app_type === 'code-server' ? 'w-full' : 'flex-1'"
+                                        class="text-xs px-3 py-2 border border-purple-300 text-purple-700 bg-purple-50 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500">
                                     Visit
+                                </button>
+                                
+                                <!-- Change Password (Code-Server only) -->
+                                <button x-show="app.app_type === 'code-server'" 
+                                        @click="showPasswordChangeModal(app)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-green-300 text-green-700 bg-green-50 rounded-md hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500">
+                                    🔑 Change Password
                                 </button>
                                 
                                 <!-- Upgrade -->
@@ -235,7 +243,22 @@
                         
                         if (response.ok) {
                             const data = await response.json();
-                            this.applications = data.applications || [];
+                            
+                            // Filter out any invalid applications and deduplicate by ID
+                            const validApps = (data.applications || []).filter(app => this.isValidApplication(app));
+                            
+                            // Deduplicate applications by ID to prevent duplicates
+                            const uniqueApps = [];
+                            const seenIds = new Set();
+                            
+                            for (const app of validApps) {
+                                if (!seenIds.has(app.id)) {
+                                    seenIds.add(app.id);
+                                    uniqueApps.push(app);
+                                }
+                            }
+                            
+                            this.applications = uniqueApps;
                         } else {
                             console.error('Failed to refresh applications');
                             Swal.fire('Error', 'Failed to refresh application list', 'error');
@@ -452,13 +475,72 @@
                         const data = await response.json();
                         
                         if (response.ok) {
-                            Swal.fire({
-                                title: 'Success!',
-                                text: `Application "${formData.name}" is being deployed. This may take a few minutes.`,
-                                icon: 'success',
-                                confirmButtonColor: '#7c3aed'
-                            });
-                            await this.refreshApplications();
+                            // Don't add to local state immediately to avoid duplicates
+                            // The refresh after the dialog will handle updating the list
+                            
+                            // Check if this is a code-server application with password
+                            if (formData.app_type === 'code-server' && data.initial_password) {
+                                Swal.fire({
+                                    title: 'Code-Server Deployed Successfully!',
+                                    html: `
+                                        <div class="text-left">
+                                            <p class="mb-4">Your code-server instance "<strong>${formData.name}</strong>" has been deployed successfully!</p>
+                                            
+                                            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                                <h4 class="font-medium text-blue-900 mb-2">🔐 Initial Login Password</h4>
+                                                <div class="flex items-center space-x-2">
+                                                    <input type="text" value="${data.initial_password}" 
+                                                           class="flex-1 px-3 py-2 border border-blue-300 rounded font-mono text-sm bg-white" 
+                                                           readonly id="password-field">
+                                                    <button onclick="navigator.clipboard.writeText('${data.initial_password}'); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 1000)" 
+                                                            class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                                                        Copy
+                                                    </button>
+                                                </div>
+                                                <p class="text-sm text-blue-700 mt-2">⚠️ Save this password securely - you'll need it to access your code-server instance</p>
+                                            </div>
+                                            
+                                            <div class="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                                                <h4 class="font-medium text-green-900 mb-2">🚀 Next Steps</h4>
+                                                <ol class="text-sm text-green-800 space-y-1">
+                                                    <li>1. Visit your code-server instance</li>
+                                                    <li>2. Enter the password above to log in</li>
+                                                    <li>3. You can change the password later using the "Change Password" button</li>
+                                                </ol>
+                                            </div>
+                                            
+                                            <div class="text-center">
+                                                <a href="${data.application.url}" target="_blank" 
+                                                   class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">
+                                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                                    </svg>
+                                                    Open Code-Server
+                                                </a>
+                                            </div>
+                                        </div>
+                                    `,
+                                    icon: 'success',
+                                    confirmButtonColor: '#7c3aed',
+                                    confirmButtonText: 'Got it!',
+                                    width: 600,
+                                    allowOutsideClick: false
+                                }).then(() => {
+                                    // Refresh the list after the user dismisses the password dialog
+                                    // to ensure the application status is up to date
+                                    this.refreshApplications();
+                                });
+                            } else {
+                                Swal.fire({
+                                    title: 'Success!',
+                                    text: `Application "${formData.name}" is being deployed. This may take a few minutes.`,
+                                    icon: 'success',
+                                    confirmButtonColor: '#7c3aed'
+                                }).then(() => {
+                                    // Refresh after the user dismisses the success dialog
+                                    this.refreshApplications();
+                                });
+                            }
                         } else {
                             Swal.fire('Error', data.error || 'Failed to deploy application', 'error');
                         }
@@ -468,6 +550,21 @@
                     } finally {
                         this.loading = false;
                     }
+                },
+
+                // Helper function to validate application data
+                isValidApplication(app) {
+                    return app && 
+                           app.id && 
+                           app.name && 
+                           app.app_type && 
+                           app.status && 
+                           app.url &&
+                           app.vps_name &&
+                           app.created_at &&
+                           app.name.trim() !== '' &&
+                           app.url !== '' &&
+                           app.vps_name.trim() !== '';
                 },
 
                 visitApplication(app) {
@@ -530,6 +627,96 @@
                     } catch (error) {
                         console.error('Error upgrading application:', error);
                         Swal.fire('Error', 'Failed to upgrade application', 'error');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+
+                async showPasswordChangeModal(app) {
+                    const { value: newPassword } = await Swal.fire({
+                        title: 'Change Code-Server Password',
+                        html: `
+                            <div class="text-left">
+                                <p class="mb-4">Change the password for <strong>${app.name}</strong>:</p>
+                                
+                                <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                                    <div class="flex items-center">
+                                        <svg class="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                                        </svg>
+                                        <span class="text-sm text-yellow-800">This will restart your code-server instance</span>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">New Password:</label>
+                                    <input id="new-password" type="password" class="swal2-input w-full" 
+                                           placeholder="Enter new password (min 8 characters)" minlength="8">
+                                    <p class="text-xs text-gray-500 mt-1">Password must be at least 8 characters long</p>
+                                </div>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Change Password',
+                        confirmButtonColor: '#059669',
+                        width: 500,
+                        preConfirm: () => {
+                            const password = document.getElementById('new-password').value;
+                            if (!password) {
+                                Swal.showValidationMessage('Password is required');
+                                return false;
+                            }
+                            if (password.length < 8) {
+                                Swal.showValidationMessage('Password must be at least 8 characters long');
+                                return false;
+                            }
+                            return password;
+                        }
+                    });
+
+                    if (newPassword) {
+                        await this.changePassword(app.id, app.name, newPassword);
+                    }
+                },
+
+                async changePassword(appId, appName, newPassword) {
+                    this.setLoadingState('Changing Password', `Updating password for "${appName}"...`);
+                    try {
+                        const response = await fetch(`/applications/${appId}/password`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ new_password: newPassword })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (response.ok) {
+                            Swal.fire({
+                                title: 'Password Changed!',
+                                html: `
+                                    <div class="text-left">
+                                        <p class="mb-4">Password for <strong>${appName}</strong> has been updated successfully!</p>
+                                        <div class="p-3 bg-green-50 border border-green-200 rounded-md">
+                                            <div class="flex items-center">
+                                                <svg class="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                                </svg>
+                                                <span class="text-sm text-green-800">Your code-server instance is restarting with the new password</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `,
+                                icon: 'success',
+                                confirmButtonColor: '#059669'
+                            });
+                        } else {
+                            Swal.fire('Error', data.error || 'Failed to change password', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error changing password:', error);
+                        Swal.fire('Error', 'Failed to change password', 'error');
                     } finally {
                         this.loading = false;
                     }

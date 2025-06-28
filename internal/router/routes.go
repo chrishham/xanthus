@@ -95,6 +95,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		apps.GET("/prerequisites", config.AppsHandler.HandleApplicationsPrerequisites)
 		apps.POST("/create", config.AppsHandler.HandleApplicationsCreate)
 		apps.POST("/:id/upgrade", config.AppsHandler.HandleApplicationUpgrade)
+		apps.POST("/:id/password", config.AppsHandler.HandleApplicationPasswordChange)
 		apps.DELETE("/:id", config.AppsHandler.HandleApplicationDelete)
 	}
 }
