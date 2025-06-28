@@ -12,8 +12,7 @@ headlmamp, openwebui, code-server
 ## Applications
 @web/templates/applications.html
 
-- add new repo doesn't show an input box for user to type
-- when typing into input box in helm chart creation, nothing happens.
+- status of deployed app. From where does the app get this info? I want on refresh to get the current helm status from the server.
 
  deployPredefinedApplication function is too specific for code server or not?
 

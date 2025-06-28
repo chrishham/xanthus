@@ -515,7 +515,7 @@
                         confirmButtonText: 'Deploy Application',
                         cancelButtonText: 'Cancel',
                         confirmButtonColor: '#7c3aed',
-                        width: 600,
+                        width: 750,
                         preConfirm: () => {
                             const name = document.getElementById('app-name').value.trim();
                             const vps = document.getElementById('app-vps').value;
@@ -618,7 +618,7 @@
                                     icon: 'success',
                                     confirmButtonColor: '#7c3aed',
                                     confirmButtonText: 'Got it!',
-                                    width: 600,
+                                    width: 700,
                                     allowOutsideClick: false
                                 }).then(() => {
                                     // Refresh the list after the user dismisses the password dialog
@@ -683,8 +683,8 @@
                                             <option value="latest">latest (Automatic)</option>
                                             ${options}
                                         </select>
-                                        <div class="text-xs text-gray-500 mt-1 ml-1">Or enter custom version below:</div>
-                                        <input id="custom-version" class="swal2-input w-1/2 mt-1 ml-1 h-8" placeholder="Custom version (optional)">
+                                        <div class="text-xs text-gray-500 mt-1">Or enter custom version below:</div>
+                                        <input id="custom-version" class="swal2-input w-full mt-1" placeholder="Custom version (optional)">
                                     `;
                                 }
                             }
@@ -788,7 +788,7 @@
                                 
                                 <div>
                                     <label class="block text-sm font-medium text-gray-700 mb-1">New Password:</label>
-                                    <input id="new-password" type="password" class="swal2-input w-1/2 h-8 ml-1" 
+                                    <input id="new-password" type="password" class="swal2-input w-full" 
                                            placeholder="Enter new password (min 8 characters)" minlength="8">
                                     <p class="text-xs text-gray-500 mt-1">Password must be at least 8 characters long</p>
                                 </div>
@@ -797,7 +797,7 @@
                         showCancelButton: true,
                         confirmButtonText: 'Change Password',
                         confirmButtonColor: '#059669',
-                        width: 500,
+                        width: 600,
                         preConfirm: () => {
                             const password = document.getElementById('new-password').value;
                             if (!password) {
@@ -867,7 +867,7 @@
                                 icon: 'info',
                                 confirmButtonColor: '#7c3aed',
                                 confirmButtonText: 'Got it!',
-                                width: 600,
+                                width: 700,
                                 allowOutsideClick: true
                             });
                         } else {
