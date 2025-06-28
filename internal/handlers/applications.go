@@ -684,13 +684,10 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 
 	// Create TLS secret for ingress if domain SSL config is available
 	if data.Domain != "" {
-		// Get domain SSL configuration
-		client := &http.Client{Timeout: 10 * time.Second}
-		var domainConfig struct {
-			Certificate string `json:"certificate"`
-			PrivateKey  string `json:"private_key"`
-		}
-		if err := utils.GetKVValue(client, token, accountID, fmt.Sprintf("ssl:%s", data.Domain), &domainConfig); err == nil {
+		// Get domain SSL configuration using the KV service
+		kvService := services.NewKVService()
+		domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, data.Domain)
+		if err == nil && domainConfig != nil {
 			// Create TLS secret in the application namespace
 			err = sshService.CreateTLSSecret(conn, data.Domain, domainConfig.Certificate, domainConfig.PrivateKey, predefinedApp.HelmChart.Namespace)
 			if err != nil {
@@ -700,7 +697,16 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 				log.Printf("✅ Created TLS secret for domain %s in namespace %s", data.Domain, predefinedApp.HelmChart.Namespace)
 			}
 		} else {
-			log.Printf("Warning: No SSL configuration found for domain %s", data.Domain)
+			log.Printf("Warning: No SSL configuration found for domain %s: %v", data.Domain, err)
+			// Try to list available SSL configurations for debugging
+			if configs, listErr := kvService.ListDomainSSLConfigs(token, accountID); listErr == nil {
+				log.Printf("Debug: Available SSL configurations:")
+				for domain := range configs {
+					log.Printf("  - %s", domain)
+				}
+			} else {
+				log.Printf("Debug: Failed to list SSL configurations: %v", listErr)
+			}
 		}
 	}
 
