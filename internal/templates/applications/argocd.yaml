@@ -29,8 +29,6 @@ server:
   # Service configuration
   service:
     type: ClusterIP
-    port: 80
-    portName: http
     servicePortHttp: 80
     servicePortHttpName: http
   
@@ -110,6 +108,10 @@ configs:
       p, role:admin, clusters, *, *, allow
       p, role:admin, repositories, *, *, allow
       g, argocd-admins, role:admin
+  
+  # Configure server parameters to run in insecure mode
+  params:
+    server.insecure: true
 
 # Create initial admin secret
 createAggregateRoles: true
