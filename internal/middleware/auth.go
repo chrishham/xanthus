@@ -23,8 +23,17 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Store token in context for handlers to use
+		// Get account ID and set in context
+		_, accountID, err := utils.CheckKVNamespaceExists(token)
+		if err != nil {
+			c.Data(http.StatusOK, "text/html", []byte("❌ Error accessing account"))
+			c.Abort()
+			return
+		}
+
+		// Store token and account ID in context for handlers to use
 		c.Set("cf_token", token)
+		c.Set("account_id", accountID)
 		c.Next()
 	}
 }
@@ -45,8 +54,17 @@ func APIAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Store token in context for handlers to use
+		// Get account ID and set in context
+		_, accountID, err := utils.CheckKVNamespaceExists(token)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+			c.Abort()
+			return
+		}
+
+		// Store token and account ID in context for handlers to use
 		c.Set("cf_token", token)
+		c.Set("account_id", accountID)
 		c.Next()
 	}
 }

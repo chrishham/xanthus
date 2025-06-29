@@ -3,7 +3,6 @@ package services
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,37 +22,67 @@ func NewSimpleApplicationService() *SimpleApplicationService {
 
 // ListApplications returns all applications for the given account with real-time status updates
 func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]models.Application, error) {
-	// Get applications from KV store
-	client := &http.Client{Timeout: 10 * time.Second}
-	kvKey := fmt.Sprintf("applications_%s", accountID)
-	
-	var applicationsJSON string
-	err := utils.GetKVValue(client, token, accountID, kvKey, &applicationsJSON)
+	kvService := NewKVService()
+
+	// Get the Xanthus namespace ID
+	namespaceID, err := kvService.GetXanthusNamespaceID(token, accountID)
 	if err != nil {
-		// If key doesn't exist, return empty list
-		return []models.Application{}, nil
+		return nil, fmt.Errorf("failed to get namespace ID: %w", err)
 	}
 
-	var applications []models.Application
-	if applicationsJSON == "" {
-		return applications, nil
+	// List all keys with app: prefix
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/keys?prefix=app:",
+		accountID, namespaceID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if err := json.Unmarshal([]byte(applicationsJSON), &applications); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal applications: %w", err)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var keysResp struct {
+		Success bool `json:"success"`
+		Result  []struct {
+			Name string `json:"name"`
+		} `json:"result"`
 	}
 
-	// Update status for each application
-	for i := range applications {
-		if status, err := s.GetApplicationRealTimeStatus(token, accountID, &applications[i]); err == nil {
-			applications[i].Status = status
+	if err := json.NewDecoder(resp.Body).Decode(&keysResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !keysResp.Success {
+		return nil, fmt.Errorf("KV API failed")
+	}
+
+	applications := []models.Application{}
+
+	// Fetch each application, but skip password keys
+	for _, key := range keysResp.Result {
+		// Skip password keys (they end with ":password")
+		if strings.HasSuffix(key.Name, ":password") {
+			continue
 		}
-		applications[i].UpdatedAt = time.Now().Format(time.RFC3339)
-	}
 
-	// Save updated applications back to KV
-	if err := s.saveApplications(token, accountID, applications); err != nil {
-		log.Printf("Warning: failed to save updated applications: %v", err)
+		var app models.Application
+		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
+			// Update application status with real-time Helm status
+			if realTimeStatus, statusErr := s.GetApplicationRealTimeStatus(token, accountID, &app); statusErr == nil {
+				app.Status = realTimeStatus
+			}
+			// If we can't get real-time status, keep the cached status
+			app.UpdatedAt = time.Now().Format(time.RFC3339)
+
+			applications = append(applications, app)
+		}
 	}
 
 	return applications, nil
@@ -125,17 +154,10 @@ func (s *SimpleApplicationService) CreateApplication(token, accountID string, ap
 		UpdatedAt:   time.Now().Format(time.RFC3339),
 	}
 
-	// Get existing applications
-	applications, err := s.ListApplications(token, accountID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get existing applications: %w", err)
-	}
-
-	// Add new application
-	applications = append(applications, *app)
-
-	// Save to KV store
-	if err := s.saveApplications(token, accountID, applications); err != nil {
+	// Save individual application to KV store with app: prefix
+	kvService := NewKVService()
+	kvKey := fmt.Sprintf("app:%s", appID)
+	if err := kvService.PutValue(token, accountID, kvKey, app); err != nil {
 		return nil, fmt.Errorf("failed to save application: %w", err)
 	}
 
@@ -144,53 +166,34 @@ func (s *SimpleApplicationService) CreateApplication(token, accountID string, ap
 
 // UpdateApplication updates an existing application
 func (s *SimpleApplicationService) UpdateApplication(token, accountID string, app *models.Application) error {
-	applications, err := s.ListApplications(token, accountID)
-	if err != nil {
-		return fmt.Errorf("failed to get applications: %w", err)
+	// Update timestamp
+	app.UpdatedAt = time.Now().Format(time.RFC3339)
+
+	// Save individual application to KV store with app: prefix
+	kvService := NewKVService()
+	kvKey := fmt.Sprintf("app:%s", app.ID)
+	if err := kvService.PutValue(token, accountID, kvKey, app); err != nil {
+		return fmt.Errorf("failed to update application: %w", err)
 	}
 
-	// Find and update the application
-	found := false
-	for i, existing := range applications {
-		if existing.ID == app.ID {
-			app.UpdatedAt = time.Now().Format(time.RFC3339)
-			applications[i] = *app
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("application not found: %s", app.ID)
-	}
-
-	// Save updated applications
-	return s.saveApplications(token, accountID, applications)
+	return nil
 }
 
 // DeleteApplication deletes an application
 func (s *SimpleApplicationService) DeleteApplication(token, accountID, appID string) error {
-	applications, err := s.ListApplications(token, accountID)
-	if err != nil {
-		return fmt.Errorf("failed to get applications: %w", err)
+	kvService := NewKVService()
+	
+	// Delete the main application key
+	kvKey := fmt.Sprintf("app:%s", appID)
+	if err := kvService.DeleteValue(token, accountID, kvKey); err != nil {
+		return fmt.Errorf("failed to delete application: %w", err)
 	}
 
-	// Find and remove the application
-	found := false
-	for i, app := range applications {
-		if app.ID == appID {
-			applications = append(applications[:i], applications[i+1:]...)
-			found = true
-			break
-		}
-	}
+	// Also delete the password key if it exists
+	passwordKey := fmt.Sprintf("app:%s:password", appID)
+	kvService.DeleteValue(token, accountID, passwordKey) // Ignore error - password key might not exist
 
-	if !found {
-		return fmt.Errorf("application not found: %s", appID)
-	}
-
-	// Save updated applications
-	return s.saveApplications(token, accountID, applications)
+	return nil
 }
 
 // GetApplicationRealTimeStatus fetches current deployment status from Helm
@@ -262,14 +265,3 @@ func (s *SimpleApplicationService) GetApplicationRealTimeStatus(token, accountID
 	}
 }
 
-// saveApplications saves applications list to KV store
-func (s *SimpleApplicationService) saveApplications(token, accountID string, applications []models.Application) error {
-	client := &http.Client{Timeout: 10 * time.Second}
-	kvKey := fmt.Sprintf("applications_%s", accountID)
-	applicationsJSON, err := json.Marshal(applications)
-	if err != nil {
-		return fmt.Errorf("failed to marshal applications: %w", err)
-	}
-
-	return utils.PutKVValue(client, token, accountID, kvKey, string(applicationsJSON))
-}
