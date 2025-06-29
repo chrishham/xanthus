@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -182,4 +183,52 @@ func DNSConfigurationSuccess(c *gin.Context, domain, action string) {
 // SetupSuccess sends success response for setup operations
 func SetupSuccess(c *gin.Context, service string) {
 	JSONSuccessSimple(c, service+" configuration saved successfully")
+}
+
+// VPS-specific error response helpers
+
+// JSONVPSNotFound sends a 404 response for VPS not found
+func JSONVPSNotFound(c *gin.Context) {
+	JSONNotFound(c, "VPS configuration not found")
+}
+
+// JSONHetznerKeyMissing sends a response indicating Hetzner API key is not configured
+func JSONHetznerKeyMissing(c *gin.Context) {
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error":          "Hetzner API key not configured",
+		"setup_required": true,
+		"setup_step":     "hetzner_api",
+		"message":        "Please configure your Hetzner API key first in the setup section",
+	})
+}
+
+// JSONServerIDInvalid sends a 400 response for invalid server ID
+func JSONServerIDInvalid(c *gin.Context) {
+	JSONBadRequest(c, "Invalid server ID")
+}
+
+// JSONSSHKeyNotFound sends an error response for missing SSH key
+func JSONSSHKeyNotFound(c *gin.Context) {
+	JSONInternalServerError(c, "SSH private key not found. Please logout and login again.")
+}
+
+// VPS power management success responses
+func JSONVPSPowerActionSuccess(c *gin.Context, action, serverID string) {
+	message := fmt.Sprintf("Server %s successfully", action)
+	JSONSuccessSimple(c, message)
+}
+
+// VPS validation responses
+func JSONVPSNameAvailable(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"available": true,
+		"message":   "Name is available",
+	})
+}
+
+func JSONVPSNameUnavailable(c *gin.Context) {
+	c.JSON(http.StatusConflict, gin.H{
+		"available": false,
+		"error":     "A VPS with this name already exists in your Hetzner account",
+	})
 }

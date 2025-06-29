@@ -1375,12 +1375,12 @@ func (h *ApplicationsHandler) updateArgoCDPassword(token, accountID, appID, newP
 		return fmt.Errorf("failed to generate password hash: %v", err)
 	}
 	hashedPassword := strings.TrimSpace(hashResult.Output)
-	
+
 	// Get the Helm release name from the application namespace (it should match the app ID pattern)
 	releaseName := fmt.Sprintf("%s-app-%s", app.Subdomain, strings.Split(app.ID, "-")[1])
-	
+
 	// Update ArgoCD using Helm values
-	upgradeCmd := fmt.Sprintf("helm upgrade %s oci://ghcr.io/argoproj/argo-helm/argo-cd --version 8.1.2 --namespace %s --set configs.secret.argocdServerAdminPassword=%s --reuse-values", 
+	upgradeCmd := fmt.Sprintf("helm upgrade %s oci://ghcr.io/argoproj/argo-helm/argo-cd --version 8.1.2 --namespace %s --set configs.secret.argocdServerAdminPassword=%s --reuse-values",
 		releaseName, app.Namespace, hashedPassword)
 	_, err = sshService.ExecuteCommand(conn, upgradeCmd)
 	if err != nil {

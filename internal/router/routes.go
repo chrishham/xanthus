@@ -8,12 +8,15 @@ import (
 
 // RouteConfig holds all the handler instances
 type RouteConfig struct {
-	AuthHandler     *handlers.AuthHandler
-	DNSHandler      *handlers.DNSHandler
-	VPSHandler      *handlers.VPSHandler
-	AppsHandler     *handlers.ApplicationsHandler
-	TerminalHandler *handlers.TerminalHandler
-	PagesHandler    *handlers.PagesHandler
+	AuthHandler         *handlers.AuthHandler
+	DNSHandler          *handlers.DNSHandler
+	VPSLifecycleHandler *handlers.VPSLifecycleHandler
+	VPSInfoHandler      *handlers.VPSInfoHandler
+	VPSConfigHandler    *handlers.VPSConfigHandler
+	VPSMetaHandler      *handlers.VPSMetaHandler
+	AppsHandler         *handlers.ApplicationsHandler
+	TerminalHandler     *handlers.TerminalHandler
+	PagesHandler        *handlers.PagesHandler
 }
 
 // SetupRoutes configures all application routes
@@ -41,7 +44,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	// Main application pages
 	protected.GET("/main", config.PagesHandler.HandleMainPage)
 	protected.GET("/setup", config.PagesHandler.HandleSetupPage)
-	protected.POST("/setup/hetzner", config.VPSHandler.HandleSetupHetzner)
+	protected.POST("/setup/hetzner", config.VPSConfigHandler.HandleSetupHetzner)
 	protected.GET("/logout", config.AuthHandler.HandleLogout)
 
 	// DNS management routes
@@ -56,27 +59,34 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	// VPS management routes
 	vps := protected.Group("/vps")
 	{
-		vps.GET("", config.VPSHandler.HandleVPSManagePage)
-		vps.GET("/list", config.VPSHandler.HandleVPSList)
-		vps.GET("/create", config.VPSHandler.HandleVPSCreatePage)
-		vps.GET("/check-key", config.VPSHandler.HandleVPSCheckKey)
-		vps.POST("/validate-key", config.VPSHandler.HandleVPSValidateKey)
-		vps.GET("/locations", config.VPSHandler.HandleVPSLocations)
-		vps.GET("/server-types", config.VPSHandler.HandleVPSServerTypes)
-		vps.GET("/server-options", config.VPSHandler.HandleVPSServerOptions)
-		vps.POST("/validate-name", config.VPSHandler.HandleVPSValidateName)
-		vps.POST("/create", config.VPSHandler.HandleVPSCreate)
-		vps.POST("/delete", config.VPSHandler.HandleVPSDelete)
-		vps.POST("/poweroff", config.VPSHandler.HandleVPSPowerOff)
-		vps.POST("/poweron", config.VPSHandler.HandleVPSPowerOn)
-		vps.POST("/reboot", config.VPSHandler.HandleVPSReboot)
-		vps.GET("/ssh-key", config.VPSHandler.HandleVPSSSHKey)
-		vps.GET("/:id/status", config.VPSHandler.HandleVPSStatus)
-		vps.GET("/:id/info", config.VPSHandler.HandleVPSInfo)
-		vps.POST("/:id/configure", config.VPSHandler.HandleVPSConfigure)
-		vps.POST("/:id/deploy", config.VPSHandler.HandleVPSDeploy)
-		vps.GET("/:id/logs", config.VPSHandler.HandleVPSLogs)
-		vps.POST("/:id/terminal", config.VPSHandler.HandleVPSTerminal)
+		// Meta/UI routes
+		vps.GET("", config.VPSMetaHandler.HandleVPSManagePage)
+		vps.GET("/create", config.VPSMetaHandler.HandleVPSCreatePage)
+		vps.GET("/locations", config.VPSMetaHandler.HandleVPSLocations)
+		vps.GET("/server-types", config.VPSMetaHandler.HandleVPSServerTypes)
+		vps.GET("/server-options", config.VPSMetaHandler.HandleVPSServerOptions)
+		vps.POST("/validate-name", config.VPSMetaHandler.HandleVPSValidateName)
+
+		// Info/monitoring routes
+		vps.GET("/list", config.VPSInfoHandler.HandleVPSList)
+		vps.GET("/ssh-key", config.VPSInfoHandler.HandleVPSSSHKey)
+		vps.GET("/:id/status", config.VPSInfoHandler.HandleVPSStatus)
+		vps.GET("/:id/info", config.VPSInfoHandler.HandleVPSInfo)
+		vps.GET("/:id/logs", config.VPSInfoHandler.HandleVPSLogs)
+		vps.POST("/:id/terminal", config.VPSInfoHandler.HandleVPSTerminal)
+
+		// Lifecycle routes
+		vps.POST("/create", config.VPSLifecycleHandler.HandleVPSCreate)
+		vps.POST("/delete", config.VPSLifecycleHandler.HandleVPSDelete)
+		vps.POST("/poweroff", config.VPSLifecycleHandler.HandleVPSPowerOff)
+		vps.POST("/poweron", config.VPSLifecycleHandler.HandleVPSPowerOn)
+		vps.POST("/reboot", config.VPSLifecycleHandler.HandleVPSReboot)
+
+		// Configuration routes
+		vps.GET("/check-key", config.VPSConfigHandler.HandleVPSCheckKey)
+		vps.POST("/validate-key", config.VPSConfigHandler.HandleVPSValidateKey)
+		vps.POST("/:id/configure", config.VPSConfigHandler.HandleVPSConfigure)
+		vps.POST("/:id/deploy", config.VPSConfigHandler.HandleVPSDeploy)
 	}
 
 	// Terminal management routes
