@@ -16,12 +16,12 @@ type VersionService interface {
 // DefaultVersionService implements VersionService with caching and GitHub integration
 type DefaultVersionService struct {
 	githubService *GitHubService
-	cache         map[string]versionCacheEntry
+	cache         map[string]legacyVersionCacheEntry
 	cacheMutex    sync.RWMutex
 	cacheTTL      time.Duration
 }
 
-type versionCacheEntry struct {
+type legacyVersionCacheEntry struct {
 	version   string
 	timestamp time.Time
 }
@@ -30,7 +30,7 @@ type versionCacheEntry struct {
 func NewDefaultVersionService() VersionService {
 	return &DefaultVersionService{
 		githubService: NewGitHubService(),
-		cache:         make(map[string]versionCacheEntry),
+		cache:         make(map[string]legacyVersionCacheEntry),
 		cacheTTL:      10 * time.Minute,
 	}
 }
@@ -75,7 +75,7 @@ func (s *DefaultVersionService) GetLatestVersion(app string) (string, error) {
 	}
 
 	// Update cache
-	s.cache[app] = versionCacheEntry{
+	s.cache[app] = legacyVersionCacheEntry{
 		version:   version,
 		timestamp: time.Now(),
 	}
