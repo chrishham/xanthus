@@ -19,15 +19,18 @@ import (
 
 // ApplicationsHandler contains dependencies for application-related operations
 type ApplicationsHandler struct {
-	catalog   models.ApplicationCatalog
-	validator models.ApplicationValidator
+	catalog        services.ApplicationCatalog
+	validator      models.ApplicationValidator
+	serviceFactory *services.ApplicationServiceFactory
 }
 
-// NewApplicationsHandler creates a new applications handler instance
+// NewApplicationsHandler creates a new applications handler instance using the service layer
 func NewApplicationsHandler() *ApplicationsHandler {
+	factory := services.NewApplicationServiceFactory()
 	return &ApplicationsHandler{
-		catalog:   models.NewDefaultApplicationCatalog(),
-		validator: models.NewDefaultApplicationValidator(),
+		catalog:        factory.CreateCatalogService(),
+		validator:      factory.CreateValidatorService(),
+		serviceFactory: factory,
 	}
 }
 

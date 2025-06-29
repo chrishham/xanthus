@@ -2,11 +2,8 @@ package models
 
 import (
 	"log"
-	"strings"
 	"sync"
 	"time"
-
-	"github.com/chrishham/xanthus/internal/services"
 )
 
 var (
@@ -16,7 +13,9 @@ var (
 	versionCacheTTL         = 10 * time.Minute
 )
 
-// ApplicationCatalog interface defines methods for managing application catalog
+// ApplicationCatalog interface is now deprecated and moved to services package.
+// This is kept for backward compatibility only.
+// Use services.ApplicationCatalog instead.
 type ApplicationCatalog interface {
 	GetApplications() []PredefinedApplication
 	GetApplicationByID(id string) (*PredefinedApplication, bool)
@@ -28,6 +27,8 @@ type ApplicationCatalog interface {
 type DefaultApplicationCatalog struct{}
 
 // NewDefaultApplicationCatalog creates a new instance of DefaultApplicationCatalog
+// This implementation is kept for backward compatibility but is deprecated.
+// New code should use services.NewApplicationServiceFactory().CreateCatalogService()
 func NewDefaultApplicationCatalog() ApplicationCatalog {
 	return &DefaultApplicationCatalog{}
 }
@@ -154,17 +155,20 @@ func getLatestCodeServerVersion() string {
 		return latestCodeServerVersion
 	}
 
-	githubService := services.NewGitHubService()
-	release, err := githubService.GetCodeServerLatestVersion()
-	if err != nil {
-		log.Printf("Warning: Failed to fetch latest code-server version: %v", err)
-		if latestCodeServerVersion != "" {
-			return latestCodeServerVersion
-		}
-		return "4.101.1"
+	// Note: This is a temporary workaround for backward compatibility.
+	// New code should use the service layer instead.
+	// For now, we'll return a fallback version to avoid circular dependencies.
+	// TODO: Remove this when all code migrates to the service layer.
+	
+	log.Printf("Warning: Using deprecated direct version fetching, returning fallback version")
+	
+	// Return cached version if available, otherwise use fallback
+	if latestCodeServerVersion != "" {
+		return latestCodeServerVersion
 	}
-
-	version := strings.TrimPrefix(release.TagName, "v")
+	
+	// Use fallback version
+	version := "4.101.1"
 
 	latestCodeServerVersion = version
 	lastVersionCheck = time.Now()
