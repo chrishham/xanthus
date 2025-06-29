@@ -6,22 +6,22 @@ import "time"
 type ApplicationConfig struct {
 	// HTTP request timeout
 	RequestTimeout time.Duration
-	
+
 	// SSH connection timeout
 	SSHTimeout time.Duration
-	
+
 	// Helm operation timeout
 	HelmTimeout time.Duration
-	
+
 	// Password validation settings
 	MinPasswordLength int
-	
+
 	// Supported application types
 	SupportedAppTypes []string
-	
+
 	// Default namespaces for different app types
 	DefaultNamespaces map[string]string
-	
+
 	// Version check limits
 	MaxVersionsToCheck int
 }
@@ -29,11 +29,11 @@ type ApplicationConfig struct {
 // DefaultConfig returns the default configuration
 func DefaultConfig() *ApplicationConfig {
 	return &ApplicationConfig{
-		RequestTimeout:     30 * time.Second,
-		SSHTimeout:         10 * time.Second,
-		HelmTimeout:        300 * time.Second, // 5 minutes
-		MinPasswordLength:  8,
-		SupportedAppTypes:  []string{"code-server", "argocd"},
+		RequestTimeout:    30 * time.Second,
+		SSHTimeout:        10 * time.Second,
+		HelmTimeout:       300 * time.Second, // 5 minutes
+		MinPasswordLength: 8,
+		SupportedAppTypes: []string{"code-server", "argocd"},
 		DefaultNamespaces: map[string]string{
 			"code-server": "code-server",
 			"argocd":      "argocd",
@@ -48,18 +48,18 @@ type ApplicationConstants struct {
 	AppPrefix      string
 	PasswordPrefix string
 	VPSPrefix      string
-	
+
 	// Secret names
 	SSHKeySecret    string
 	TLSSecretSuffix string
-	
+
 	// Release name patterns
 	ReleaseNameFormat string
-	
+
 	// Helm chart repositories
-	ArgoCDRepo      string
-	CodeServerRepo  string
-	
+	ArgoCDRepo     string
+	CodeServerRepo string
+
 	// Default Docker image tags
 	DefaultCodeServerTag string
 	DefaultArgoCDTag     string
@@ -71,15 +71,15 @@ func Constants() *ApplicationConstants {
 		AppPrefix:      "app:",
 		PasswordPrefix: ":password",
 		VPSPrefix:      "vps:",
-		
+
 		SSHKeySecret:    "config:ssl:csr",
 		TLSSecretSuffix: "-tls",
-		
+
 		ReleaseNameFormat: "%s-%s", // subdomain-appid
-		
-		ArgoCDRepo:      "oci://ghcr.io/argoproj/argo-helm/argo-cd",
-		CodeServerRepo:  "https://github.com/coder/code-server-helm.git",
-		
+
+		ArgoCDRepo:     "oci://ghcr.io/argoproj/argo-helm/argo-cd",
+		CodeServerRepo: "https://github.com/coder/code-server-helm.git",
+
 		DefaultCodeServerTag: "latest",
 		DefaultArgoCDTag:     "8.1.2",
 	}

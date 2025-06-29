@@ -159,14 +159,14 @@ func getLatestCodeServerVersion() string {
 	// New code should use the service layer instead.
 	// For now, we'll return a fallback version to avoid circular dependencies.
 	// TODO: Remove this when all code migrates to the service layer.
-	
+
 	log.Printf("Warning: Using deprecated direct version fetching, returning fallback version")
-	
+
 	// Return cached version if available, otherwise use fallback
 	if latestCodeServerVersion != "" {
 		return latestCodeServerVersion
 	}
-	
+
 	// Use fallback version
 	version := "4.101.1"
 

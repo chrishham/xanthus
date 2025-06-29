@@ -11,13 +11,13 @@ import (
 
 // ConfigDrivenCatalogService implements ApplicationCatalog using YAML configuration files
 type ConfigDrivenCatalogService struct {
-	configPath    string
-	configLoader  models.ConfigLoader
+	configPath     string
+	configLoader   models.ConfigLoader
 	versionService VersionService
-	applications  []models.PredefinedApplication
-	categories    []string
-	mutex         sync.RWMutex
-	loaded        bool
+	applications   []models.PredefinedApplication
+	categories     []string
+	mutex          sync.RWMutex
+	loaded         bool
 }
 
 // NewConfigDrivenCatalogService creates a new configuration-driven catalog service
@@ -61,11 +61,11 @@ func (s *ConfigDrivenCatalogService) GetApplications() []models.PredefinedApplic
 	apps := make([]models.PredefinedApplication, len(s.applications))
 	for i, app := range s.applications {
 		apps[i] = app
-		
+
 		// Get current version from version service
 		if version, err := s.versionService.GetLatestVersion(app.ID); err == nil {
 			apps[i].Version = version
-			
+
 			// Update placeholders with current version
 			if apps[i].HelmChart.Placeholders == nil {
 				apps[i].HelmChart.Placeholders = make(map[string]string)

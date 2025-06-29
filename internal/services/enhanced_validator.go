@@ -277,9 +277,9 @@ func (v *EnhancedApplicationValidator) validateRepository(repository string) err
 	}
 
 	// Ensure it's a valid HTTP/HTTPS URL or Git repository
-	if !strings.HasPrefix(repository, "http://") && 
-	   !strings.HasPrefix(repository, "https://") && 
-	   !strings.HasPrefix(repository, "git@") {
+	if !strings.HasPrefix(repository, "http://") &&
+		!strings.HasPrefix(repository, "https://") &&
+		!strings.HasPrefix(repository, "git@") {
 		return fmt.Errorf("repository URL must be HTTP, HTTPS, or Git SSH format")
 	}
 

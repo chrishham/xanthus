@@ -5,7 +5,13 @@ ram usage output is problematic
 ArgoCD: View Credentials  delete
 
 - when a vps is deleted , then delete all associated entries from applications.
-- when a vps is created...
+- when a vps is created then show a loading modal , show that user cant press anything else
+- When a vps is created then dont check for available dns records created by Xanthus and dont touch A records.
+- Dont touch A records when creating a vps. when user creates an application then for the domain associated (or blank or asterisk for the bare domain) only then create an A record. 
+- When user creates a new app check if the subdomain is arleady taken show relevant error.
+
+
+
  
 VPS Status & Health
 k3s status doesnt update succesfully, even after Setup completed! All components are ready.
@@ -48,15 +54,15 @@ buy domain, point nameservers to cloudfare, wait for the domain to be active, cr
 - 
 
  find internal -type f -name '*.go' -exec wc -l {} + | sort -nr | sed -n '2,11p'
-  1389 internal/handlers/applications.go
-  1282 internal/handlers/vps.go
    781 internal/services/ssh.go
    647 internal/services/cloudflare.go
+   568 internal/services/application_service_simple.go
    472 internal/services/hetzner.go
    427 internal/services/kv.go
+   425 internal/handlers/applications/http.go
+   387 internal/services/enhanced_validator.go
+   340 internal/handlers/applications/common.go
    317 internal/utils/cloudflare.go
    291 internal/utils/hetzner.go
-   274 internal/handlers/dns.go
-   257 internal/services/helm.go
 
    GetPredefinedApplications

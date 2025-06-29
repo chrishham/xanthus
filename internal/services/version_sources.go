@@ -30,7 +30,7 @@ func NewGitHubVersionSource(repository string) VersionSource {
 
 func (g *GitHubVersionSource) GetLatestVersion() (string, error) {
 	log.Printf("Fetching latest version from GitHub repository: %s", g.repository)
-	
+
 	switch g.repository {
 	case "coder/code-server":
 		release, err := g.githubService.GetCodeServerLatestVersion()
@@ -73,7 +73,7 @@ func NewDockerHubVersionSource(repository string) VersionSource {
 
 func (d *DockerHubVersionSource) GetLatestVersion() (string, error) {
 	log.Printf("Fetching latest version from Docker Hub repository: %s", d.repository)
-	
+
 	// TODO: Implement Docker Hub API integration
 	// For now, return a placeholder
 	log.Printf("Warning: Docker Hub version fetching not yet implemented for %s", d.repository)
@@ -109,7 +109,7 @@ func NewHelmVersionSource(repository, chartName string) VersionSource {
 
 func (h *HelmVersionSource) GetLatestVersion() (string, error) {
 	log.Printf("Fetching latest version from Helm repository: %s, chart: %s", h.repository, h.chartName)
-	
+
 	// TODO: Implement Helm repository API integration
 	// For now, return a placeholder
 	log.Printf("Warning: Helm version fetching not yet implemented for %s/%s", h.repository, h.chartName)

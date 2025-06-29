@@ -44,7 +44,7 @@ func (cs *CodeServerHandlers) UpdatePassword(token, accountID, appID, newPasswor
 	secretName := fmt.Sprintf("%s-code-server", releaseName)
 	encodedPassword := utils.Base64Encode(newPassword)
 	cmd := fmt.Sprintf("kubectl patch secret --namespace %s %s -p '{\"data\":{\"password\":\"%s\"}}'", appData.Namespace, secretName, encodedPassword)
-	
+
 	sshService := services.NewSSHService()
 	_, err = sshService.ExecuteCommand(conn, cmd)
 	if err != nil {

@@ -83,7 +83,7 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 		fmt.Printf("Attempting to retrieve application: %s\n", key.Name)
 		var app models.Application
 		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
-			fmt.Printf("Successfully retrieved application: %s (ID: %s, Name: %s, VPSName: %s, AppType: %s, Status: %s, URL: %s)\n", 
+			fmt.Printf("Successfully retrieved application: %s (ID: %s, Name: %s, VPSName: %s, AppType: %s, Status: %s, URL: %s)\n",
 				key.Name, app.ID, app.Name, app.VPSName, app.AppType, app.Status, app.URL)
 			// Update application status with real-time Helm status
 			if realTimeStatus, statusErr := s.GetApplicationRealTimeStatus(token, accountID, &app); statusErr == nil {
@@ -126,7 +126,7 @@ func (s *SimpleApplicationService) GetApplication(token, accountID, appID string
 func (s *SimpleApplicationService) CreateApplication(token, accountID string, appData interface{}, predefinedApp *models.PredefinedApplication) (*models.Application, error) {
 	// Parse application data based on type
 	var subdomain, domain, vpsID, vpsName, description string
-	
+
 	switch data := appData.(type) {
 	case map[string]interface{}:
 		if sub, ok := data["subdomain"].(string); ok {
@@ -150,10 +150,10 @@ func (s *SimpleApplicationService) CreateApplication(token, accountID string, ap
 
 	// Generate application ID
 	appID := fmt.Sprintf("app-%d", time.Now().Unix())
-	
+
 	// Create namespace based on application type
 	namespace := predefinedApp.ID
-	
+
 	// Create application model
 	app := &models.Application{
 		ID:          appID,
@@ -222,7 +222,7 @@ func (s *SimpleApplicationService) UpdateApplication(token, accountID string, ap
 // DeleteApplication deletes an application
 func (s *SimpleApplicationService) DeleteApplication(token, accountID, appID string) error {
 	kvService := NewKVService()
-	
+
 	// Delete the main application key
 	kvKey := fmt.Sprintf("app:%s", appID)
 	if err := kvService.DeleteValue(token, accountID, kvKey); err != nil {
@@ -245,7 +245,7 @@ func (s *SimpleApplicationService) GetApplicationRealTimeStatus(token, accountID
 	// Use existing VPS service
 	vpsService := NewVPSService()
 	sshService := NewSSHService()
-	
+
 	// Get VPS configuration
 	serverID, _ := strconv.Atoi(app.VPSID)
 	vpsConfig, err := vpsService.ValidateVPSAccess(token, accountID, serverID)
@@ -270,7 +270,7 @@ func (s *SimpleApplicationService) GetApplicationRealTimeStatus(token, accountID
 
 	// Check Helm deployment status
 	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
-	statusCmd := fmt.Sprintf("helm status %s -n %s --output json 2>/dev/null || echo '{\"info\":{\"status\":\"not-found\"}}'", 
+	statusCmd := fmt.Sprintf("helm status %s -n %s --output json 2>/dev/null || echo '{\"info\":{\"status\":\"not-found\"}}'",
 		releaseName, app.Namespace)
 
 	result, err := sshService.ExecuteCommand(conn, statusCmd)
@@ -353,7 +353,7 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 
 	// Handle different chart repository types based on HelmChart configuration
 	helmConfig := predefinedApp.HelmChart
-	
+
 	if strings.Contains(helmConfig.Repository, "github.com") {
 		// Clone GitHub repository for the chart
 		repoDir := fmt.Sprintf("/tmp/%s-chart", predefinedApp.ID)
@@ -391,9 +391,9 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 	}
 
 	// Install via Helm
-	installCmd := fmt.Sprintf("helm install %s %s --namespace %s --values %s --wait --timeout 10m", 
+	installCmd := fmt.Sprintf("helm install %s %s --namespace %s --values %s --wait --timeout 10m",
 		releaseName, chartName, namespace, valuesPath)
-	
+
 	result, err := sshService.ExecuteCommand(conn, installCmd)
 	if err != nil {
 		return fmt.Errorf("helm install failed: %v, output: %s", err, result.Output)
@@ -414,7 +414,7 @@ func (s *SimpleApplicationService) generateValuesFile(predefinedApp *models.Pred
 	if predefinedApp.HelmChart.ValuesTemplate != "" {
 		return s.generateFromTemplate(predefinedApp, subdomain, domain, releaseName)
 	}
-	
+
 	// Fallback to minimal values if no template is specified
 	return s.generateMinimalValues(predefinedApp, subdomain, domain, releaseName)
 }
@@ -422,13 +422,13 @@ func (s *SimpleApplicationService) generateValuesFile(predefinedApp *models.Pred
 // generateFromTemplate generates values from a template file with placeholder substitution
 func (s *SimpleApplicationService) generateFromTemplate(predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
 	templatePath := fmt.Sprintf("internal/templates/applications/%s", predefinedApp.HelmChart.ValuesTemplate)
-	
+
 	// Read the template file
 	templateContent, err := os.ReadFile(templatePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read template file %s: %w", templatePath, err)
 	}
-	
+
 	// Prepare placeholder values
 	placeholders := map[string]string{
 		"VERSION":      predefinedApp.Version,
@@ -436,21 +436,20 @@ func (s *SimpleApplicationService) generateFromTemplate(predefinedApp *models.Pr
 		"DOMAIN":       domain,
 		"RELEASE_NAME": releaseName,
 	}
-	
+
 	// Add any additional placeholders from the configuration
 	for key, value := range predefinedApp.HelmChart.Placeholders {
 		placeholders[key] = value
 	}
-	
+
 	// Replace placeholders in the template
 	content := string(templateContent)
 	for placeholder, value := range placeholders {
 		content = strings.ReplaceAll(content, fmt.Sprintf("{{%s}}", placeholder), value)
 	}
-	
+
 	return content, nil
 }
-
 
 // generateMinimalValues generates minimal values when no template is available
 func (s *SimpleApplicationService) generateMinimalValues(predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
@@ -546,7 +545,7 @@ func (s *SimpleApplicationService) retrieveArgoCDPassword(token, accountID, appI
 // storeEncryptedPassword encrypts and stores the password in KV store
 func (s *SimpleApplicationService) storeEncryptedPassword(token, accountID, appID, password string) error {
 	kvService := NewKVService()
-	
+
 	// Encrypt the password
 	encryptedPassword, err := utils.EncryptData(password, token)
 	if err != nil {
@@ -565,4 +564,3 @@ func (s *SimpleApplicationService) storeEncryptedPassword(token, accountID, appI
 
 	return nil
 }
-

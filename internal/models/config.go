@@ -11,18 +11,18 @@ import (
 
 // ApplicationConfig represents the YAML configuration structure for applications
 type ApplicationConfig struct {
-	ID            string                     `yaml:"id" validate:"required"`
-	Name          string                     `yaml:"name" validate:"required"`
-	Description   string                     `yaml:"description" validate:"required"`
-	Icon          string                     `yaml:"icon,omitempty"`
-	Category      string                     `yaml:"category" validate:"required"`
-	VersionSource VersionSourceConfig        `yaml:"version_source"`
-	HelmChart     HelmChartConfigYAML        `yaml:"helm_chart"`
-	DefaultPort   int                        `yaml:"default_port" validate:"required,min=1,max=65535"`
+	ID            string                      `yaml:"id" validate:"required"`
+	Name          string                      `yaml:"name" validate:"required"`
+	Description   string                      `yaml:"description" validate:"required"`
+	Icon          string                      `yaml:"icon,omitempty"`
+	Category      string                      `yaml:"category" validate:"required"`
+	VersionSource VersionSourceConfig         `yaml:"version_source"`
+	HelmChart     HelmChartConfigYAML         `yaml:"helm_chart"`
+	DefaultPort   int                         `yaml:"default_port" validate:"required,min=1,max=65535"`
 	Requirements  ApplicationRequirementsYAML `yaml:"requirements"`
-	Features      []string                   `yaml:"features,omitempty"`
-	Documentation string                     `yaml:"documentation,omitempty"`
-	Metadata      ApplicationMetadata        `yaml:"metadata,omitempty"`
+	Features      []string                    `yaml:"features,omitempty"`
+	Documentation string                      `yaml:"documentation,omitempty"`
+	Metadata      ApplicationMetadata         `yaml:"metadata,omitempty"`
 }
 
 // VersionSourceConfig defines how to fetch version information
@@ -136,7 +136,7 @@ func (l *YAMLConfigLoader) LoadApplication(configFile string) (*PredefinedApplic
 
 	// Convert to PredefinedApplication
 	app := l.convertToPredefinedApplication(config)
-	
+
 	return &app, nil
 }
 
@@ -188,7 +188,7 @@ func (l *YAMLConfigLoader) ValidateConfig(config ApplicationConfig) error {
 // validateVersionSource validates version source configuration
 func (l *YAMLConfigLoader) validateVersionSource(vs VersionSourceConfig) error {
 	validTypes := []string{"github", "dockerhub", "helm", "static"}
-	
+
 	if vs.Type == "" {
 		return fmt.Errorf("version source type is required")
 	}

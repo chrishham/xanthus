@@ -24,10 +24,10 @@ type CacheStats struct {
 
 // InMemoryVersionCache implements VersionCache with in-memory storage
 type InMemoryVersionCache struct {
-	entries    map[string]versionCacheEntry
-	mutex      sync.RWMutex
-	stats      CacheStats
-	cleanupTTL time.Duration
+	entries     map[string]versionCacheEntry
+	mutex       sync.RWMutex
+	stats       CacheStats
+	cleanupTTL  time.Duration
 	lastCleanup time.Time
 }
 
@@ -43,10 +43,10 @@ func NewInMemoryVersionCache(cleanupInterval time.Duration) VersionCache {
 		cleanupTTL:  cleanupInterval,
 		lastCleanup: time.Now(),
 	}
-	
+
 	// Start cleanup goroutine
 	go cache.startCleanupWorker()
-	
+
 	return cache
 }
 
@@ -54,20 +54,20 @@ func NewInMemoryVersionCache(cleanupInterval time.Duration) VersionCache {
 func (c *InMemoryVersionCache) Get(key string) (string, bool) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	entry, exists := c.entries[key]
 	if !exists {
 		c.stats.Misses++
 		return "", false
 	}
-	
+
 	// Check if entry has expired
 	if time.Now().After(entry.expiresAt) {
 		c.stats.Misses++
 		// Don't delete here to avoid write lock, cleanup worker will handle it
 		return "", false
 	}
-	
+
 	c.stats.Hits++
 	return entry.value, true
 }
@@ -76,7 +76,7 @@ func (c *InMemoryVersionCache) Get(key string) (string, bool) {
 func (c *InMemoryVersionCache) Set(key string, value string, ttl time.Duration) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.entries[key] = versionCacheEntry{
 		value:     value,
 		expiresAt: time.Now().Add(ttl),
@@ -87,7 +87,7 @@ func (c *InMemoryVersionCache) Set(key string, value string, ttl time.Duration) 
 func (c *InMemoryVersionCache) Invalidate(key string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	delete(c.entries, key)
 }
 
@@ -95,7 +95,7 @@ func (c *InMemoryVersionCache) Invalidate(key string) {
 func (c *InMemoryVersionCache) Clear() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	c.entries = make(map[string]versionCacheEntry)
 	c.stats.Hits = 0
 	c.stats.Misses = 0
@@ -105,7 +105,7 @@ func (c *InMemoryVersionCache) Clear() {
 func (c *InMemoryVersionCache) GetStats() CacheStats {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
-	
+
 	stats := c.stats
 	stats.Entries = len(c.entries)
 	stats.LastCleanup = c.lastCleanup
@@ -116,7 +116,7 @@ func (c *InMemoryVersionCache) GetStats() CacheStats {
 func (c *InMemoryVersionCache) startCleanupWorker() {
 	ticker := time.NewTicker(c.cleanupTTL)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		c.cleanupExpiredEntries()
 	}
@@ -126,14 +126,14 @@ func (c *InMemoryVersionCache) startCleanupWorker() {
 func (c *InMemoryVersionCache) cleanupExpiredEntries() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	
+
 	now := time.Now()
 	for key, entry := range c.entries {
 		if now.After(entry.expiresAt) {
 			delete(c.entries, key)
 		}
 	}
-	
+
 	c.lastCleanup = now
 }
 

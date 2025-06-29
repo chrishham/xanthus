@@ -49,7 +49,7 @@ type BackgroundRefreshConfig struct {
 // NewBackgroundRefreshService creates a new background refresh service
 func NewBackgroundRefreshService(versionService EnhancedVersionService, config BackgroundRefreshConfig) *BackgroundRefreshService {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &BackgroundRefreshService{
 		versionService: versionService,
 		refreshQueue:   make(chan refreshRequest, config.QueueSize),
@@ -64,19 +64,19 @@ func NewBackgroundRefreshService(versionService EnhancedVersionService, config B
 func (b *BackgroundRefreshService) Start() error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	
+
 	if b.running {
 		return nil // Already running
 	}
-	
+
 	log.Printf("Starting background refresh service with %d workers", b.workers)
-	
+
 	// Start worker goroutines
 	for i := 0; i < b.workers; i++ {
 		b.wg.Add(1)
 		go b.worker(i)
 	}
-	
+
 	b.running = true
 	return nil
 }
@@ -85,23 +85,23 @@ func (b *BackgroundRefreshService) Start() error {
 func (b *BackgroundRefreshService) Stop() error {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
-	
+
 	if !b.running {
 		return nil // Already stopped
 	}
-	
+
 	log.Println("Stopping background refresh service...")
-	
+
 	// Cancel context and close stop channel
 	b.cancel()
 	close(b.stopChan)
-	
+
 	// Wait for all workers to finish
 	b.wg.Wait()
-	
+
 	// Close refresh queue
 	close(b.refreshQueue)
-	
+
 	b.running = false
 	log.Println("Background refresh service stopped")
 	return nil
@@ -111,7 +111,7 @@ func (b *BackgroundRefreshService) Stop() error {
 func (b *BackgroundRefreshService) QueueRefresh(appID string, priority RefreshPriority, callback func(string, string, error)) {
 	b.mutex.RLock()
 	defer b.mutex.RUnlock()
-	
+
 	if !b.running {
 		log.Printf("Background refresh service not running, skipping refresh for %s", appID)
 		if callback != nil {
@@ -119,7 +119,7 @@ func (b *BackgroundRefreshService) QueueRefresh(appID string, priority RefreshPr
 		}
 		return
 	}
-	
+
 	select {
 	case b.refreshQueue <- refreshRequest{
 		appID:    appID,
@@ -145,9 +145,9 @@ func (b *BackgroundRefreshService) IsRunning() bool {
 // worker processes refresh requests from the queue
 func (b *BackgroundRefreshService) worker(workerID int) {
 	defer b.wg.Done()
-	
+
 	log.Printf("Background refresh worker %d started", workerID)
-	
+
 	for {
 		select {
 		case <-b.ctx.Done():
@@ -161,7 +161,7 @@ func (b *BackgroundRefreshService) worker(workerID int) {
 				log.Printf("Background refresh worker %d stopping due to closed queue", workerID)
 				return
 			}
-			
+
 			b.processRefreshRequest(workerID, request)
 		}
 	}
@@ -170,17 +170,17 @@ func (b *BackgroundRefreshService) worker(workerID int) {
 // processRefreshRequest handles a single refresh request
 func (b *BackgroundRefreshService) processRefreshRequest(workerID int, request refreshRequest) {
 	log.Printf("Worker %d processing refresh for %s", workerID, request.appID)
-	
+
 	start := time.Now()
 	version, err := b.versionService.RefreshVersionFromSource(request.appID)
 	duration := time.Since(start)
-	
+
 	if err != nil {
 		log.Printf("Worker %d failed to refresh %s after %v: %v", workerID, request.appID, duration, err)
 	} else {
 		log.Printf("Worker %d successfully refreshed %s to version %s in %v", workerID, request.appID, version, duration)
 	}
-	
+
 	// Call callback if provided
 	if request.callback != nil {
 		request.callback(request.appID, version, err)
@@ -211,14 +211,14 @@ func NewPeriodicRefreshManager(backgroundService *BackgroundRefreshService, cata
 func (p *PeriodicRefreshManager) Start() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	
+
 	if p.running {
 		return
 	}
-	
+
 	log.Println("Starting periodic refresh manager")
 	p.running = true
-	
+
 	go p.refreshLoop()
 }
 
@@ -226,11 +226,11 @@ func (p *PeriodicRefreshManager) Start() {
 func (p *PeriodicRefreshManager) Stop() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	
+
 	if !p.running {
 		return
 	}
-	
+
 	log.Println("Stopping periodic refresh manager")
 	p.ticker.Stop()
 	close(p.stopChan)
@@ -252,9 +252,9 @@ func (p *PeriodicRefreshManager) refreshLoop() {
 // refreshAllApplications queues refresh requests for all applications
 func (p *PeriodicRefreshManager) refreshAllApplications() {
 	applications := p.catalogService.GetApplications()
-	
+
 	log.Printf("Queuing periodic refresh for %d applications", len(applications))
-	
+
 	for _, app := range applications {
 		p.backgroundService.QueueRefresh(app.ID, PriorityLow, func(appID, version string, err error) {
 			if err != nil {

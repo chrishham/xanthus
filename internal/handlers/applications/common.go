@@ -295,12 +295,12 @@ func (p *PasswordHelper) retrievePasswordFromVPS(token, accountID, appID string)
 // retrieveCodeServerPasswordFromVPS retrieves code-server password from VPS
 func (p *PasswordHelper) retrieveCodeServerPasswordFromVPS(conn *services.SSHConnection, releaseName, namespace string) (string, error) {
 	sshService := services.NewSSHService()
-	
+
 	// Retrieve password from Kubernetes secret
 	// The secret name is the same as the release name for code-server
 	secretName := releaseName
 	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
-	
+
 	result, err := sshService.ExecuteCommand(conn, cmd)
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve code-server password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
@@ -317,11 +317,11 @@ func (p *PasswordHelper) retrieveCodeServerPasswordFromVPS(conn *services.SSHCon
 // retrieveArgoCDPasswordFromVPS retrieves ArgoCD admin password from VPS
 func (p *PasswordHelper) retrieveArgoCDPasswordFromVPS(conn *services.SSHConnection, releaseName, namespace string) (string, error) {
 	sshService := services.NewSSHService()
-	
+
 	// Retrieve admin password from ArgoCD initial admin secret
 	secretName := "argocd-initial-admin-secret"
 	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, secretName)
-	
+
 	result, err := sshService.ExecuteCommand(conn, cmd)
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve ArgoCD password from secret '%s' in namespace '%s': %v", secretName, namespace, err)

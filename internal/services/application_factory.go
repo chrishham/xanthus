@@ -1,17 +1,17 @@
 package services
 
 import (
-	"time"
 	"github.com/chrishham/xanthus/internal/models"
+	"time"
 )
 
 // ApplicationServiceFactory provides a factory for creating application-related services
 type ApplicationServiceFactory struct {
 	versionService         VersionService
 	enhancedVersionService EnhancedVersionService
-	configLoader          models.ConfigLoader
-	registry              ApplicationRegistry
-	enhancedValidator     *EnhancedApplicationValidator
+	configLoader           models.ConfigLoader
+	registry               ApplicationRegistry
+	enhancedValidator      *EnhancedApplicationValidator
 }
 
 // NewApplicationServiceFactory creates a new application service factory
@@ -19,22 +19,22 @@ func NewApplicationServiceFactory() *ApplicationServiceFactory {
 	// Create config loader for enhanced version service
 	validator := models.NewDefaultApplicationValidator()
 	configLoader := models.NewYAMLConfigLoader(validator)
-	
+
 	// Create enhanced version service
 	enhancedVersionService := NewEnhancedDefaultVersionService(configLoader)
-	
+
 	// Create enhanced validator
 	enhancedValidator := NewEnhancedApplicationValidator(validator)
-	
+
 	// Create application registry
 	registry := NewInMemoryApplicationRegistry(enhancedValidator)
-	
+
 	return &ApplicationServiceFactory{
 		versionService:         enhancedVersionService, // Use enhanced service as default
 		enhancedVersionService: enhancedVersionService,
-		configLoader:          configLoader,
-		registry:              registry,
-		enhancedValidator:     enhancedValidator,
+		configLoader:           configLoader,
+		registry:               registry,
+		enhancedValidator:      enhancedValidator,
 	}
 }
 
@@ -106,17 +106,17 @@ func (f *ApplicationServiceFactory) CreateRegistryWithDefaults() (ApplicationReg
 	// Load default applications from configuration
 	configPath := GetDefaultConfigPath()
 	configCatalog := NewConfigDrivenCatalogService(configPath, f.versionService)
-	
+
 	// Get default applications
 	defaultApps := configCatalog.GetApplications()
-	
+
 	// Register default applications
 	for _, app := range defaultApps {
 		if err := f.registry.Register(app); err != nil {
 			return nil, err
 		}
 	}
-	
+
 	return f.registry, nil
 }
 

@@ -60,7 +60,7 @@ func (h *Handler) VPSConfigMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetString("cf_token")
 		accountID := c.GetString("account_id")
-		
+
 		if token == "" || accountID == "" {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Missing authentication context"})
 			c.Abort()

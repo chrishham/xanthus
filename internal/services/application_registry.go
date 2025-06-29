@@ -209,18 +209,18 @@ func (b *RegistryWithCatalogBridge) GetApplicationByID(id string) (*models.Prede
 func (b *RegistryWithCatalogBridge) GetCategories() []string {
 	applications := b.registry.List()
 	categorySet := make(map[string]bool)
-	
+
 	for _, app := range applications {
 		if app.Category != "" {
 			categorySet[app.Category] = true
 		}
 	}
-	
+
 	categories := make([]string, 0, len(categorySet))
 	for category := range categorySet {
 		categories = append(categories, category)
 	}
-	
+
 	return categories
 }
 

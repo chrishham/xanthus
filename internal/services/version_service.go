@@ -91,7 +91,7 @@ func (s *DefaultVersionService) RefreshVersion(app string) error {
 
 	// Clear cache entry to force refresh
 	delete(s.cache, app)
-	
+
 	// Fetch new version (will update cache)
 	_, err := s.GetLatestVersion(app)
 	return err
