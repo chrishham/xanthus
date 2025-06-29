@@ -12,12 +12,32 @@
   - All tests pass, functionality preserved
   - **Commit**: `0dafad4` - "refactor: split applications module into focused components"
 
+- **Phase 1.2**: Create service layer abstractions
+  - Created `internal/services/application_catalog.go` with ApplicationCatalogService using dependency injection
+  - Implemented `internal/services/version_service.go` with thread-safe caching and TTL
+  - Added `internal/services/application_factory.go` for clean service creation and lifecycle management
+  - Updated ApplicationsHandler to use new service layer architecture
+  - Separated version fetching logic from models to services layer
+  - Maintained backward compatibility with deprecated legacy functions
+  - Enhanced caching strategy with proper TTL and thread safety
+  - Foundation established for extensible version sources (GitHub, DockerHub, etc.)
+  - **Commit**: `10963aa` - "feat: implement service layer for applications module (Phase 1.2)"
+
+- **Phase 2**: Configuration-driven catalog
+  - Created YAML schema for application configurations
+  - Implemented `internal/models/config.go` with ApplicationConfig and ConfigLoader interfaces
+  - Created `internal/services/config_catalog.go` with ConfigDrivenCatalogService and HybridCatalogService
+  - Added `configs/applications/` directory with template, code-server, and argocd configurations
+  - Implemented comprehensive validation for YAML configurations
+  - Updated ApplicationsHandler to use HybridCatalogService (config + fallback)
+  - Maintained full backward compatibility while enabling configuration-driven applications
+  - Enhanced application factory with config and hybrid catalog creation methods
+  - **Status**: ✅ COMPLETED
+
 ### 🔄 In Progress
 - None currently
 
 ### ⏳ Planned
-- **Phase 1.2**: Create service layer abstractions
-- **Phase 2**: Configuration-driven catalog
 - **Phase 3**: Enhanced version management
 - **Phase 4**: Application lifecycle management
 
@@ -184,10 +204,10 @@ type ApplicationValidator interface {
 - ✅ Remove business logic from models  
 - ✅ Create clean interfaces
 
-### Step 2: Create Service Layer
-- Implement `ApplicationCatalogService`
-- Implement `VersionService` with caching
-- Create proper abstraction layers
+### Step 2: Create Service Layer ✅ COMPLETED
+- ✅ Implement `ApplicationCatalogService`
+- ✅ Implement `VersionService` with caching
+- ✅ Create proper abstraction layers
 
 ### Step 3: Configuration System
 - Design YAML schema for applications
@@ -305,9 +325,131 @@ type ApplicationValidator interface {
 - ✅ No broken imports or references
 - ✅ Functionality preserved
 
+### Phase 1.2 Implementation Details ✅ COMPLETED
+
+**What was accomplished:**
+
+1. **Created service layer architecture:**
+   ```
+   internal/services/
+   ├── application_catalog.go (136 lines - Service wrapper with dependency injection)
+   ├── version_service.go (98 lines - Thread-safe caching with TTL)
+   └── application_factory.go (30 lines - Clean service creation and lifecycle)
+   ```
+
+2. **Implemented ApplicationCatalogService:**
+   - Wraps DefaultApplicationCatalog with VersionService dependency injection
+   - Maintains interface compatibility while adding extensibility
+   - Enables future swapping of version sources without changing catalog logic
+   - Provides foundation for configuration-driven applications
+
+3. **Enhanced VersionService:**
+   - Thread-safe caching with proper mutex protection
+   - Configurable TTL (Time-To-Live) for cache entries
+   - Improved error handling and retry logic
+   - Separated caching logic from business logic
+   - Extensible design for multiple version sources
+
+4. **Added ApplicationServiceFactory:**
+   - Centralized service creation and configuration
+   - Clean dependency injection setup
+   - Easy to extend for future service types
+   - Lifecycle management for service dependencies
+
+5. **Updated ApplicationsHandler:**
+   - Uses new service layer through dependency injection
+   - Maintains all existing functionality
+   - Backward compatibility preserved
+   - Ready for future enhancements
+
+6. **Benefits achieved:**
+   - **Better Architecture**: Clear separation between models, services, and handlers
+   - **Thread Safety**: Proper synchronization for concurrent access
+   - **Caching**: Improved performance with TTL-based cache invalidation
+   - **Extensibility**: Easy to add new version sources (DockerHub, Helm repositories, etc.)
+   - **Testability**: Services can be mocked independently
+   - **Maintainability**: Cleaner code organization and dependencies
+
+**Files created/modified:**
+- ✅ Created: `internal/services/application_catalog.go`
+- ✅ Created: `internal/services/version_service.go`
+- ✅ Created: `internal/services/application_factory.go`
+- ✅ Modified: `internal/handlers/applications.go`
+- ✅ Modified: `internal/models/catalog.go`
+
+**Verification:**
+- ✅ All tests pass (unit + integration)
+- ✅ Project builds successfully
+- ✅ Thread-safe caching implementation
+- ✅ Backward compatibility maintained
+- ✅ Service layer properly abstracted
+
+### Phase 2 Implementation Details ✅ COMPLETED
+
+**What was accomplished:**
+
+1. **Created YAML configuration schema:**
+   ```
+   configs/applications/
+   ├── template.yaml (Configuration template with documentation)
+   ├── code-server.yaml (VS Code server configuration)
+   └── argocd.yaml (Argo CD configuration)
+   ```
+
+2. **Implemented configuration models and loader:**
+   - `ApplicationConfig` struct with validation tags
+   - `VersionSourceConfig` for dynamic version fetching
+   - `ConfigLoader` interface with YAML implementation
+   - Comprehensive validation for all configuration fields
+   - Support for multiple version source types (github, dockerhub, helm, static)
+
+3. **Created configuration-driven catalog services:**
+   - `ConfigDrivenCatalogService` - loads applications from YAML files
+   - `HybridCatalogService` - uses config with fallback to hardcoded apps
+   - Integration with existing version service for dynamic version resolution
+   - Thread-safe loading and caching of configuration files
+
+4. **Enhanced application factory:**
+   - `CreateConfigCatalogService()` for pure configuration-driven catalogs
+   - `CreateHybridCatalogService()` for config + fallback approach
+   - Centralized configuration path management
+   - Easy service creation with proper dependency injection
+
+5. **Updated application handler:**
+   - Uses `HybridCatalogService` by default for seamless migration
+   - Maintains all existing functionality
+   - Zero breaking changes for existing users
+   - Configuration files take precedence when available
+
+6. **Benefits achieved:**
+   - **Configuration-driven**: Applications can be added by editing YAML files
+   - **Flexible version sources**: Support for GitHub, DockerHub, Helm, and static versions
+   - **Validation**: Comprehensive validation prevents invalid configurations
+   - **Backward compatibility**: Existing hardcoded applications still work
+   - **Hot-reloading**: Configuration can be refreshed without restart
+   - **Extensibility**: Easy to add new applications without code changes
+
+**Files created/modified:**
+- ✅ Created: `internal/models/config.go`
+- ✅ Created: `internal/services/config_catalog.go`
+- ✅ Created: `configs/applications/template.yaml`
+- ✅ Created: `configs/applications/code-server.yaml`
+- ✅ Created: `configs/applications/argocd.yaml`
+- ✅ Modified: `internal/services/application_factory.go`
+- ✅ Modified: `internal/handlers/applications.go`
+
+**Verification:**
+- ✅ All tests pass (unit + integration)
+- ✅ Project builds successfully
+- ✅ Configuration files loaded correctly
+- ✅ Version resolution working for both apps
+- ✅ Hybrid fallback mechanism functioning
+- ✅ Backward compatibility maintained
+
 **Next Steps:**
-The foundation is now ready for Phase 2 (Configuration-driven catalog) and Phase 3 (Enhanced version management). The interface-based design makes it straightforward to implement:
-- YAML-based application configurations
-- Pluggable version sources (GitHub, DockerHub, Helm, etc.)
-- Background refresh capabilities
-- Enhanced caching strategies
+Phase 2 is now complete. The configuration-driven catalog provides a flexible foundation for Phase 3 (Enhanced version management) and Phase 4 (Application lifecycle management). The architecture enables:
+- Easy addition of new applications via YAML configuration
+- Multiple version source support (GitHub, DockerHub, Helm, static)
+- Configuration validation and error handling
+- Hot-reloading of application configurations
+- Extensible metadata and feature definitions

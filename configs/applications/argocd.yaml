@@ -1,0 +1,40 @@
+id: argocd
+name: Argo CD
+description: Declarative, GitOps continuous delivery tool for Kubernetes
+icon: 🚀
+category: DevOps
+
+version_source:
+  type: helm
+  source: https://argoproj.github.io/argo-helm
+  chart: argo-cd
+
+helm_chart:
+  repository: https://argoproj.github.io/argo-helm
+  chart: argo-cd
+  version: stable
+  namespace: argocd
+  values_template: argocd.yaml
+  placeholders: {}
+
+default_port: 80
+
+requirements:
+  min_cpu: 1.0
+  min_memory_gb: 2
+  min_disk_gb: 5
+
+features:
+  - GitOps application delivery
+  - Declarative configuration
+  - Web UI and CLI
+  - Multi-cluster support
+  - RBAC and SSO integration
+  - Automated synchronization
+
+documentation: https://argo-cd.readthedocs.io/
+
+metadata:
+  maintainer: Argo Project
+  support: https://github.com/argoproj/argo-cd/issues
+  license: Apache-2.0

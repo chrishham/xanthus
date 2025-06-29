@@ -1,0 +1,72 @@
+# Application Configuration Template
+# Copy this file and customize for each application
+
+# Unique identifier for the application
+id: example-app
+
+# Display name shown in the UI
+name: Example Application
+
+# Brief description of what the application does
+description: An example application for demonstration purposes
+
+# Icon/emoji to display in the UI (optional)
+icon: 🚀
+
+# Category for grouping applications
+category: Development
+
+# Version source configuration
+version_source:
+  # Type of version source: github, dockerhub, helm, static
+  type: github
+  # Repository or source location
+  source: owner/repository
+  # Optional: specific pattern for version tags (default: latest release)
+  pattern: "v*"
+
+# Helm chart configuration
+helm_chart:
+  # Helm repository URL
+  repository: https://example.com/helm-charts
+  # Chart name within the repository
+  chart: example-chart
+  # Chart version (can use "latest" for dynamic versions)
+  version: stable
+  # Kubernetes namespace for deployment
+  namespace: example-app
+  # Values template file (relative to templates directory)
+  values_template: example-app.yaml
+  # Additional placeholder values for template substitution
+  placeholders:
+    CUSTOM_VALUE: example
+
+# Default port for the application
+default_port: 8080
+
+# Minimum system requirements
+requirements:
+  # Minimum CPU cores required
+  min_cpu: 0.5
+  # Minimum memory in GB
+  min_memory_gb: 1
+  # Minimum disk space in GB
+  min_disk_gb: 5
+
+# List of key features/capabilities
+features:
+  - Feature 1
+  - Feature 2
+  - Feature 3
+
+# URL to documentation (optional)
+documentation: https://example.com/docs
+
+# Additional metadata (optional)
+metadata:
+  # Maintainer information
+  maintainer: Example Team
+  # Support contact
+  support: support@example.com
+  # License information
+  license: MIT

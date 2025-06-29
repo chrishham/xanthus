@@ -28,7 +28,7 @@ type ApplicationsHandler struct {
 func NewApplicationsHandler() *ApplicationsHandler {
 	factory := services.NewApplicationServiceFactory()
 	return &ApplicationsHandler{
-		catalog:        factory.CreateCatalogService(),
+		catalog:        factory.CreateHybridCatalogService(),
 		validator:      factory.CreateValidatorService(),
 		serviceFactory: factory,
 	}
