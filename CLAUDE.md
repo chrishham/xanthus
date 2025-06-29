@@ -157,3 +157,11 @@ make test-e2e     # Test with mocked external services
 ```bash
 make build        # Creates bin/xanthus executable
 ```
+
+## Vps investigation
+
+You can ssh to the vps at any time to investigate issues by using the @xanthus-ssh-key.pem and ssh -i xanthus-ssh-key.pem root@188.245.79.245
+
+## Important!!!
+
+All *.go files shouldn't exceed the 500 lines limit. If you encounter such a case please tell me and suggest a refactor plan.

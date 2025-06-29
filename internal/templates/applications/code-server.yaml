@@ -81,7 +81,8 @@ extraInitContainers: |
           mkdir -p /home/coder/.local/share/code-server/User
           cp -f /tmp/vscode-settings/settings.json /home/coder/.local/share/code-server/User/settings.json 2>/dev/null || echo "No settings.json found, skipping..."
           cp -f /tmp/vscode-settings/keybindings.json /home/coder/.local/share/code-server/User/keybindings.json 2>/dev/null || echo "No keybindings.json found, skipping..."
-          chown -R 1000:1000 /home/coder/.local/share/code-server/User
+          echo "Fixing permissions for .local directory..."
+          chown -R 1000:1000 /home/coder/.local
           echo "VS Code settings copied successfully"
         else
           echo "No VS Code settings ConfigMap mounted, skipping..."
