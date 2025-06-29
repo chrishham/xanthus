@@ -244,9 +244,10 @@
                 loading: false,
                 loadingTitle: 'Processing...',
                 loadingMessage: 'Please wait while the operation completes.',
-                autoRefreshEnabled: true,
-                refreshInterval: 15000, // 15 seconds - reasonable for applications
+                autoRefreshEnabled: false, // Disabled by default to prevent slow concurrent requests
+                refreshInterval: 60000, // 60 seconds - longer interval to prevent overlap
                 intervalId: null,
+                isRefreshing: false, // Prevent concurrent requests
 
                 init() {
                     // Initialize applications list
@@ -268,6 +269,8 @@
                 },
 
                 async refreshApplications() {
+                    if (this.isRefreshing) return; // Prevent concurrent requests
+                    this.isRefreshing = true;
                     this.setLoadingState('Loading Applications', 'Retrieving application list...');
                     try {
                         const response = await fetch('/applications/list', {
@@ -304,13 +307,17 @@
                         Swal.fire('Error', 'Failed to refresh application list', 'error');
                     } finally {
                         this.loading = false;
+                        this.isRefreshing = false;
                     }
                 },
 
                 startAutoRefresh() {
                     if (this.autoRefreshEnabled && !this.intervalId) {
                         this.intervalId = setInterval(() => {
-                            this.refreshApplicationsQuietly();
+                            // Only refresh if page is visible and not already refreshing
+                            if (!document.hidden && !this.isRefreshing) {
+                                this.refreshApplicationsQuietly();
+                            }
                         }, this.refreshInterval);
                     }
                 },
@@ -333,6 +340,8 @@
 
                 async refreshApplicationsQuietly() {
                     // Refresh without showing loading spinner
+                    if (this.isRefreshing) return; // Prevent concurrent requests
+                    this.isRefreshing = true;
                     try {
                         const response = await fetch('/applications/list', {
                             method: 'GET',
@@ -359,10 +368,24 @@
                             }
                             
                             this.applications = uniqueApps;
+                        } else if (response.status === 401 || response.status === 403) {
+                            // Authentication failed - stop auto-refresh and redirect to login
+                            this.stopAutoRefresh();
+                            console.log('Authentication expired, redirecting to login');
+                            window.location.href = '/login';
+                            return;
                         }
                     } catch (error) {
-                        console.log('Background refresh failed:', error);
+                        // Handle network errors gracefully
+                        if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+                            console.log('Network error during background refresh - stopping auto-refresh');
+                            this.stopAutoRefresh();
+                        } else {
+                            console.log('Background refresh failed:', error);
+                        }
                         // Silently fail for background updates
+                    } finally {
+                        this.isRefreshing = false;
                     }
                 },
 
@@ -654,7 +677,7 @@
 
                 // Helper function to validate application data
                 isValidApplication(app) {
-                    return app && 
+                    const isValid = app && 
                            app.id && 
                            app.name && 
                            app.app_type && 
@@ -665,6 +688,32 @@
                            app.name.trim() !== '' &&
                            app.url !== '' &&
                            app.vps_name.trim() !== '';
+                    
+                    if (!isValid) {
+                        console.log('Invalid application detected:', {
+                            id: app?.id,
+                            name: app?.name,
+                            app_type: app?.app_type,
+                            status: app?.status,
+                            url: app?.url,
+                            vps_name: app?.vps_name,
+                            created_at: app?.created_at,
+                            missing_fields: []
+                                .concat(!app ? ['app is null/undefined'] : [])
+                                .concat(!app?.id ? ['id'] : [])
+                                .concat(!app?.name ? ['name'] : [])
+                                .concat(!app?.app_type ? ['app_type'] : [])
+                                .concat(!app?.status ? ['status'] : [])
+                                .concat(!app?.url ? ['url'] : [])
+                                .concat(!app?.vps_name ? ['vps_name'] : [])
+                                .concat(!app?.created_at ? ['created_at'] : [])
+                                .concat(app?.name && app.name.trim() === '' ? ['name is empty'] : [])
+                                .concat(app?.url && app.url === '' ? ['url is empty'] : [])
+                                .concat(app?.vps_name && app.vps_name.trim() === '' ? ['vps_name is empty'] : [])
+                        });
+                    }
+                    
+                    return isValid;
                 },
 
                 visitApplication(app) {

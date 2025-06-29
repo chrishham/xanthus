@@ -141,9 +141,27 @@ func (h *Handler) HandleApplicationsCreate(c *gin.Context) {
 		return
 	}
 
+	// Look up VPS name from VPS ID
+	vpsHelper := NewVPSConnectionHelper()
+	vpsConfig, err := vpsHelper.GetVPSConfigByID(token, accountID, appData.VPS)
+	if err != nil {
+		log.Printf("Failed to get VPS config for ID %s: %v", appData.VPS, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid VPS selection"})
+		return
+	}
+
+	// Convert struct to map for service compatibility
+	appDataMap := map[string]interface{}{
+		"subdomain":   appData.Subdomain,
+		"domain":      appData.Domain,
+		"vps_id":      appData.VPS,
+		"vps_name":    vpsConfig.Name,
+		"description": appData.Description,
+	}
+
 	// Create application using service
 	appService := services.NewSimpleApplicationService()
-	app, err := appService.CreateApplication(token, accountID, appData, predefinedApp)
+	app, err := appService.CreateApplication(token, accountID, appDataMap, predefinedApp)
 	if err != nil {
 		log.Printf("Error creating application: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create application"})

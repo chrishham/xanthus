@@ -33,6 +33,7 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 	// List all keys with app: prefix
 	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/keys?prefix=app:",
 		accountID, namespaceID)
+	fmt.Printf("Listing keys from KV with URL: %s\n", url)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -63,25 +64,41 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 		return nil, fmt.Errorf("KV API failed")
 	}
 
+	fmt.Printf("Found %d keys with app: prefix\n", len(keysResp.Result))
+	for i, key := range keysResp.Result {
+		fmt.Printf("Key %d: %s\n", i, key.Name)
+	}
+
 	applications := []models.Application{}
 
 	// Fetch each application, but skip password keys
 	for _, key := range keysResp.Result {
 		// Skip password keys (they end with ":password")
 		if strings.HasSuffix(key.Name, ":password") {
+			fmt.Printf("Skipping password key: %s\n", key.Name)
 			continue
 		}
 
+		fmt.Printf("Attempting to retrieve application: %s\n", key.Name)
 		var app models.Application
 		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
+			fmt.Printf("Successfully retrieved application: %s (ID: %s, Name: %s, VPSName: %s, AppType: %s, Status: %s, URL: %s)\n", 
+				key.Name, app.ID, app.Name, app.VPSName, app.AppType, app.Status, app.URL)
 			// Update application status with real-time Helm status
 			if realTimeStatus, statusErr := s.GetApplicationRealTimeStatus(token, accountID, &app); statusErr == nil {
 				app.Status = realTimeStatus
+				fmt.Printf("Updated status for %s: %s\n", app.ID, realTimeStatus)
+			} else {
+				fmt.Printf("Could not get real-time status for %s: %v\n", app.ID, statusErr)
 			}
 			// If we can't get real-time status, keep the cached status
 			app.UpdatedAt = time.Now().Format(time.RFC3339)
 
 			applications = append(applications, app)
+			fmt.Printf("Added application to list: %s\n", app.ID)
+		} else {
+			// Log error to help debug issues
+			fmt.Printf("Error retrieving application %s: %v\n", key.Name, err)
 		}
 	}
 
@@ -157,8 +174,30 @@ func (s *SimpleApplicationService) CreateApplication(token, accountID string, ap
 	// Save individual application to KV store with app: prefix
 	kvService := NewKVService()
 	kvKey := fmt.Sprintf("app:%s", appID)
+	fmt.Printf("Saving application with key: %s, appID: %s\n", kvKey, appID)
 	if err := kvService.PutValue(token, accountID, kvKey, app); err != nil {
+		fmt.Printf("Failed to save application to KV: %v\n", err)
 		return nil, fmt.Errorf("failed to save application: %w", err)
+	}
+	fmt.Printf("Successfully saved application to KV\n")
+
+	// Deploy the application using Helm
+	fmt.Printf("Starting deployment for application %s\n", appID)
+	// Convert back to map for deployment
+	dataMap := appData.(map[string]interface{})
+	err := s.deployApplication(token, accountID, dataMap, predefinedApp, appID)
+	if err != nil {
+		fmt.Printf("Deployment failed for %s: %v\n", appID, err)
+		app.Status = "Failed"
+	} else {
+		fmt.Printf("Deployment successful for %s\n", appID)
+		app.Status = "Running"
+	}
+
+	// Update application status
+	app.UpdatedAt = time.Now().Format(time.RFC3339)
+	if err := kvService.PutValue(token, accountID, kvKey, app); err != nil {
+		fmt.Printf("Warning: Failed to update application status: %v\n", err)
 	}
 
 	return app, nil
@@ -262,6 +301,186 @@ func (s *SimpleApplicationService) GetApplicationRealTimeStatus(token, accountID
 		return "Not Deployed", nil
 	default:
 		return helmStatus.Info.Status, nil
+	}
+}
+
+// deployApplication deploys a predefined application using its Helm configuration
+func (s *SimpleApplicationService) deployApplication(token, accountID string, appData map[string]interface{}, predefinedApp *models.PredefinedApplication, appID string) error {
+	kvService := NewKVService()
+	sshService := NewSSHService()
+
+	subdomain := appData["subdomain"].(string)
+	domain := appData["domain"].(string)
+	vpsID := appData["vps_id"].(string)
+
+	// Get VPS configuration for SSH details
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", vpsID), &vpsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+
+	// Get SSH private key
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := kvService.GetValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return fmt.Errorf("failed to get SSH private key: %v", err)
+	}
+
+	// Create SSH connection
+	vpsIDInt, _ := strconv.Atoi(vpsID)
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, vpsIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Generate release name and namespace
+	releaseName := fmt.Sprintf("%s-%s", predefinedApp.ID, appID)
+	namespace := fmt.Sprintf("app-%s", strings.ReplaceAll(subdomain, ".", "-"))
+
+	// Create namespace if it doesn't exist
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl create namespace %s --dry-run=client -o yaml | kubectl apply -f -", namespace))
+	if err != nil {
+		return fmt.Errorf("failed to create namespace: %v", err)
+	}
+
+	var chartName string
+
+	// Handle different application deployment types
+	switch predefinedApp.ID {
+	case "code-server":
+		// Clone GitHub repository for code-server chart
+		repoDir := "/tmp/code-server-chart"
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone https://github.com/coder/code-server %s", repoDir, repoDir))
+		if err != nil {
+			return fmt.Errorf("failed to clone chart repository: %v", err)
+		}
+		chartName = fmt.Sprintf("%s/ci/helm-chart", repoDir)
+
+	case "argocd":
+		// Add Helm repository for ArgoCD
+		repoName := "argo"
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo add %s https://argoproj.github.io/argo-helm", repoName))
+		if err != nil {
+			return fmt.Errorf("failed to add Helm repository: %v", err)
+		}
+
+		// Update Helm repositories
+		_, err = sshService.ExecuteCommand(conn, "helm repo update")
+		if err != nil {
+			return fmt.Errorf("failed to update Helm repositories: %v", err)
+		}
+		chartName = fmt.Sprintf("%s/argo-cd", repoName)
+
+	default:
+		return fmt.Errorf("unsupported application type: %s", predefinedApp.ID)
+	}
+
+	// Generate and upload values file
+	valuesContent, err := s.generateValuesFile(predefinedApp, subdomain, domain, releaseName)
+	if err != nil {
+		return fmt.Errorf("failed to generate values file: %v", err)
+	}
+
+	valuesPath := fmt.Sprintf("/tmp/%s-values.yaml", releaseName)
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", valuesPath, valuesContent))
+	if err != nil {
+		return fmt.Errorf("failed to upload values file: %v", err)
+	}
+
+	// Install via Helm
+	installCmd := fmt.Sprintf("helm install %s %s --namespace %s --values %s --wait --timeout 10m", 
+		releaseName, chartName, namespace, valuesPath)
+	
+	result, err := sshService.ExecuteCommand(conn, installCmd)
+	if err != nil {
+		return fmt.Errorf("helm install failed: %v, output: %s", err, result.Output)
+	}
+
+	return nil
+}
+
+// generateValuesFile generates a Helm values file based on the application type
+func (s *SimpleApplicationService) generateValuesFile(predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
+	switch predefinedApp.ID {
+	case "code-server":
+		return fmt.Sprintf(`
+image:
+  tag: "%s"
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: "traefik"
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - host: %s.%s
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: %s-tls
+      hosts:
+        - %s.%s
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 8Gi
+
+extraArgs:
+  - --auth=password
+
+extraSecretMounts:
+  - name: password
+    secretName: %s-password
+    mountPath: /home/coder/.config/code-server
+    readOnly: true
+
+extraInitContainers:
+  - name: init-password
+    image: busybox
+    command: ['sh', '-c', 'echo "password: $(cat /tmp/password)" > /home/coder/.config/code-server/config.yaml']
+    volumeMounts:
+      - name: password
+        mountPath: /tmp
+        readOnly: true
+      - name: home
+        mountPath: /home/coder
+`, predefinedApp.Version, subdomain, domain, releaseName, subdomain, domain, releaseName), nil
+
+	case "argocd":
+		return fmt.Sprintf(`
+server:
+  ingress:
+    enabled: true
+    ingressClassName: "traefik"
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+      traefik.ingress.kubernetes.io/router.tls: "true"
+    hosts:
+      - %s.%s
+    tls:
+      - secretName: %s-tls
+        hosts:
+          - %s.%s
+
+configs:
+  params:
+    server.insecure: true
+`, subdomain, domain, releaseName, subdomain, domain), nil
+
+	default:
+		return "", fmt.Errorf("unsupported application type: %s", predefinedApp.ID)
 	}
 }
 
