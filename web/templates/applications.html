@@ -56,8 +56,12 @@
                     <span x-text="autoRefreshEnabled ? 'Auto-refresh ON' : 'Auto-refresh OFF'"></span>
                 </button>
             </div>
-            <div x-show="autoRefreshEnabled" class="text-sm text-gray-500">
-                <span>Refreshing every 15 seconds</span>
+            <div x-show="autoRefreshEnabled" class="text-sm text-gray-500 flex items-center space-x-2">
+                <svg class="w-4 h-4 text-green-500 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                    <circle cx="10" cy="10" r="3"></circle>
+                </svg>
+                <span>Auto-refresh: every 30 seconds</span>
+                <span x-show="countdown > 0" class="text-xs bg-gray-200 px-2 py-1 rounded" x-text="`Next: ${countdown}s`"></span>
             </div>
         </div>
 
@@ -149,10 +153,12 @@
                                 </div>
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                                       :class="{
-                                          'bg-green-100 text-green-800': app.status === 'deployed',
+                                          'bg-green-100 text-green-800': app.status === 'Running' || app.status === 'deployed',
+                                          'bg-blue-100 text-blue-800': app.status === 'Deploying' || app.status === 'Creating',
                                           'bg-yellow-100 text-yellow-800': app.status === 'pending',
-                                          'bg-red-100 text-red-800': app.status === 'failed',
-                                          'bg-gray-100 text-gray-800': !['deployed', 'pending', 'failed'].includes(app.status)
+                                          'bg-red-100 text-red-800': app.status === 'Failed' || app.status === 'failed',
+                                          'bg-gray-100 text-gray-800': app.status === 'Not Deployed',
+                                          'bg-gray-100 text-gray-800': !['Running', 'deployed', 'Deploying', 'Creating', 'pending', 'Failed', 'failed', 'Not Deployed'].includes(app.status)
                                       }"
                                       x-text="app.status">
                                 </span>
@@ -244,9 +250,11 @@
                 loading: false,
                 loadingTitle: 'Processing...',
                 loadingMessage: 'Please wait while the operation completes.',
-                autoRefreshEnabled: false, // Disabled by default to prevent slow concurrent requests
-                refreshInterval: 60000, // 60 seconds - longer interval to prevent overlap
+                autoRefreshEnabled: true, // Enabled by default for real-time status updates
+                refreshInterval: 30000, // 30 seconds - good balance between freshness and performance
                 intervalId: null,
+                countdownInterval: null,
+                countdown: 0,
                 isRefreshing: false, // Prevent concurrent requests
 
                 init() {
@@ -313,10 +321,15 @@
 
                 startAutoRefresh() {
                     if (this.autoRefreshEnabled && !this.intervalId) {
+                        // Start countdown
+                        this.startCountdown();
+                        
                         this.intervalId = setInterval(() => {
                             // Only refresh if page is visible and not already refreshing
                             if (!document.hidden && !this.isRefreshing) {
                                 this.refreshApplicationsQuietly();
+                                // Restart countdown after refresh
+                                this.startCountdown();
                             }
                         }, this.refreshInterval);
                     }
@@ -327,6 +340,11 @@
                         clearInterval(this.intervalId);
                         this.intervalId = null;
                     }
+                    if (this.countdownInterval) {
+                        clearInterval(this.countdownInterval);
+                        this.countdownInterval = null;
+                        this.countdown = 0;
+                    }
                 },
 
                 toggleAutoRefresh() {
@@ -336,6 +354,23 @@
                     } else {
                         this.stopAutoRefresh();
                     }
+                },
+
+                startCountdown() {
+                    // Stop existing countdown
+                    if (this.countdownInterval) {
+                        clearInterval(this.countdownInterval);
+                    }
+                    
+                    // Start new countdown
+                    this.countdown = Math.floor(this.refreshInterval / 1000);
+                    this.countdownInterval = setInterval(() => {
+                        this.countdown--;
+                        if (this.countdown <= 0) {
+                            clearInterval(this.countdownInterval);
+                            this.countdownInterval = null;
+                        }
+                    }, 1000);
                 },
 
                 async refreshApplicationsQuietly() {

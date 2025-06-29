@@ -151,8 +151,8 @@ func (s *SimpleApplicationService) CreateApplication(token, accountID string, ap
 	// Generate application ID
 	appID := fmt.Sprintf("app-%d", time.Now().Unix())
 	
-	// Create namespace from subdomain
-	namespace := fmt.Sprintf("app-%s", strings.ReplaceAll(subdomain, ".", "-"))
+	// Create namespace based on application type
+	namespace := predefinedApp.ID
 	
 	// Create application model
 	app := &models.Application{
@@ -341,7 +341,7 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 
 	// Generate release name and namespace
 	releaseName := fmt.Sprintf("%s-%s", predefinedApp.ID, appID)
-	namespace := fmt.Sprintf("app-%s", strings.ReplaceAll(subdomain, ".", "-"))
+	namespace := predefinedApp.ID
 
 	// Create namespace if it doesn't exist
 	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl create namespace %s --dry-run=client -o yaml | kubectl apply -f -", namespace))
