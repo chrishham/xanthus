@@ -1,0 +1,461 @@
+package services
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/chrishham/xanthus/internal/models"
+	"github.com/chrishham/xanthus/internal/utils"
+)
+
+// ArgoCDDeploymentStrategy implements deployment strategy for ArgoCD applications
+type ArgoCDDeploymentStrategy struct {
+	*BaseDeploymentStrategy
+}
+
+// NewArgoCDDeploymentStrategy creates a new ArgoCDDeploymentStrategy
+func NewArgoCDDeploymentStrategy(passwordService PasswordService) DeploymentStrategy {
+	return &ArgoCDDeploymentStrategy{
+		BaseDeploymentStrategy: NewBaseDeploymentStrategy(passwordService),
+	}
+}
+
+// Deploy implements ArgoCD specific deployment
+func (s *ArgoCDDeploymentStrategy) Deploy(conn *SSHConnection, app *models.Application, predefinedApp *models.PredefinedApplication) error {
+	// Execute base deployment
+	if err := s.BaseDeploymentStrategy.Deploy(conn, app, predefinedApp); err != nil {
+		return err
+	}
+
+	// Perform ArgoCD specific post-deployment configuration
+	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	if err := s.configureArgoCDPostDeployment(conn, releaseName, app.Namespace); err != nil {
+		return fmt.Errorf("failed to configure ArgoCD post-deployment: %w", err)
+	}
+
+	return nil
+}
+
+// Upgrade implements ArgoCD specific upgrade
+func (s *ArgoCDDeploymentStrategy) Upgrade(conn *SSHConnection, app *models.Application, version string) error {
+	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	
+	// Get current Helm values
+	getCurrentValuesCmd := fmt.Sprintf("helm get values %s -n %s --output json", releaseName, app.Namespace)
+	currentValuesJSON, err := conn.Execute(getCurrentValuesCmd)
+	if err != nil {
+		return fmt.Errorf("failed to get current Helm values: %w", err)
+	}
+
+	// Parse current values
+	var currentValues map[string]interface{}
+	if err := json.Unmarshal([]byte(currentValuesJSON), &currentValues); err != nil {
+		return fmt.Errorf("failed to parse current values: %w", err)
+	}
+
+	// Update ArgoCD image versions
+	if currentValues["global"] == nil {
+		currentValues["global"] = make(map[string]interface{})
+	}
+	globalConfig := currentValues["global"].(map[string]interface{})
+	globalConfig["image"] = map[string]interface{}{
+		"tag": version,
+	}
+
+	// Write updated values to file
+	updatedValuesJSON, err := json.Marshal(currentValues)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated values: %w", err)
+	}
+
+	valuesFile := fmt.Sprintf("/tmp/argocd-upgrade-values-%s.json", app.ID)
+	writeCmd := fmt.Sprintf("echo '%s' > %s", string(updatedValuesJSON), valuesFile)
+	if _, err := conn.Execute(writeCmd); err != nil {
+		return fmt.Errorf("failed to write updated values: %w", err)
+	}
+
+	// Upgrade using Helm
+	upgradeCmd := fmt.Sprintf("helm upgrade %s argo/argo-cd -n %s -f %s --wait --timeout=15m", 
+		releaseName, app.Namespace, valuesFile)
+	
+	if _, err := conn.Execute(upgradeCmd); err != nil {
+		return fmt.Errorf("failed to upgrade ArgoCD: %w", err)
+	}
+
+	// Clean up values file
+	cleanupCmd := fmt.Sprintf("rm -f %s", valuesFile)
+	conn.Execute(cleanupCmd) // Ignore cleanup errors
+
+	return nil
+}
+
+// ValidateVersion validates ArgoCD version
+func (s *ArgoCDDeploymentStrategy) ValidateVersion(version string) (bool, error) {
+	if strings.TrimSpace(version) == "" {
+		return false, fmt.Errorf("version cannot be empty")
+	}
+
+	// Get GitHub releases for ArgoCD
+	releases, err := utils.GetGithubReleases("argoproj", "argo-cd")
+	if err != nil {
+		return false, fmt.Errorf("failed to get GitHub releases: %w", err)
+	}
+
+	// Check if version exists in releases
+	for _, release := range releases {
+		if release.TagName == version || strings.TrimPrefix(release.TagName, "v") == version {
+			return true, nil
+		}
+	}
+
+	return false, fmt.Errorf("version %s not found in GitHub releases", version)
+}
+
+// configureArgoCDPostDeployment performs ArgoCD specific post-deployment configuration
+func (s *ArgoCDDeploymentStrategy) configureArgoCDPostDeployment(conn *SSHConnection, releaseName, namespace string) error {
+	// Wait for ArgoCD server to be ready
+	waitCmd := fmt.Sprintf("kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server,app.kubernetes.io/instance=%s -n %s --timeout=600s", 
+		releaseName, namespace)
+	if _, err := conn.Execute(waitCmd); err != nil {
+		return fmt.Errorf("ArgoCD server not ready: %w", err)
+	}
+
+	// Create default ArgoCD project if needed
+	if err := s.createDefaultProject(conn, releaseName, namespace); err != nil {
+		return fmt.Errorf("failed to create default project: %w", err)
+	}
+
+	return nil
+}
+
+// createDefaultProject creates a default ArgoCD project
+func (s *ArgoCDDeploymentStrategy) createDefaultProject(conn *SSHConnection, releaseName, namespace string) error {
+	projectYAML := fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: %s
+spec:
+  description: Default project
+  sourceRepos:
+  - '*'
+  destinations:
+  - namespace: '*'
+    server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+  - group: '*'
+    kind: '*'
+  namespaceResourceWhitelist:
+  - group: '*'
+    kind: '*'`, namespace)
+
+	// Write project YAML to file
+	projectFile := fmt.Sprintf("/tmp/argocd-default-project-%s.yaml", releaseName)
+	writeCmd := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", projectFile, projectYAML)
+	
+	if _, err := conn.Execute(writeCmd); err != nil {
+		return fmt.Errorf("failed to write project file: %w", err)
+	}
+
+	// Apply project
+	applyCmd := fmt.Sprintf("kubectl apply -f %s", projectFile)
+	if _, err := conn.Execute(applyCmd); err != nil {
+		return fmt.Errorf("failed to apply project: %w", err)
+	}
+
+	// Clean up
+	cleanupCmd := fmt.Sprintf("rm -f %s", projectFile)
+	conn.Execute(cleanupCmd) // Ignore cleanup errors
+
+	return nil
+}
+
+// ArgoCDService provides ArgoCD specific operations
+type ArgoCDService interface {
+	// GetVersions returns available ArgoCD versions from GitHub
+	GetVersions() ([]models.VersionInfo, error)
+	
+	// GetPassword retrieves the ArgoCD admin password
+	GetPassword(token, accountID, appID string) (string, error)
+	
+	// UpdatePassword updates the ArgoCD admin password
+	UpdatePassword(token, accountID, appID, newPassword string) error
+	
+	// GetApplications returns ArgoCD applications
+	GetApplications(token, accountID, appID string) ([]ArgoCDApplication, error)
+	
+	// CreateApplication creates an ArgoCD application
+	CreateApplication(token, accountID, appID string, appSpec ArgoCDApplicationSpec) error
+	
+	// GetClusterInfo returns cluster information
+	GetClusterInfo(token, accountID, appID string) (*ArgoCDClusterInfo, error)
+}
+
+// ArgoCDApplication represents an ArgoCD application
+type ArgoCDApplication struct {
+	Name      string                 `json:"name"`
+	Namespace string                 `json:"namespace"`
+	Project   string                 `json:"project"`
+	Source    ArgoCDApplicationSource `json:"source"`
+	Health    string                 `json:"health"`
+	SyncStatus string                `json:"sync_status"`
+}
+
+// ArgoCDApplicationSource represents the source configuration for an ArgoCD application
+type ArgoCDApplicationSource struct {
+	RepoURL        string `json:"repo_url"`
+	Path           string `json:"path"`
+	TargetRevision string `json:"target_revision"`
+}
+
+// ArgoCDApplicationSpec represents the specification for creating an ArgoCD application
+type ArgoCDApplicationSpec struct {
+	Name           string                  `json:"name"`
+	Project        string                  `json:"project"`
+	Source         ArgoCDApplicationSource `json:"source"`
+	Destination    ArgoCDDestination       `json:"destination"`
+	SyncPolicy     *ArgoCDSyncPolicy       `json:"sync_policy,omitempty"`
+}
+
+// ArgoCDDestination represents the destination for an ArgoCD application
+type ArgoCDDestination struct {
+	Server    string `json:"server"`
+	Namespace string `json:"namespace"`
+}
+
+// ArgoCDSyncPolicy represents sync policy for an ArgoCD application
+type ArgoCDSyncPolicy struct {
+	Automated   *ArgoCDAutomatedSync `json:"automated,omitempty"`
+	SyncOptions []string             `json:"sync_options,omitempty"`
+}
+
+// ArgoCDAutomatedSync represents automated sync configuration
+type ArgoCDAutomatedSync struct {
+	Prune    bool `json:"prune"`
+	SelfHeal bool `json:"self_heal"`
+}
+
+// ArgoCDClusterInfo contains information about the ArgoCD cluster
+type ArgoCDClusterInfo struct {
+	ServerVersion string              `json:"server_version"`
+	Applications  int                 `json:"applications"`
+	Projects      int                 `json:"projects"`
+	Repositories  int                 `json:"repositories"`
+	Clusters      []ArgoCDCluster     `json:"clusters"`
+}
+
+// ArgoCDCluster represents a cluster managed by ArgoCD
+type ArgoCDCluster struct {
+	Name   string `json:"name"`
+	Server string `json:"server"`
+	Status string `json:"status"`
+}
+
+// DefaultArgoCDService implements ArgoCDService
+type DefaultArgoCDService struct {
+	appService      ApplicationService
+	passwordService PasswordService
+	vpsService      VPSService
+	sshService      SSHService
+}
+
+// NewArgoCDService creates a new DefaultArgoCDService
+func NewArgoCDService(appService ApplicationService, passwordService PasswordService) ArgoCDService {
+	return &DefaultArgoCDService{
+		appService:      appService,
+		passwordService: passwordService,
+		vpsService:      NewVPSService(),
+		sshService:      NewSSHService(),
+	}
+}
+
+// GetVersions returns available ArgoCD versions from GitHub
+func (s *DefaultArgoCDService) GetVersions() ([]models.VersionInfo, error) {
+	releases, err := utils.GetGithubReleases("argoproj", "argo-cd")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get releases: %w", err)
+	}
+
+	var versions []models.VersionInfo
+	for i, release := range releases {
+		version := models.VersionInfo{
+			Version:     release.TagName,
+			Name:        release.Name,
+			IsLatest:    i == 0,
+			IsStable:    !release.Prerelease,
+			PublishedAt: release.PublishedAt,
+			URL:         release.HTMLURL,
+		}
+		versions = append(versions, version)
+	}
+
+	return versions, nil
+}
+
+// GetPassword retrieves the ArgoCD admin password
+func (s *DefaultArgoCDService) GetPassword(token, accountID, appID string) (string, error) {
+	return s.passwordService.Get(token, accountID, appID, "argocd")
+}
+
+// UpdatePassword updates the ArgoCD admin password
+func (s *DefaultArgoCDService) UpdatePassword(token, accountID, appID, newPassword string) error {
+	return s.passwordService.Update(token, accountID, appID, "argocd", newPassword)
+}
+
+// GetApplications returns ArgoCD applications
+func (s *DefaultArgoCDService) GetApplications(token, accountID, appID string) ([]ArgoCDApplication, error) {
+	conn, err := s.getConnection(token, accountID, appID)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	// Get application details
+	app, err := s.appService.Get(token, accountID, appID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get application: %w", err)
+	}
+
+	// Get ArgoCD applications using kubectl
+	getAppsCmd := fmt.Sprintf("kubectl get applications -n %s -o json", app.Namespace)
+	output, err := conn.Execute(getAppsCmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ArgoCD applications: %w", err)
+	}
+
+	// Parse the output (simplified - in real implementation would parse full JSON)
+	var applications []ArgoCDApplication
+	// This is a simplified implementation - real implementation would parse the full kubectl output
+	
+	return applications, nil
+}
+
+// CreateApplication creates an ArgoCD application
+func (s *DefaultArgoCDService) CreateApplication(token, accountID, appID string, appSpec ArgoCDApplicationSpec) error {
+	conn, err := s.getConnection(token, accountID, appID)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	// Get application details
+	app, err := s.appService.Get(token, accountID, appID)
+	if err != nil {
+		return fmt.Errorf("failed to get application: %w", err)
+	}
+
+	// Create ArgoCD application YAML
+	appYAML := fmt.Sprintf(`apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  project: %s
+  source:
+    repoURL: %s
+    path: %s
+    targetRevision: %s
+  destination:
+    server: %s
+    namespace: %s
+  syncPolicy:
+    automated:
+      prune: %t
+      selfHeal: %t`,
+		appSpec.Name, app.Namespace, appSpec.Project,
+		appSpec.Source.RepoURL, appSpec.Source.Path, appSpec.Source.TargetRevision,
+		appSpec.Destination.Server, appSpec.Destination.Namespace,
+		appSpec.SyncPolicy != nil && appSpec.SyncPolicy.Automated != nil && appSpec.SyncPolicy.Automated.Prune,
+		appSpec.SyncPolicy != nil && appSpec.SyncPolicy.Automated != nil && appSpec.SyncPolicy.Automated.SelfHeal)
+
+	// Write application YAML to file
+	appFile := fmt.Sprintf("/tmp/argocd-app-%s.yaml", appSpec.Name)
+	writeCmd := fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", appFile, appYAML)
+	
+	if _, err := conn.Execute(writeCmd); err != nil {
+		return fmt.Errorf("failed to write application file: %w", err)
+	}
+
+	// Apply application
+	applyCmd := fmt.Sprintf("kubectl apply -f %s", appFile)
+	if _, err := conn.Execute(applyCmd); err != nil {
+		return fmt.Errorf("failed to apply ArgoCD application: %w", err)
+	}
+
+	// Clean up
+	cleanupCmd := fmt.Sprintf("rm -f %s", appFile)
+	conn.Execute(cleanupCmd) // Ignore cleanup errors
+
+	return nil
+}
+
+// GetClusterInfo returns cluster information
+func (s *DefaultArgoCDService) GetClusterInfo(token, accountID, appID string) (*ArgoCDClusterInfo, error) {
+	conn, err := s.getConnection(token, accountID, appID)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	// Get application details
+	app, err := s.appService.Get(token, accountID, appID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get application: %w", err)
+	}
+
+	info := &ArgoCDClusterInfo{}
+
+	// Get server version
+	versionCmd := "kubectl version --short"
+	if version, err := conn.Execute(versionCmd); err == nil {
+		info.ServerVersion = strings.TrimSpace(version)
+	}
+
+	// Get application count
+	countAppsCmd := fmt.Sprintf("kubectl get applications -n %s --no-headers 2>/dev/null | wc -l", app.Namespace)
+	if count, err := conn.Execute(countAppsCmd); err == nil {
+		info.Applications = utils.ParseInt(strings.TrimSpace(count))
+	}
+
+	// Get project count
+	countProjectsCmd := fmt.Sprintf("kubectl get appprojects -n %s --no-headers 2>/dev/null | wc -l", app.Namespace)
+	if count, err := conn.Execute(countProjectsCmd); err == nil {
+		info.Projects = utils.ParseInt(strings.TrimSpace(count))
+	}
+
+	// Add default cluster
+	info.Clusters = []ArgoCDCluster{
+		{
+			Name:   "in-cluster",
+			Server: "https://kubernetes.default.svc",
+			Status: "healthy",
+		},
+	}
+
+	return info, nil
+}
+
+// getConnection establishes SSH connection for ArgoCD operations
+func (s *DefaultArgoCDService) getConnection(token, accountID, appID string) (*SSHConnection, error) {
+	// Get application
+	app, err := s.appService.Get(token, accountID, appID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get application: %w", err)
+	}
+
+	// Get VPS connection details
+	vpsDetails, err := s.vpsService.GetVPSDetails(token, accountID, app.VPSID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VPS details: %w", err)
+	}
+
+	// Establish SSH connection
+	conn, err := s.sshService.Connect(vpsDetails.IPAddress, "root", vpsDetails.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to VPS: %w", err)
+	}
+
+	return conn, nil
+}

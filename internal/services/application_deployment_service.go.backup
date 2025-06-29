@@ -1,0 +1,283 @@
+package services
+
+import (
+	"fmt"
+	"log"
+	"strings"
+
+	"github.com/chrishham/xanthus/internal/models"
+	"github.com/chrishham/xanthus/internal/utils"
+)
+
+// ApplicationDeploymentService handles application deployments and upgrades
+type ApplicationDeploymentService interface {
+	// Deploy deploys a predefined application using Helm
+	Deploy(token, accountID string, app *models.Application, predefinedApp *models.PredefinedApplication) error
+	
+	// Upgrade upgrades an existing application to a new version
+	Upgrade(token, accountID, appID, version string) error
+	
+	// Uninstall removes an application deployment
+	Uninstall(token, accountID, appID string) error
+	
+	// GetDeploymentStrategy returns the appropriate deployment strategy for an application
+	GetDeploymentStrategy(appType string) (DeploymentStrategy, error)
+}
+
+// DefaultApplicationDeploymentService implements ApplicationDeploymentService
+type DefaultApplicationDeploymentService struct {
+	appService        ApplicationService
+	vpsService        *VPSService
+	sshService        *SSHService
+	passwordService   PasswordService
+	strategies        map[string]DeploymentStrategy
+}
+
+// NewApplicationDeploymentService creates a new DefaultApplicationDeploymentService
+func NewApplicationDeploymentService(appService ApplicationService, passwordService PasswordService) ApplicationDeploymentService {
+	service := &DefaultApplicationDeploymentService{
+		appService:      appService,
+		vpsService:      NewVPSService(),
+		sshService:      NewSSHService(),
+		passwordService: passwordService,
+		strategies:      make(map[string]DeploymentStrategy),
+	}
+	
+	// Register deployment strategies
+	service.registerStrategies()
+	
+	return service
+}
+
+// Deploy deploys a predefined application using Helm
+func (s *DefaultApplicationDeploymentService) Deploy(token, accountID string, app *models.Application, predefinedApp *models.PredefinedApplication) error {
+	// Update application status to deploying
+	app.Status = "Deploying"
+	if err := s.appService.Update(token, accountID, app); err != nil {
+		log.Printf("Warning: failed to update application status: %v", err)
+	}
+
+	// Get VPS connection details
+	vpsDetails, err := s.vpsService.GetVPSDetails(token, accountID, app.VPSID)
+	if err != nil {
+		return s.handleDeploymentError(token, accountID, app, fmt.Errorf("failed to get VPS details: %w", err))
+	}
+
+	// Establish SSH connection
+	conn, err := s.sshService.Connect(vpsDetails.IPAddress, "root", vpsDetails.PrivateKey)
+	if err != nil {
+		return s.handleDeploymentError(token, accountID, app, fmt.Errorf("failed to connect to VPS: %w", err))
+	}
+	defer conn.Close()
+
+	// Get deployment strategy
+	strategy, err := s.GetDeploymentStrategy(app.AppType)
+	if err != nil {
+		return s.handleDeploymentError(token, accountID, app, fmt.Errorf("unsupported application type: %s", app.AppType))
+	}
+
+	// Execute deployment using strategy
+	if err := strategy.Deploy(conn, app, predefinedApp); err != nil {
+		return s.handleDeploymentError(token, accountID, app, fmt.Errorf("deployment failed: %w", err))
+	}
+
+	// Handle post-deployment tasks (password retrieval, etc.)
+	if err := s.handlePostDeployment(token, accountID, app, conn); err != nil {
+		log.Printf("Warning: post-deployment tasks failed: %v", err)
+	}
+
+	// Update application status to running
+	app.Status = "Running"
+	if err := s.appService.Update(token, accountID, app); err != nil {
+		log.Printf("Warning: failed to update application status: %v", err)
+	}
+
+	return nil
+}
+
+// Upgrade upgrades an existing application to a new version
+func (s *DefaultApplicationDeploymentService) Upgrade(token, accountID, appID, version string) error {
+	// Get application
+	app, err := s.appService.Get(token, accountID, appID)
+	if err != nil {
+		return fmt.Errorf("failed to get application: %w", err)
+	}
+
+	// Update application status
+	app.Status = "Upgrading"
+	app.AppVersion = version
+	if err := s.appService.Update(token, accountID, app); err != nil {
+		log.Printf("Warning: failed to update application status: %v", err)
+	}
+
+	// Get VPS connection details
+	vpsDetails, err := s.vpsService.GetVPSDetails(token, accountID, app.VPSID)
+	if err != nil {
+		return s.handleUpgradeError(token, accountID, app, fmt.Errorf("failed to get VPS details: %w", err))
+	}
+
+	// Establish SSH connection
+	conn, err := s.sshService.Connect(vpsDetails.IPAddress, "root", vpsDetails.PrivateKey)
+	if err != nil {
+		return s.handleUpgradeError(token, accountID, app, fmt.Errorf("failed to connect to VPS: %w", err))
+	}
+	defer conn.Close()
+
+	// Get deployment strategy
+	strategy, err := s.GetDeploymentStrategy(app.AppType)
+	if err != nil {
+		return s.handleUpgradeError(token, accountID, app, fmt.Errorf("unsupported application type: %s", app.AppType))
+	}
+
+	// Execute upgrade using strategy
+	if err := strategy.Upgrade(conn, app, version); err != nil {
+		return s.handleUpgradeError(token, accountID, app, fmt.Errorf("upgrade failed: %w", err))
+	}
+
+	// Update application status
+	app.Status = "Running"
+	if err := s.appService.Update(token, accountID, app); err != nil {
+		log.Printf("Warning: failed to update application status: %v", err)
+	}
+
+	return nil
+}
+
+// Uninstall removes an application deployment
+func (s *DefaultApplicationDeploymentService) Uninstall(token, accountID, appID string) error {
+	// Get application
+	app, err := s.appService.Get(token, accountID, appID)
+	if err != nil {
+		return fmt.Errorf("failed to get application: %w", err)
+	}
+
+	// Get VPS connection details
+	vpsDetails, err := s.vpsService.GetVPSDetails(token, accountID, app.VPSID)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS details: %w", err)
+	}
+
+	// Establish SSH connection
+	conn, err := s.sshService.Connect(vpsDetails.IPAddress, "root", vpsDetails.PrivateKey)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %w", err)
+	}
+	defer conn.Close()
+
+	// Get deployment strategy
+	strategy, err := s.GetDeploymentStrategy(app.AppType)
+	if err != nil {
+		log.Printf("Warning: unsupported application type for uninstall: %s", app.AppType)
+		// Continue with generic uninstall
+		return s.genericUninstall(conn, app)
+	}
+
+	// Execute uninstall using strategy
+	return strategy.Uninstall(conn, app)
+}
+
+// GetDeploymentStrategy returns the appropriate deployment strategy for an application
+func (s *DefaultApplicationDeploymentService) GetDeploymentStrategy(appType string) (DeploymentStrategy, error) {
+	strategy, exists := s.strategies[appType]
+	if !exists {
+		return nil, fmt.Errorf("no deployment strategy found for application type: %s", appType)
+	}
+	return strategy, nil
+}
+
+// registerStrategies registers all available deployment strategies
+func (s *DefaultApplicationDeploymentService) registerStrategies() {
+	// Note: These will be created in subsequent services
+	// s.strategies["code-server"] = NewCodeServerDeploymentStrategy(s.passwordService)
+	// s.strategies["argocd"] = NewArgoCDDeploymentStrategy(s.passwordService)
+}
+
+// handleDeploymentError handles deployment errors by updating application status
+func (s *DefaultApplicationDeploymentService) handleDeploymentError(token, accountID string, app *models.Application, err error) error {
+	app.Status = "Failed"
+	if updateErr := s.appService.Update(token, accountID, app); updateErr != nil {
+		log.Printf("Warning: failed to update application status after error: %v", updateErr)
+	}
+	return err
+}
+
+// handleUpgradeError handles upgrade errors by reverting application status
+func (s *DefaultApplicationDeploymentService) handleUpgradeError(token, accountID string, app *models.Application, err error) error {
+	// Try to get the real-time status to determine if we should mark as failed or running
+	if status, statusErr := s.appService.GetRealTimeStatus(token, accountID, app); statusErr == nil {
+		app.Status = status
+	} else {
+		app.Status = "Failed"
+	}
+	
+	if updateErr := s.appService.Update(token, accountID, app); updateErr != nil {
+		log.Printf("Warning: failed to update application status after error: %v", updateErr)
+	}
+	return err
+}
+
+// handlePostDeployment handles post-deployment tasks like password retrieval
+func (s *DefaultApplicationDeploymentService) handlePostDeployment(token, accountID string, app *models.Application, conn *SSHConnection) error {
+	// Handle application-specific post-deployment tasks
+	switch app.AppType {
+	case "code-server":
+		return s.handleCodeServerPostDeployment(token, accountID, app, conn)
+	case "argocd":
+		return s.handleArgoCDPostDeployment(token, accountID, app, conn)
+	default:
+		// No specific post-deployment tasks
+		return nil
+	}
+}
+
+// handleCodeServerPostDeployment handles code-server specific post-deployment tasks
+func (s *DefaultApplicationDeploymentService) handleCodeServerPostDeployment(token, accountID string, app *models.Application, conn *SSHConnection) error {
+	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	
+	// Wait for deployment to be ready
+	waitCmd := fmt.Sprintf("kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=%s -n %s --timeout=300s", 
+		releaseName, app.Namespace)
+	if _, err := conn.Execute(waitCmd); err != nil {
+		return fmt.Errorf("failed waiting for code-server pod: %w", err)
+	}
+
+	// Retrieve and store the password
+	return s.passwordService.RetrieveAndStoreCodeServerPassword(token, accountID, app.ID, releaseName, app.Namespace, conn)
+}
+
+// handleArgoCDPostDeployment handles ArgoCD specific post-deployment tasks
+func (s *DefaultApplicationDeploymentService) handleArgoCDPostDeployment(token, accountID string, app *models.Application, conn *SSHConnection) error {
+	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	
+	// Wait for deployment to be ready
+	waitCmd := fmt.Sprintf("kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=argocd-server,app.kubernetes.io/instance=%s -n %s --timeout=300s", 
+		releaseName, app.Namespace)
+	if _, err := conn.Execute(waitCmd); err != nil {
+		return fmt.Errorf("failed waiting for ArgoCD server pod: %w", err)
+	}
+
+	// Retrieve and store the password
+	return s.passwordService.RetrieveAndStoreArgoCDPassword(token, accountID, app.ID, releaseName, app.Namespace, conn)
+}
+
+// genericUninstall performs a generic Helm uninstall
+func (s *DefaultApplicationDeploymentService) genericUninstall(conn *SSHConnection, app *models.Application) error {
+	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	
+	// Uninstall Helm chart
+	uninstallCmd := fmt.Sprintf("helm uninstall %s -n %s", releaseName, app.Namespace)
+	if _, err := conn.Execute(uninstallCmd); err != nil {
+		// Log but don't fail - the application might not be installed
+		log.Printf("Warning: failed to uninstall Helm chart %s: %v", releaseName, err)
+	}
+
+	// Delete namespace if it's application-specific
+	if strings.HasPrefix(app.Namespace, "app-") {
+		deleteNSCmd := fmt.Sprintf("kubectl delete namespace %s --ignore-not-found=true", app.Namespace)
+		if _, err := conn.Execute(deleteNSCmd); err != nil {
+			log.Printf("Warning: failed to delete namespace %s: %v", app.Namespace, err)
+		}
+	}
+
+	return nil
+}
