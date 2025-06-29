@@ -19,12 +19,16 @@ import (
 
 // ApplicationsHandler contains dependencies for application-related operations
 type ApplicationsHandler struct {
-	// Add dependencies here as needed
+	catalog   models.ApplicationCatalog
+	validator models.ApplicationValidator
 }
 
 // NewApplicationsHandler creates a new applications handler instance
 func NewApplicationsHandler() *ApplicationsHandler {
-	return &ApplicationsHandler{}
+	return &ApplicationsHandler{
+		catalog:   models.NewDefaultApplicationCatalog(),
+		validator: models.NewDefaultApplicationValidator(),
+	}
 }
 
 // HandleApplicationsPage renders the applications management page
@@ -50,7 +54,7 @@ func (h *ApplicationsHandler) HandleApplicationsPage(c *gin.Context) {
 	}
 
 	// Get predefined applications catalog
-	predefinedApps := models.GetPredefinedApplications()
+	predefinedApps := h.catalog.GetApplications()
 
 	c.HTML(http.StatusOK, "applications.html", gin.H{
 		"Applications":   applications,
@@ -142,7 +146,7 @@ func (h *ApplicationsHandler) HandleApplicationsPrerequisites(c *gin.Context) {
 	}
 
 	// Get predefined applications catalog
-	predefinedApps := models.GetPredefinedApplications()
+	predefinedApps := h.catalog.GetApplications()
 
 	c.JSON(http.StatusOK, gin.H{
 		"domains":         managedDomains,
@@ -182,7 +186,7 @@ func (h *ApplicationsHandler) HandleApplicationsCreate(c *gin.Context) {
 	}
 
 	// Validate that app type exists in catalog
-	predefinedApp, exists := models.GetPredefinedApplicationByID(appData.AppType)
+	predefinedApp, exists := h.catalog.GetApplicationByID(appData.AppType)
 	if !exists {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid application type"})
 		return
@@ -876,7 +880,7 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 	}
 
 	// Get predefined app configuration
-	predefinedApp, exists := models.GetPredefinedApplicationByID(app.AppType)
+	predefinedApp, exists := h.catalog.GetApplicationByID(app.AppType)
 	if !exists {
 		return fmt.Errorf("predefined application type not found: %s", app.AppType)
 	}
