@@ -45,7 +45,7 @@ func TestE2E_APP_001_CompleteApplicationLifecycle(t *testing.T) {
 	// 1. Create VPS with K3s cluster
 	var vpsInstance *helpers.VPSInstance
 	t.Run("Step1_CreateVPSWithK3s", func(t *testing.T) {
-		vpsInstance = simulateVPSCreation(t, config, vpsName)
+		vpsInstance = helpers.SimulateVPSCreation(config, vpsName)
 		require.NotNil(t, vpsInstance, "VPS creation should succeed")
 
 		cleanup.RegisterResource("vps", vpsInstance.ID, vpsInstance.Name, map[string]interface{}{
@@ -199,7 +199,7 @@ func TestE2E_APP_002_MultiApplicationDeployment(t *testing.T) {
 	// 1. Deploy web application (nginx)
 	var vpsInstance *helpers.VPSInstance
 	t.Run("Step1_DeployWebApplication", func(t *testing.T) {
-		vpsInstance = simulateVPSCreation(t, config, vpsName)
+		vpsInstance = helpers.SimulateVPSCreation(config, vpsName)
 		require.NotNil(t, vpsInstance, "VPS creation should succeed")
 
 		cleanup.RegisterResource("vps", vpsInstance.ID, vpsInstance.Name, map[string]interface{}{
@@ -313,7 +313,7 @@ func TestE2E_APP_003_CustomManifestDeployment(t *testing.T) {
 	// 2. Deploy via VPS terminal interface
 	var vpsInstance *helpers.VPSInstance
 	t.Run("Step2_DeployViaTerminal", func(t *testing.T) {
-		vpsInstance = simulateVPSCreation(t, config, vpsName)
+		vpsInstance = helpers.SimulateVPSCreation(config, vpsName)
 		require.NotNil(t, vpsInstance, "VPS creation should succeed")
 
 		cleanup.RegisterResource("vps", vpsInstance.ID, vpsInstance.Name, map[string]interface{}{
@@ -350,7 +350,7 @@ func TestE2E_APP_003_CustomManifestDeployment(t *testing.T) {
 
 	// 5. Monitor resource consumption
 	t.Run("Step5_MonitorResourceConsumption", func(t *testing.T) {
-		resourceMonitoring := simulateResourceMonitoring(t, config, vpsInstance)
+		resourceMonitoring := helpers.SimulateResourceMonitoring(config, vpsInstance)
 		assert.NotNil(t, resourceMonitoring, "Resource monitoring should succeed")
 
 		t.Logf("Resource consumption: CPU: %v%%, Memory: %v%%, Disk: %v%%",

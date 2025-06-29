@@ -152,3 +152,50 @@ func getEnvFloatOrDefault(key string, defaultValue float64) float64 {
 	}
 	return defaultValue
 }
+
+// SimulateVPSCreation simulates VPS creation for testing
+func SimulateVPSCreation(config *E2ETestConfig, vpsName string) *VPSInstance {
+	if config.TestMode == "mock" {
+		return &VPSInstance{
+			ID:         fmt.Sprintf("vps-%d", time.Now().Unix()),
+			Name:       vpsName,
+			IP:         "192.168.1.100",
+			Status:     "running",
+			CreatedAt:  time.Now(),
+			ServerType: "cx11",
+			Location:   "nbg1",
+			Cost:       2.90,
+		}
+	}
+
+	// In live mode, would create actual VPS
+	time.Sleep(500 * time.Millisecond)
+	return &VPSInstance{
+		ID:         fmt.Sprintf("vps-%d", time.Now().Unix()),
+		Name:       vpsName,
+		IP:         "188.245.79.245", // Use actual VPS IP in live mode
+		Status:     "running",
+		CreatedAt:  time.Now(),
+		ServerType: "cx11",
+		Location:   "nbg1",
+		Cost:       2.90,
+	}
+}
+
+// SimulateResourceMonitoring simulates resource monitoring for testing
+func SimulateResourceMonitoring(config *E2ETestConfig, vps *VPSInstance) map[string]interface{} {
+	if config.TestMode == "mock" {
+		return map[string]interface{}{
+			"cpu":    75.5,
+			"memory": 82.3,
+			"disk":   45.1,
+		}
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	return map[string]interface{}{
+		"cpu":    75.5,
+		"memory": 82.3,
+		"disk":   45.1,
+	}
+}
