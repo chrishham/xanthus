@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/chrishham/xanthus/internal/models"
+	"github.com/chrishham/xanthus/internal/utils"
 )
 
 // ApplicationDeploymentService handles application deployment operations
@@ -19,18 +20,112 @@ func NewApplicationDeploymentService() *ApplicationDeploymentService {
 
 // DeployApplication deploys an application using Helm and appropriate handlers
 func (ads *ApplicationDeploymentService) DeployApplication(token, accountID string, appData interface{}, predefinedApp *models.PredefinedApplication, appID string) error {
-	// For now, delegate to existing simple implementation
-	// This can be enhanced later with more sophisticated deployment logic
 	log.Printf("Deploying application %s with type %s", appID, predefinedApp.ID)
 
-	// In the future, this would contain:
-	// - VPS connection setup
-	// - Helm chart deployment
-	// - TLS certificate management
-	// - Application-specific configuration
-	// - Password retrieval and storage
+	// Convert appData to map for easier access
+	appDataMap, ok := appData.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid application data format")
+	}
 
-	// For now, return success to maintain compatibility
+	kvService := NewKVService()
+	sshService := NewSSHService()
+
+	subdomain := appDataMap["subdomain"].(string)
+	domain := appDataMap["domain"].(string)
+	vpsID := appDataMap["vps_id"].(string)
+
+	// Get VPS configuration for SSH details
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", vpsID), &vpsConfig)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+
+	// Get SSH private key
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := kvService.GetValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return fmt.Errorf("failed to get SSH private key: %v", err)
+	}
+
+	// Create SSH connection
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+	defer conn.Close()
+
+	// Generate release name and namespace (using type-based namespace as per CLAUDE.md)
+	releaseName := fmt.Sprintf("%s-%s", predefinedApp.ID, appID)
+	namespace := predefinedApp.ID
+
+	// Create namespace if it doesn't exist
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl create namespace %s --dry-run=client -o yaml | kubectl apply -f -", namespace))
+	if err != nil {
+		return fmt.Errorf("failed to create namespace: %v", err)
+	}
+
+	var chartName string
+
+	// Handle different chart repository types based on HelmChart configuration
+	helmConfig := predefinedApp.HelmChart
+
+	if strings.Contains(helmConfig.Repository, "github.com") {
+		// Clone GitHub repository for the chart
+		repoDir := fmt.Sprintf("/tmp/%s-chart", predefinedApp.ID)
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, helmConfig.Repository, repoDir))
+		if err != nil {
+			return fmt.Errorf("failed to clone chart repository: %v", err)
+		}
+		chartName = fmt.Sprintf("%s/%s", repoDir, helmConfig.Chart)
+	} else {
+		// Add Helm repository
+		repoName := predefinedApp.ID
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo add %s %s", repoName, helmConfig.Repository))
+		if err != nil {
+			return fmt.Errorf("failed to add Helm repository: %v", err)
+		}
+
+		// Update Helm repositories
+		_, err = sshService.ExecuteCommand(conn, "helm repo update")
+		if err != nil {
+			return fmt.Errorf("failed to update Helm repositories: %v", err)
+		}
+		chartName = fmt.Sprintf("%s/%s", repoName, helmConfig.Chart)
+	}
+
+	// Generate and upload values file
+	valuesContent, err := ads.generateValuesFromTemplate(predefinedApp, predefinedApp.Version, subdomain, domain, releaseName)
+	if err != nil {
+		return fmt.Errorf("failed to generate values file: %v", err)
+	}
+
+	valuesPath := fmt.Sprintf("/tmp/%s-values.yaml", releaseName)
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", valuesPath, valuesContent))
+	if err != nil {
+		return fmt.Errorf("failed to upload values file: %v", err)
+	}
+
+	// Install via Helm
+	installCmd := fmt.Sprintf("helm install %s %s --namespace %s --values %s --wait --timeout 10m",
+		releaseName, chartName, namespace, valuesPath)
+
+	result, err := sshService.ExecuteCommand(conn, installCmd)
+	if err != nil {
+		return fmt.Errorf("helm install failed: %v, output: %s", err, result.Output)
+	}
+
+	// Retrieve and store password for applications that generate them
+	if err := ads.retrieveApplicationPassword(token, accountID, predefinedApp.ID, appID, vpsID, releaseName, namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey); err != nil {
+		// Log the error but don't fail the deployment since the app is successfully deployed
+		log.Printf("Warning: Failed to retrieve application password: %v", err)
+	}
+
 	return nil
 }
 
@@ -213,4 +308,91 @@ func (ads *ApplicationDeploymentService) generateValuesFromTemplate(predefinedAp
 	}
 
 	return content, nil
+}
+
+// retrieveApplicationPassword retrieves and stores the auto-generated password for applications that create them
+func (ads *ApplicationDeploymentService) retrieveApplicationPassword(token, accountID, appType, appID, vpsID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+	switch appType {
+	case "code-server":
+		return ads.retrieveCodeServerPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey)
+	case "argocd":
+		return ads.retrieveArgoCDPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey)
+	default:
+		// No password retrieval needed for this application type
+		return nil
+	}
+}
+
+// retrieveCodeServerPassword retrieves the auto-generated password from code-server Kubernetes secret
+func (ads *ApplicationDeploymentService) retrieveCodeServerPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+	sshService := NewSSHService()
+
+	conn, err := sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+	defer conn.Close()
+
+	// Retrieve password from Kubernetes secret
+	// The secret name is the same as the release name for code-server
+	secretName := releaseName
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
+	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+	}
+
+	// Store password in KV store
+	password := strings.TrimSpace(result.Output)
+	return ads.storeEncryptedPassword(token, accountID, appID, password)
+}
+
+// retrieveArgoCDPassword retrieves the auto-generated admin password from ArgoCD
+func (ads *ApplicationDeploymentService) retrieveArgoCDPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+	sshService := NewSSHService()
+
+	conn, err := sshService.ConnectToVPS(vpsIP, sshUser, privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+	defer conn.Close()
+
+	// Retrieve admin password from ArgoCD initial admin secret
+	secretName := "argocd-initial-admin-secret"
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, secretName)
+	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+	}
+
+	password := strings.TrimSpace(result.Output)
+	if password == "" {
+		return fmt.Errorf("retrieved empty password from ArgoCD secret")
+	}
+
+	// Store password in KV store
+	return ads.storeEncryptedPassword(token, accountID, appID, password)
+}
+
+// storeEncryptedPassword encrypts and stores the password in KV store
+func (ads *ApplicationDeploymentService) storeEncryptedPassword(token, accountID, appID, password string) error {
+	kvService := NewKVService()
+
+	// Encrypt the password
+	encryptedPassword, err := utils.EncryptData(password, token)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt password: %v", err)
+	}
+
+	// Store in KV with the key format: app:{appID}:password
+	// Use the same format as PasswordHelper.StoreEncryptedPassword
+	key := fmt.Sprintf("app:%s:password", appID)
+	err = kvService.PutValue(token, accountID, key, map[string]string{
+		"password": encryptedPassword,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to store encrypted password: %v", err)
+	}
+
+	return nil
 }
