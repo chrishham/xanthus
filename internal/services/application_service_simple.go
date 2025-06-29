@@ -553,8 +553,11 @@ func (s *SimpleApplicationService) storeEncryptedPassword(token, accountID, appI
 	}
 
 	// Store in KV with the key format: app:{appID}:password
+	// Use the same format as PasswordHelper.StoreEncryptedPassword
 	key := fmt.Sprintf("app:%s:password", appID)
-	err = kvService.PutValue(token, accountID, key, encryptedPassword)
+	err = kvService.PutValue(token, accountID, key, map[string]string{
+		"password": encryptedPassword,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to store encrypted password: %v", err)
 	}
