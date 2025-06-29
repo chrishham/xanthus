@@ -10,6 +10,8 @@ type ApplicationServiceFactory struct {
 	versionService         VersionService
 	enhancedVersionService EnhancedVersionService
 	configLoader          models.ConfigLoader
+	registry              ApplicationRegistry
+	enhancedValidator     *EnhancedApplicationValidator
 }
 
 // NewApplicationServiceFactory creates a new application service factory
@@ -21,10 +23,18 @@ func NewApplicationServiceFactory() *ApplicationServiceFactory {
 	// Create enhanced version service
 	enhancedVersionService := NewEnhancedDefaultVersionService(configLoader)
 	
+	// Create enhanced validator
+	enhancedValidator := NewEnhancedApplicationValidator(validator)
+	
+	// Create application registry
+	registry := NewInMemoryApplicationRegistry(enhancedValidator)
+	
 	return &ApplicationServiceFactory{
 		versionService:         enhancedVersionService, // Use enhanced service as default
 		enhancedVersionService: enhancedVersionService,
 		configLoader:          configLoader,
+		registry:              registry,
+		enhancedValidator:     enhancedValidator,
 	}
 }
 
@@ -68,4 +78,49 @@ func (f *ApplicationServiceFactory) CreateBackgroundRefreshService(config Backgr
 // CreatePeriodicRefreshManager creates a new periodic refresh manager
 func (f *ApplicationServiceFactory) CreatePeriodicRefreshManager(backgroundService *BackgroundRefreshService, catalogService ApplicationCatalog, interval time.Duration) *PeriodicRefreshManager {
 	return NewPeriodicRefreshManager(backgroundService, catalogService, interval)
+}
+
+// CreateApplicationRegistry creates a new application registry
+func (f *ApplicationServiceFactory) CreateApplicationRegistry() ApplicationRegistry {
+	return f.registry
+}
+
+// CreateEnhancedValidator creates a new enhanced application validator
+func (f *ApplicationServiceFactory) CreateEnhancedValidator() *EnhancedApplicationValidator {
+	return f.enhancedValidator
+}
+
+// CreateRegistryCatalogBridge creates a registry-catalog bridge
+func (f *ApplicationServiceFactory) CreateRegistryCatalogBridge() *RegistryWithCatalogBridge {
+	return NewRegistryWithCatalogBridge(f.registry)
+}
+
+// CreateRegistryBasedCatalogService creates a catalog service backed by the registry
+func (f *ApplicationServiceFactory) CreateRegistryBasedCatalogService() ApplicationCatalog {
+	bridge := NewRegistryWithCatalogBridge(f.registry)
+	return bridge
+}
+
+// CreateRegistryWithDefaults creates a registry pre-populated with default applications
+func (f *ApplicationServiceFactory) CreateRegistryWithDefaults() (ApplicationRegistry, error) {
+	// Load default applications from configuration
+	configPath := GetDefaultConfigPath()
+	configCatalog := NewConfigDrivenCatalogService(configPath, f.versionService)
+	
+	// Get default applications
+	defaultApps := configCatalog.GetApplications()
+	
+	// Register default applications
+	for _, app := range defaultApps {
+		if err := f.registry.Register(app); err != nil {
+			return nil, err
+		}
+	}
+	
+	return f.registry, nil
+}
+
+// ValidateApplicationWithCluster validates an application against cluster capabilities
+func (f *ApplicationServiceFactory) ValidateApplicationWithCluster(app models.PredefinedApplication, cluster ClusterInfo) error {
+	return f.enhancedValidator.ValidateWithCluster(app, cluster)
 }
