@@ -503,7 +503,8 @@ func (s *SimpleApplicationService) retrieveCodeServerPassword(token, accountID, 
 	}
 
 	// Retrieve password from Kubernetes secret
-	secretName := fmt.Sprintf("%s-code-server", releaseName)
+	// The secret name is the same as the release name for code-server
+	secretName := releaseName
 	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
 	result, err := sshService.ExecuteCommand(conn, cmd)
 	if err != nil {

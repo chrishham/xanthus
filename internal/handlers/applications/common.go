@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chrishham/xanthus/internal/models"
@@ -227,19 +228,108 @@ func (p *PasswordHelper) StoreEncryptedPassword(token, accountID, appID, passwor
 }
 
 // GetDecryptedPassword retrieves and decrypts a stored password
+// If not found in KV, attempts to retrieve from VPS and store it
 func (p *PasswordHelper) GetDecryptedPassword(token, accountID, appID string) (string, error) {
 	var passwordData struct {
 		Password string `json:"password"`
 	}
 
+	// First try to get from KV store
 	err := p.kvService.GetValue(token, accountID, fmt.Sprintf("app:%s:password", appID), &passwordData)
-	if err != nil {
-		return "", fmt.Errorf("failed to retrieve password: %v", err)
+	if err == nil {
+		// Found in KV, decrypt and return
+		password, err := utils.DecryptData(passwordData.Password, token)
+		if err != nil {
+			return "", fmt.Errorf("failed to decrypt password: %v", err)
+		}
+		return password, nil
 	}
 
-	password, err := utils.DecryptData(passwordData.Password, token)
+	// Password not found in KV, try to retrieve from VPS
+	fmt.Printf("Password not found in KV for app %s, attempting to retrieve from VPS\n", appID)
+	password, err := p.retrievePasswordFromVPS(token, accountID, appID)
 	if err != nil {
-		return "", fmt.Errorf("failed to decrypt password: %v", err)
+		return "", fmt.Errorf("failed to retrieve password from VPS: %v", err)
+	}
+
+	// Store the retrieved password in KV for future use
+	if storeErr := p.StoreEncryptedPassword(token, accountID, appID, password); storeErr != nil {
+		fmt.Printf("Warning: Failed to store retrieved password in KV: %v\n", storeErr)
+	} else {
+		fmt.Printf("Successfully stored retrieved password in KV for app %s\n", appID)
+	}
+
+	return password, nil
+}
+
+// retrievePasswordFromVPS retrieves password directly from VPS for a given application
+func (p *PasswordHelper) retrievePasswordFromVPS(token, accountID, appID string) (string, error) {
+	// Get application details
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get application details: %v", err)
+	}
+
+	// Get VPS connection
+	vpsHelper := NewVPSConnectionHelper()
+	conn, err := vpsHelper.GetVPSConnection(token, accountID, app.VPSID)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Generate release name (should match the deployment logic)
+	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+
+	// Retrieve password based on application type
+	switch app.AppType {
+	case "code-server":
+		return p.retrieveCodeServerPasswordFromVPS(conn, releaseName, app.Namespace)
+	case "argocd":
+		return p.retrieveArgoCDPasswordFromVPS(conn, releaseName, app.Namespace)
+	default:
+		return "", fmt.Errorf("password retrieval not supported for application type: %s", app.AppType)
+	}
+}
+
+// retrieveCodeServerPasswordFromVPS retrieves code-server password from VPS
+func (p *PasswordHelper) retrieveCodeServerPasswordFromVPS(conn *services.SSHConnection, releaseName, namespace string) (string, error) {
+	sshService := services.NewSSHService()
+	
+	// Retrieve password from Kubernetes secret
+	// The secret name is the same as the release name for code-server
+	secretName := releaseName
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
+	
+	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve code-server password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+	}
+
+	password := strings.TrimSpace(result.Output)
+	if password == "" {
+		return "", fmt.Errorf("retrieved empty password from code-server secret")
+	}
+
+	return password, nil
+}
+
+// retrieveArgoCDPasswordFromVPS retrieves ArgoCD admin password from VPS
+func (p *PasswordHelper) retrieveArgoCDPasswordFromVPS(conn *services.SSHConnection, releaseName, namespace string) (string, error) {
+	sshService := services.NewSSHService()
+	
+	// Retrieve admin password from ArgoCD initial admin secret
+	secretName := "argocd-initial-admin-secret"
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, secretName)
+	
+	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve ArgoCD password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+	}
+
+	password := strings.TrimSpace(result.Output)
+	if password == "" {
+		return "", fmt.Errorf("retrieved empty password from ArgoCD secret")
 	}
 
 	return password, nil
