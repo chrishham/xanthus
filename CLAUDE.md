@@ -138,6 +138,35 @@ internal/templates/applications/ # Helm values templates
 - **Extensible architecture** - Add new applications via YAML configuration
 - **Unified pipeline** - Same deployment flow for all application types
 
+### Application Namespace Structure
+
+Xanthus uses a **type-based namespace organization** for clean resource management:
+
+**Namespace Design:**
+- **All code-server applications** deploy to the `code-server` namespace
+- **All ArgoCD applications** deploy to the `argocd` namespace
+- **Future application types** will follow the same pattern (e.g., `grafana`, `jenkins`)
+
+**Benefits:**
+- ✅ **Clean organization**: Applications grouped by type instead of individual namespaces
+- ✅ **Better resource management**: Easier to monitor and manage applications by type
+- ✅ **Simplified operations**: Consistent namespace structure across deployments
+- ✅ **Reduced namespace proliferation**: No more one-namespace-per-application
+
+**Examples:**
+```bash
+# All code-server instances in one namespace
+kubectl get pods -n code-server
+# my-codeserver-app-123
+# dev-codeserver-app-456
+# test-codeserver-app-789
+
+# All ArgoCD instances in one namespace  
+kubectl get pods -n argocd
+# prod-argocd-app-111
+# staging-argocd-app-222
+```
+
 ### Handler Architecture
 
 Handlers are organized by domain with clear separation:
@@ -161,6 +190,12 @@ Each handler follows dependency injection pattern through the `RouteConfig` stru
 - Unified deployment pipeline for all application types
 - Version management through GitHub API or Helm repositories
 
+**Password Management:**
+- **Intelligent password retrieval** - Attempts KV store first, falls back to VPS if not found
+- **Automatic password caching** - Stores retrieved passwords in KV for faster future access
+- **Multi-application support** - Works with both code-server and ArgoCD applications
+- **Robust error handling** - Gracefully handles missing passwords and connection issues
+
 **Error Handling:**
 - Structured error responses for API endpoints
 - User-friendly error messages in web interface
@@ -170,6 +205,46 @@ Each handler follows dependency injection pattern through the `RouteConfig` stru
 - Middleware-based authentication
 - Trusted proxy configuration
 - Input validation and sanitization
+
+## UI Features
+
+### Auto-Refresh System
+
+The applications page includes an **intelligent auto-refresh system** for real-time status monitoring:
+
+**Auto-Refresh Features:**
+- **Enabled by default** with 30-second intervals for optimal balance between freshness and performance
+- **Visual countdown timer** showing time until next refresh ("Next: 29s")
+- **Smart visibility detection** - automatically pauses when tab is hidden, resumes when visible
+- **Concurrent request protection** - prevents multiple simultaneous refresh requests
+- **Graceful error handling** - handles network issues and authentication failures
+
+**Visual Indicators:**
+- **Toggle button**: Shows "Auto-refresh ON/OFF" status
+- **Pulsing green dot**: Indicates active auto-refresh
+- **Live countdown**: Real-time countdown to next refresh
+- **Status badges**: Color-coded application status indicators
+
+**Status Color Mapping:**
+- 🟢 **Running/deployed** - Green badge (application is healthy and accessible)
+- 🔵 **Deploying/Creating** - Blue badge (deployment in progress)
+- 🟡 **pending** - Yellow badge (waiting for resources or dependencies)
+- 🔴 **Failed/failed** - Red badge (deployment or runtime failure)
+- ⚪ **Not Deployed** - Gray badge (application not found or removed)
+
+**Performance Optimizations:**
+- **Background refresh** - Updates data without loading spinners during auto-refresh
+- **Network-aware** - Automatically stops on repeated network failures
+- **Resource-efficient** - 30-second intervals prevent server overload
+- **Page focus detection** - Reduces unnecessary requests when user is away
+
+**Usage:**
+```javascript
+// Auto-refresh controls in applications.html
+toggleAutoRefresh()     // Enable/disable auto-refresh
+refreshApplications()   // Manual refresh with loading indicator
+refreshApplicationsQuietly() // Background refresh without UI feedback
+```
 
 ## Testing Philosophy
 
