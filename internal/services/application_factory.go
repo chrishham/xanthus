@@ -2,7 +2,6 @@ package services
 
 import (
 	"github.com/chrishham/xanthus/internal/models"
-	"time"
 )
 
 // ApplicationServiceFactory provides a factory for creating application-related services
@@ -68,16 +67,6 @@ func (f *ApplicationServiceFactory) GetVersionService() VersionService {
 // GetEnhancedVersionService returns the enhanced version service instance
 func (f *ApplicationServiceFactory) GetEnhancedVersionService() EnhancedVersionService {
 	return f.enhancedVersionService
-}
-
-// CreateBackgroundRefreshService creates a new background refresh service
-func (f *ApplicationServiceFactory) CreateBackgroundRefreshService(config BackgroundRefreshConfig) *BackgroundRefreshService {
-	return NewBackgroundRefreshService(f.enhancedVersionService, config)
-}
-
-// CreatePeriodicRefreshManager creates a new periodic refresh manager
-func (f *ApplicationServiceFactory) CreatePeriodicRefreshManager(backgroundService *BackgroundRefreshService, catalogService ApplicationCatalog, interval time.Duration) *PeriodicRefreshManager {
-	return NewPeriodicRefreshManager(backgroundService, catalogService, interval)
 }
 
 // CreateApplicationRegistry creates a new application registry
