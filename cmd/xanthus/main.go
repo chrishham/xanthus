@@ -8,6 +8,7 @@ import (
 
 	"github.com/chrishham/xanthus/internal/handlers"
 	"github.com/chrishham/xanthus/internal/handlers/applications"
+	"github.com/chrishham/xanthus/internal/handlers/vps"
 	"github.com/chrishham/xanthus/internal/router"
 	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -38,10 +39,10 @@ func main() {
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler()
 	dnsHandler := handlers.NewDNSHandler()
-	vpsLifecycleHandler := handlers.NewVPSLifecycleHandler()
-	vpsInfoHandler := handlers.NewVPSInfoHandler()
-	vpsConfigHandler := handlers.NewVPSConfigHandler()
-	vpsMetaHandler := handlers.NewVPSMetaHandler()
+	vpsLifecycleHandler := vps.NewVPSLifecycleHandler()
+	vpsInfoHandler := vps.NewVPSInfoHandler()
+	vpsConfigHandler := vps.NewVPSConfigHandler()
+	vpsMetaHandler := vps.NewVPSMetaHandler()
 	appsHandler := applications.NewHandler()
 	terminalHandler := handlers.NewTerminalHandler()
 	pagesHandler := handlers.NewPagesHandler()

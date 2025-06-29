@@ -20,6 +20,8 @@ headlmamp, openwebui, code-server
 ## Applications
 @web/templates/applications.html
 
+- fix Not Deployed at applications list, when the app is surely deployed.
+
 # Settings
 
 - separate page to update the Hetzner api key ?

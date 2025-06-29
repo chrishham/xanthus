@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/chrishham/xanthus/internal/handlers"
 	"github.com/chrishham/xanthus/internal/handlers/applications"
+	"github.com/chrishham/xanthus/internal/handlers/vps"
 	"github.com/chrishham/xanthus/internal/middleware"
 	"github.com/gin-gonic/gin"
 )
@@ -11,10 +12,10 @@ import (
 type RouteConfig struct {
 	AuthHandler         *handlers.AuthHandler
 	DNSHandler          *handlers.DNSHandler
-	VPSLifecycleHandler *handlers.VPSLifecycleHandler
-	VPSInfoHandler      *handlers.VPSInfoHandler
-	VPSConfigHandler    *handlers.VPSConfigHandler
-	VPSMetaHandler      *handlers.VPSMetaHandler
+	VPSLifecycleHandler *vps.VPSLifecycleHandler
+	VPSInfoHandler      *vps.VPSInfoHandler
+	VPSConfigHandler    *vps.VPSConfigHandler
+	VPSMetaHandler      *vps.VPSMetaHandler
 	AppsHandler         *applications.Handler
 	TerminalHandler     *handlers.TerminalHandler
 	PagesHandler        *handlers.PagesHandler
