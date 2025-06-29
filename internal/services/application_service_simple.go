@@ -399,6 +399,12 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 		return fmt.Errorf("helm install failed: %v, output: %s", err, result.Output)
 	}
 
+	// Retrieve and store password for applications that generate them
+	if err := s.retrieveApplicationPassword(token, accountID, predefinedApp.ID, appID, vpsID, releaseName, namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey); err != nil {
+		// Log the error but don't fail the deployment since the app is successfully deployed
+		fmt.Printf("Warning: Failed to retrieve application password: %v\n", err)
+	}
+
 	return nil
 }
 
@@ -471,5 +477,88 @@ ingress:
 image:
   tag: "%s"
 `, predefinedApp.ID, subdomain, domain, releaseName, subdomain, domain, predefinedApp.Version), nil
+}
+
+// retrieveApplicationPassword retrieves and stores the auto-generated password for applications that create them
+func (s *SimpleApplicationService) retrieveApplicationPassword(token, accountID, appType, appID, vpsID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+	switch appType {
+	case "code-server":
+		return s.retrieveCodeServerPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey)
+	case "argocd":
+		return s.retrieveArgoCDPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey)
+	default:
+		// No password retrieval needed for this application type
+		return nil
+	}
+}
+
+// retrieveCodeServerPassword retrieves the auto-generated password from code-server Kubernetes secret
+func (s *SimpleApplicationService) retrieveCodeServerPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+	sshService := NewSSHService()
+	vpsIDInt, _ := strconv.Atoi(strings.Split(appID, "-")[1]) // Extract VPS ID from app ID
+
+	conn, err := sshService.GetOrCreateConnection(vpsIP, sshUser, privateKey, vpsIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Retrieve password from Kubernetes secret
+	secretName := fmt.Sprintf("%s-code-server", releaseName)
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
+	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+	}
+
+	// Store password in KV store
+	password := strings.TrimSpace(result.Output)
+	return s.storeEncryptedPassword(token, accountID, appID, password)
+}
+
+// retrieveArgoCDPassword retrieves the auto-generated admin password from ArgoCD
+func (s *SimpleApplicationService) retrieveArgoCDPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+	sshService := NewSSHService()
+	vpsIDInt, _ := strconv.Atoi(strings.Split(appID, "-")[1]) // Extract VPS ID from app ID
+
+	conn, err := sshService.GetOrCreateConnection(vpsIP, sshUser, privateKey, vpsIDInt)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Retrieve admin password from ArgoCD initial admin secret
+	secretName := "argocd-initial-admin-secret"
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, secretName)
+	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+	}
+
+	password := strings.TrimSpace(result.Output)
+	if password == "" {
+		return fmt.Errorf("retrieved empty password from ArgoCD secret")
+	}
+
+	// Store password in KV store
+	return s.storeEncryptedPassword(token, accountID, appID, password)
+}
+
+// storeEncryptedPassword encrypts and stores the password in KV store
+func (s *SimpleApplicationService) storeEncryptedPassword(token, accountID, appID, password string) error {
+	kvService := NewKVService()
+	
+	// Encrypt the password
+	encryptedPassword, err := utils.EncryptData(password, token)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt password: %v", err)
+	}
+
+	// Store in KV with the key format: app:{appID}:password
+	key := fmt.Sprintf("app:%s:password", appID)
+	err = kvService.PutValue(token, accountID, key, encryptedPassword)
+	if err != nil {
+		return fmt.Errorf("failed to store encrypted password: %v", err)
+	}
+
+	return nil
 }
 
