@@ -115,8 +115,7 @@ func (ads *ApplicationDeploymentService) performUpgrade(token, accountID string,
 		return fmt.Errorf("failed to generate values file: %v", err)
 	}
 
-	// Upload values file to VPS
-	valuesPath := fmt.Sprintf("/tmp/%s-values.yaml", releaseName)
+	// Establish SSH connection
 	sshService := NewSSHService()
 	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
 	if err != nil {
@@ -124,7 +123,40 @@ func (ads *ApplicationDeploymentService) performUpgrade(token, accountID string,
 	}
 	defer conn.Close()
 
-	// Write values file
+	// Handle chart repository setup (same as deployment)
+	var chartName string
+	helmConfig := predefinedApp.HelmChart
+
+	if strings.Contains(helmConfig.Repository, "github.com") {
+		// Clone GitHub repository for the chart
+		repoDir := fmt.Sprintf("/tmp/%s-chart", predefinedApp.ID)
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, helmConfig.Repository, repoDir))
+		if err != nil {
+			return fmt.Errorf("failed to clone chart repository: %v", err)
+		}
+		chartName = fmt.Sprintf("%s/%s", repoDir, helmConfig.Chart)
+	} else {
+		// Add/update Helm repository
+		repoName := predefinedApp.ID
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo add %s %s", repoName, helmConfig.Repository))
+		if err != nil {
+			// If repo add fails, it might already exist, try to update
+			_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo update %s", repoName))
+			if err != nil {
+				return fmt.Errorf("failed to add/update Helm repository: %v", err)
+			}
+		} else {
+			// Update Helm repositories after successful add
+			_, err = sshService.ExecuteCommand(conn, "helm repo update")
+			if err != nil {
+				return fmt.Errorf("failed to update Helm repositories: %v", err)
+			}
+		}
+		chartName = fmt.Sprintf("%s/%s", repoName, helmConfig.Chart)
+	}
+
+	// Upload values file to VPS
+	valuesPath := fmt.Sprintf("/tmp/%s-values.yaml", releaseName)
 	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", valuesPath, valuesContent))
 	if err != nil {
 		return fmt.Errorf("failed to upload values file: %v", err)
@@ -132,11 +164,6 @@ func (ads *ApplicationDeploymentService) performUpgrade(token, accountID string,
 
 	// Perform Helm upgrade
 	helmService := NewHelmService()
-	chartName := predefinedApp.HelmChart.Repository
-	if strings.Contains(predefinedApp.HelmChart.Repository, "github.com") {
-		// For GitHub-based charts, use the cloned path
-		chartName = fmt.Sprintf("/tmp/%s-chart/%s", app.AppType, predefinedApp.HelmChart.Chart)
-	}
 
 	err = helmService.UpgradeChart(
 		vpsConfig.PublicIPv4,
