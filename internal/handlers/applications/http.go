@@ -1,4 +1,4 @@
-package handlers
+package applications
 
 import (
 	"encoding/json"
@@ -17,25 +17,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ApplicationsHandler contains dependencies for application-related operations
-type ApplicationsHandler struct {
-	catalog        services.ApplicationCatalog
-	validator      models.ApplicationValidator
-	serviceFactory *services.ApplicationServiceFactory
-}
-
-// NewApplicationsHandler creates a new applications handler instance using the service layer
-func NewApplicationsHandler() *ApplicationsHandler {
-	factory := services.NewApplicationServiceFactory()
-	return &ApplicationsHandler{
-		catalog:        factory.CreateHybridCatalogService(),
-		validator:      factory.CreateValidatorService(),
-		serviceFactory: factory,
-	}
-}
-
 // HandleApplicationsPage renders the applications management page
-func (h *ApplicationsHandler) HandleApplicationsPage(c *gin.Context) {
+func (h *Handler) HandleApplicationsPage(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !utils.VerifyCloudflareToken(token) {
 		c.Redirect(http.StatusTemporaryRedirect, "/login")
@@ -67,7 +50,7 @@ func (h *ApplicationsHandler) HandleApplicationsPage(c *gin.Context) {
 }
 
 // HandleApplicationsList returns a JSON list of applications
-func (h *ApplicationsHandler) HandleApplicationsList(c *gin.Context) {
+func (h *Handler) HandleApplicationsList(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !utils.VerifyCloudflareToken(token) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -95,7 +78,7 @@ func (h *ApplicationsHandler) HandleApplicationsList(c *gin.Context) {
 }
 
 // HandleApplicationsPrerequisites returns prerequisites for creating applications
-func (h *ApplicationsHandler) HandleApplicationsPrerequisites(c *gin.Context) {
+func (h *Handler) HandleApplicationsPrerequisites(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !utils.VerifyCloudflareToken(token) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -159,7 +142,7 @@ func (h *ApplicationsHandler) HandleApplicationsPrerequisites(c *gin.Context) {
 }
 
 // HandleApplicationsCreate creates new applications from predefined catalog
-func (h *ApplicationsHandler) HandleApplicationsCreate(c *gin.Context) {
+func (h *Handler) HandleApplicationsCreate(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !utils.VerifyCloudflareToken(token) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -231,7 +214,7 @@ func (h *ApplicationsHandler) HandleApplicationsCreate(c *gin.Context) {
 }
 
 // HandleApplicationUpgrade upgrades existing applications to new versions
-func (h *ApplicationsHandler) HandleApplicationUpgrade(c *gin.Context) {
+func (h *Handler) HandleApplicationUpgrade(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !utils.VerifyCloudflareToken(token) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -293,7 +276,7 @@ func (h *ApplicationsHandler) HandleApplicationUpgrade(c *gin.Context) {
 }
 
 // HandleApplicationVersions returns available versions for an application type
-func (h *ApplicationsHandler) HandleApplicationVersions(c *gin.Context) {
+func (h *Handler) HandleApplicationVersions(c *gin.Context) {
 	appType := c.Param("app_type")
 
 	// Currently only supporting code-server version lookup
@@ -343,7 +326,7 @@ func (h *ApplicationsHandler) HandleApplicationVersions(c *gin.Context) {
 }
 
 // HandleApplicationPasswordChange changes the password for code-server applications
-func (h *ApplicationsHandler) HandleApplicationPasswordChange(c *gin.Context) {
+func (h *Handler) HandleApplicationPasswordChange(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !utils.VerifyCloudflareToken(token) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -406,7 +389,7 @@ func (h *ApplicationsHandler) HandleApplicationPasswordChange(c *gin.Context) {
 }
 
 // HandleApplicationPasswordGet retrieves the current password for code-server applications
-func (h *ApplicationsHandler) HandleApplicationPasswordGet(c *gin.Context) {
+func (h *Handler) HandleApplicationPasswordGet(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !utils.VerifyCloudflareToken(token) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -457,7 +440,7 @@ func (h *ApplicationsHandler) HandleApplicationPasswordGet(c *gin.Context) {
 }
 
 // HandleApplicationDelete deletes applications and cleans up resources
-func (h *ApplicationsHandler) HandleApplicationDelete(c *gin.Context) {
+func (h *Handler) HandleApplicationDelete(c *gin.Context) {
 	token, err := c.Cookie("cf_token")
 	if err != nil || !utils.VerifyCloudflareToken(token) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
@@ -488,7 +471,7 @@ func (h *ApplicationsHandler) HandleApplicationDelete(c *gin.Context) {
 }
 
 // getApplicationsList retrieves all applications from Cloudflare KV with real-time status
-func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]models.Application, error) {
+func (h *Handler) getApplicationsList(token, accountID string) ([]models.Application, error) {
 	kvService := services.NewKVService()
 
 	// Get the Xanthus namespace ID
@@ -555,7 +538,7 @@ func (h *ApplicationsHandler) getApplicationsList(token, accountID string) ([]mo
 }
 
 // createApplication implements core application creation logic with predefined apps
-func (h *ApplicationsHandler) createApplication(token, accountID string, appData interface{}, predefinedApp *models.PredefinedApplication) (*models.Application, error) {
+func (h *Handler) createApplication(token, accountID string, appData interface{}, predefinedApp *models.PredefinedApplication) (*models.Application, error) {
 	// Generate unique ID for application
 	appID := fmt.Sprintf("app-%d", time.Now().Unix())
 
@@ -630,7 +613,7 @@ func (h *ApplicationsHandler) createApplication(token, accountID string, appData
 }
 
 // deployPredefinedApplication deploys a predefined application using its Helm configuration
-func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID string, appData interface{}, predefinedApp *models.PredefinedApplication, appID string) error {
+func (h *Handler) deployPredefinedApplication(token, accountID string, appData interface{}, predefinedApp *models.PredefinedApplication, appID string) error {
 	data := appData.(struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
@@ -798,7 +781,7 @@ func (h *ApplicationsHandler) deployPredefinedApplication(token, accountID strin
 }
 
 // generateValuesFile creates a values file from template with placeholder substitution
-func (h *ApplicationsHandler) generateValuesFile(conn *services.SSHConnection, predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
+func (h *Handler) generateValuesFile(conn *services.SSHConnection, predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
 	sshService := services.NewSSHService()
 
 	// Read the values template file
@@ -834,7 +817,7 @@ func (h *ApplicationsHandler) generateValuesFile(conn *services.SSHConnection, p
 }
 
 // createVSCodeSettingsConfigMap creates a ConfigMap with default VS Code settings for persistence
-func (h *ApplicationsHandler) createVSCodeSettingsConfigMap(conn *services.SSHConnection, releaseName, namespace string) error {
+func (h *Handler) createVSCodeSettingsConfigMap(conn *services.SSHConnection, releaseName, namespace string) error {
 	sshService := services.NewSSHService()
 
 	// Default VS Code settings with theme persistence and other user preferences
@@ -872,7 +855,7 @@ func (h *ApplicationsHandler) createVSCodeSettingsConfigMap(conn *services.SSHCo
 }
 
 // upgradeApplication implements core application upgrade logic
-func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, version string) error {
+func (h *Handler) upgradeApplication(token, accountID, appID, version string) error {
 	kvService := services.NewKVService()
 
 	// Get current application
@@ -998,7 +981,7 @@ func (h *ApplicationsHandler) upgradeApplication(token, accountID, appID, versio
 }
 
 // retrieveAndStoreCodeServerPassword retrieves the auto-generated password from Kubernetes secret
-func (h *ApplicationsHandler) retrieveAndStoreCodeServerPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+func (h *Handler) retrieveAndStoreCodeServerPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
 	sshService := services.NewSSHService()
 	vpsIDInt, _ := strconv.Atoi(strings.Split(appID, "-")[1]) // Extract VPS ID from app ID
 
@@ -1044,7 +1027,7 @@ func (h *ApplicationsHandler) retrieveAndStoreCodeServerPassword(token, accountI
 }
 
 // getCodeServerPassword retrieves the stored password for a code-server application
-func (h *ApplicationsHandler) getCodeServerPassword(token, accountID, appID string) (string, error) {
+func (h *Handler) getCodeServerPassword(token, accountID, appID string) (string, error) {
 	kvService := services.NewKVService()
 
 	var passwordData struct {
@@ -1066,7 +1049,7 @@ func (h *ApplicationsHandler) getCodeServerPassword(token, accountID, appID stri
 }
 
 // updateCodeServerPassword updates the password for a code-server application
-func (h *ApplicationsHandler) updateCodeServerPassword(token, accountID, appID, newPassword string, app *models.Application) error {
+func (h *Handler) updateCodeServerPassword(token, accountID, appID, newPassword string, app *models.Application) error {
 	// Get VPS configuration for SSH details
 	kvService := services.NewKVService()
 	var vpsConfig struct {
@@ -1131,7 +1114,7 @@ func (h *ApplicationsHandler) updateCodeServerPassword(token, accountID, appID, 
 }
 
 // deleteApplication implements core application deletion logic
-func (h *ApplicationsHandler) deleteApplication(token, accountID, appID string) error {
+func (h *Handler) deleteApplication(token, accountID, appID string) error {
 	kvService := services.NewKVService()
 
 	// Get application details before deletion
@@ -1194,7 +1177,7 @@ func (h *ApplicationsHandler) deleteApplication(token, accountID, appID string) 
 }
 
 // validateCodeServerVersion checks if a given version exists in GitHub releases
-func (h *ApplicationsHandler) validateCodeServerVersion(version string) (bool, error) {
+func (h *Handler) validateCodeServerVersion(version string) (bool, error) {
 	githubService := services.NewGitHubService()
 	releases, err := githubService.GetCodeServerVersions(50) // Check last 50 releases
 	if err != nil {
@@ -1215,7 +1198,7 @@ func (h *ApplicationsHandler) validateCodeServerVersion(version string) (bool, e
 }
 
 // getRealTimeStatus fetches the current Helm deployment status for an application
-func (h *ApplicationsHandler) getRealTimeStatus(token, accountID string, app *models.Application) (string, error) {
+func (h *Handler) getRealTimeStatus(token, accountID string, app *models.Application) (string, error) {
 	kvService := services.NewKVService()
 	helmService := services.NewHelmService()
 
@@ -1258,7 +1241,7 @@ func (h *ApplicationsHandler) getRealTimeStatus(token, accountID string, app *mo
 }
 
 // getArgoCDPassword retrieves the current password for an ArgoCD application directly from the VPS
-func (h *ApplicationsHandler) getArgoCDPassword(token, accountID, appID string) (string, error) {
+func (h *Handler) getArgoCDPassword(token, accountID, appID string) (string, error) {
 	kvService := services.NewKVService()
 
 	// First try to get the stored password from KV
@@ -1345,7 +1328,7 @@ func (h *ApplicationsHandler) getArgoCDPassword(token, accountID, appID string) 
 }
 
 // updateArgoCDPassword updates the password for an ArgoCD application
-func (h *ApplicationsHandler) updateArgoCDPassword(token, accountID, appID, newPassword string, app *models.Application) error {
+func (h *Handler) updateArgoCDPassword(token, accountID, appID, newPassword string, app *models.Application) error {
 	// Get VPS configuration for SSH details
 	kvService := services.NewKVService()
 	var vpsConfig struct {
@@ -1411,7 +1394,7 @@ func (h *ApplicationsHandler) updateArgoCDPassword(token, accountID, appID, newP
 }
 
 // retrieveAndStoreArgoCDPassword retrieves the auto-generated admin password from ArgoCD
-func (h *ApplicationsHandler) retrieveAndStoreArgoCDPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
+func (h *Handler) retrieveAndStoreArgoCDPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
 	sshService := services.NewSSHService()
 	vpsIDInt, _ := strconv.Atoi(strings.Split(appID, "-")[1]) // Extract VPS ID from app ID
 
