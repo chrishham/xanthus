@@ -58,3 +58,5 @@ buy domain, point nameservers to cloudfare, wait for the domain to be active, cr
    291 internal/utils/hetzner.go
    274 internal/handlers/dns.go
    257 internal/services/helm.go
+
+   GetPredefinedApplications
