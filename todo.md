@@ -19,28 +19,12 @@ headlmamp, openwebui, code-server
 
 ## Applications
 @web/templates/applications.html
-Argocd Installation failed:
-Invalid SSL certificate 
-
-cerfificates stopped working!
-
- deployPredefinedApplication function is too specific for code server or not?
 
 # Settings
 
 - separate page to update the Hetzner api key ?
 
 ## Port forward from vps to local machine
-
-- need for both tunelling
-ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key -D 8089 -N -f ubuntu@158.180.27.32
-- and port forwarding one or more ports
-ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 8080:localhost:8080 ubuntu@158.180.27.32
-ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 3000:localhost:3000 ubuntu@158.180.27.32
-
-ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 8082:localhost:8082 ubuntu@158.180.27.32
-ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 9000:localhost:9000 ubuntu@158.180.27.32
-ssh -i C:\Users\E40274\Desktop\Test\SSH_ubuntu-ampere-4core-24gbRam.key   -N -L 9001:localhost:9001 ubuntu@158.180.27.32
 
 
 # Tests
@@ -60,3 +44,15 @@ buy domain, point nameservers to cloudfare, wait for the domain to be active, cr
 ## Essential apps
 
 - 
+
+ find internal -type f -name '*.go' -exec wc -l {} + | sort -nr | sed -n '2,11p'
+  1389 internal/handlers/applications.go
+  1282 internal/handlers/vps.go
+   781 internal/services/ssh.go
+   647 internal/services/cloudflare.go
+   472 internal/services/hetzner.go
+   427 internal/services/kv.go
+   317 internal/utils/cloudflare.go
+   291 internal/utils/hetzner.go
+   274 internal/handlers/dns.go
+   257 internal/services/helm.go
