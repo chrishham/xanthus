@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -350,21 +351,21 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 
 	var chartName string
 
-	// Handle different application deployment types
-	switch predefinedApp.ID {
-	case "code-server":
-		// Clone GitHub repository for code-server chart
-		repoDir := "/tmp/code-server-chart"
-		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone https://github.com/coder/code-server %s", repoDir, repoDir))
+	// Handle different chart repository types based on HelmChart configuration
+	helmConfig := predefinedApp.HelmChart
+	
+	if strings.Contains(helmConfig.Repository, "github.com") {
+		// Clone GitHub repository for the chart
+		repoDir := fmt.Sprintf("/tmp/%s-chart", predefinedApp.ID)
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, helmConfig.Repository, repoDir))
 		if err != nil {
 			return fmt.Errorf("failed to clone chart repository: %v", err)
 		}
-		chartName = fmt.Sprintf("%s/ci/helm-chart", repoDir)
-
-	case "argocd":
-		// Add Helm repository for ArgoCD
-		repoName := "argo"
-		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo add %s https://argoproj.github.io/argo-helm", repoName))
+		chartName = fmt.Sprintf("%s/%s", repoDir, helmConfig.Chart)
+	} else {
+		// Add Helm repository
+		repoName := predefinedApp.ID
+		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo add %s %s", repoName, helmConfig.Repository))
 		if err != nil {
 			return fmt.Errorf("failed to add Helm repository: %v", err)
 		}
@@ -374,10 +375,7 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 		if err != nil {
 			return fmt.Errorf("failed to update Helm repositories: %v", err)
 		}
-		chartName = fmt.Sprintf("%s/argo-cd", repoName)
-
-	default:
-		return fmt.Errorf("unsupported application type: %s", predefinedApp.ID)
+		chartName = fmt.Sprintf("%s/%s", repoName, helmConfig.Chart)
 	}
 
 	// Generate and upload values file
@@ -404,18 +402,55 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 	return nil
 }
 
-// generateValuesFile generates a Helm values file based on the application type
+// generateValuesFile generates a Helm values file using template-based approach
 func (s *SimpleApplicationService) generateValuesFile(predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
-	switch predefinedApp.ID {
-	case "code-server":
-		return fmt.Sprintf(`
-image:
-  tag: "%s"
+	// Check if a values template is specified in the configuration
+	if predefinedApp.HelmChart.ValuesTemplate != "" {
+		return s.generateFromTemplate(predefinedApp, subdomain, domain, releaseName)
+	}
+	
+	// Fallback to minimal values if no template is specified
+	return s.generateMinimalValues(predefinedApp, subdomain, domain, releaseName)
+}
 
-service:
-  type: ClusterIP
-  port: 8080
+// generateFromTemplate generates values from a template file with placeholder substitution
+func (s *SimpleApplicationService) generateFromTemplate(predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
+	templatePath := fmt.Sprintf("internal/templates/applications/%s", predefinedApp.HelmChart.ValuesTemplate)
+	
+	// Read the template file
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read template file %s: %w", templatePath, err)
+	}
+	
+	// Prepare placeholder values
+	placeholders := map[string]string{
+		"VERSION":      predefinedApp.Version,
+		"SUBDOMAIN":    subdomain,
+		"DOMAIN":       domain,
+		"RELEASE_NAME": releaseName,
+	}
+	
+	// Add any additional placeholders from the configuration
+	for key, value := range predefinedApp.HelmChart.Placeholders {
+		placeholders[key] = value
+	}
+	
+	// Replace placeholders in the template
+	content := string(templateContent)
+	for placeholder, value := range placeholders {
+		content = strings.ReplaceAll(content, fmt.Sprintf("{{%s}}", placeholder), value)
+	}
+	
+	return content, nil
+}
 
+
+// generateMinimalValues generates minimal values when no template is available
+func (s *SimpleApplicationService) generateMinimalValues(predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName string) (string, error) {
+	// Generate basic ingress configuration for any application
+	return fmt.Sprintf(`
+# Minimal values generated for %s
 ingress:
   enabled: true
   className: "traefik"
@@ -432,55 +467,9 @@ ingress:
       hosts:
         - %s.%s
 
-persistence:
-  enabled: true
-  storageClass: local-path
-  size: 8Gi
-
-extraArgs:
-  - --auth=password
-
-extraSecretMounts:
-  - name: password
-    secretName: %s-password
-    mountPath: /home/coder/.config/code-server
-    readOnly: true
-
-extraInitContainers:
-  - name: init-password
-    image: busybox
-    command: ['sh', '-c', 'echo "password: $(cat /tmp/password)" > /home/coder/.config/code-server/config.yaml']
-    volumeMounts:
-      - name: password
-        mountPath: /tmp
-        readOnly: true
-      - name: home
-        mountPath: /home/coder
-`, predefinedApp.Version, subdomain, domain, releaseName, subdomain, domain, releaseName), nil
-
-	case "argocd":
-		return fmt.Sprintf(`
-server:
-  ingress:
-    enabled: true
-    ingressClassName: "traefik"
-    annotations:
-      traefik.ingress.kubernetes.io/router.entrypoints: websecure
-      traefik.ingress.kubernetes.io/router.tls: "true"
-    hosts:
-      - %s.%s
-    tls:
-      - secretName: %s-tls
-        hosts:
-          - %s.%s
-
-configs:
-  params:
-    server.insecure: true
-`, subdomain, domain, releaseName, subdomain, domain), nil
-
-	default:
-		return "", fmt.Errorf("unsupported application type: %s", predefinedApp.ID)
-	}
+# Application version
+image:
+  tag: "%s"
+`, predefinedApp.ID, subdomain, domain, releaseName, subdomain, domain, predefinedApp.Version), nil
 }
 

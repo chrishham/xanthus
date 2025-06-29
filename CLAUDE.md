@@ -98,6 +98,46 @@ tests/                # Comprehensive test suite
 - **Helm** - Application deployment via charts
 - **SSH** - Server configuration and management
 
+### Application Deployment Architecture
+
+Xanthus uses a **configuration-driven application deployment system** that supports multiple application types through a unified pipeline:
+
+**Configuration Structure:**
+```
+configs/applications/           # Application definitions
+├── code-server.yaml           # VS Code in browser
+├── argocd.yaml               # GitOps CD tool
+└── [future-apps].yaml        # Extensible for new applications
+
+internal/templates/applications/ # Helm values templates
+├── code-server.yaml           # Code-server deployment template
+├── argocd.yaml               # ArgoCD deployment template
+└── [future-apps].yaml        # Templates for new applications
+```
+
+**Deployment Flow (All Applications):**
+1. **Load Configuration** - Read app definition from `configs/applications/`
+2. **Version Resolution** - Fetch latest version (GitHub API, Helm repos, etc.)
+3. **Repository Setup** - Clone GitHub repos or add Helm repositories
+4. **Values Generation** - Process templates with placeholder substitution
+5. **Helm Deployment** - Deploy using generated values and chart configuration
+
+**Supported Application Types:**
+
+| Application | Repository Type | Version Source | Special Features |
+|------------|----------------|----------------|-----------------|
+| **Code-Server** | GitHub clone | GitHub API | VS Code settings, init containers |
+| **ArgoCD** | Helm repository | Helm API* | RBAC, multi-component deployment |
+
+*Note: Helm version fetching not yet implemented, defaults to "latest"
+
+**Key Features:**
+- **Template-driven deployment** - No hardcoded application logic
+- **Dynamic chart handling** - Supports both GitHub and Helm repositories
+- **Placeholder substitution** - `{{VERSION}}`, `{{SUBDOMAIN}}`, `{{DOMAIN}}`, etc.
+- **Extensible architecture** - Add new applications via YAML configuration
+- **Unified pipeline** - Same deployment flow for all application types
+
 ### Handler Architecture
 
 Handlers are organized by domain with clear separation:
@@ -110,9 +150,16 @@ Each handler follows dependency injection pattern through the `RouteConfig` stru
 ### Development Patterns
 
 **Configuration Management:**
-- YAML-based application configurations in `configs/`
+- YAML-based application configurations in `configs/applications/`
+- Template-driven Helm values in `internal/templates/applications/`
 - Template-driven server setup in `internal/templates/`
 - Environment-based feature flags for testing
+
+**Application Development:**
+- New applications added via YAML configuration (no code changes required)
+- Template-based deployment with placeholder substitution
+- Unified deployment pipeline for all application types
+- Version management through GitHub API or Helm repositories
 
 **Error Handling:**
 - Structured error responses for API endpoints
@@ -157,6 +204,12 @@ make test-e2e     # Test with mocked external services
 ```bash
 make build        # Creates bin/xanthus executable
 ```
+
+**Adding New Applications:**
+1. Create YAML configuration in `configs/applications/new-app.yaml`
+2. Create Helm values template in `internal/templates/applications/new-app.yaml`
+3. Application automatically available through the unified deployment pipeline
+4. No code changes required - configuration-driven architecture
 
 ## Vps investigation
 
