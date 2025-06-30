@@ -68,11 +68,36 @@ func main() {
 
 // setupTemplates configures HTML templates with helper functions
 func setupTemplates(r *gin.Engine) {
-	r.SetFuncMap(template.FuncMap{
+	funcMap := template.FuncMap{
 		"toJSON": func(v interface{}) template.JS {
 			b, _ := json.Marshal(v)
 			return template.JS(b)
 		},
-	})
-	r.LoadHTMLGlob("web/templates/*")
+		"dict": func(values ...interface{}) map[string]interface{} {
+			if len(values)%2 != 0 {
+				panic("dict requires an even number of arguments")
+			}
+			dict := make(map[string]interface{}, len(values)/2)
+			for i := 0; i < len(values); i += 2 {
+				key, ok := values[i].(string)
+				if !ok {
+					panic("dict keys must be strings")
+				}
+				dict[key] = values[i+1]
+			}
+			return dict
+		},
+		"default": func(defaultValue, value interface{}) interface{} {
+			if value == nil || value == "" {
+				return defaultValue
+			}
+			return value
+		},
+	}
+	
+	// Load main templates and partials
+	tmpl := template.New("").Funcs(funcMap)
+	tmpl = template.Must(tmpl.ParseGlob("web/templates/*.html"))
+	tmpl = template.Must(tmpl.ParseGlob("web/templates/partials/*/*.html"))
+	r.SetHTMLTemplate(tmpl)
 }

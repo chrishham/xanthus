@@ -1,0 +1,111 @@
+<!-- Server Details -->
+<div class="p-6">
+    <div class="space-y-3">
+        <!-- Server Type -->
+        <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">Server Type:</span>
+            <span class="text-sm font-medium text-gray-900" x-text="server.server_type.name"></span>
+        </div>
+        
+        <!-- Location -->
+        <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">Location:</span>
+            <span class="text-sm font-medium text-gray-900" x-text="server.datacenter.location.description"></span>
+        </div>
+        
+        <!-- Resources -->
+        <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">Resources:</span>
+            <span class="text-sm font-medium text-gray-900" 
+                  x-text="server.server_type.cores + ' CPU, ' + server.server_type.memory + 'GB RAM, ' + server.server_type.disk + 'GB Storage'"></span>
+        </div>
+        
+        <!-- Public IP -->
+        <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">Public IP:</span>
+            <span class="text-sm font-medium text-gray-900 font-mono" x-text="server.public_net.ipv4.ip"></span>
+        </div>
+        
+        <!-- SSL Status -->
+        <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">SSL Config:</span>
+            <span class="text-xs px-2 py-1 rounded-full"
+                  :class="server.labels && server.labels.managed_by === 'xanthus' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
+                  x-text="server.labels && server.labels.managed_by === 'xanthus' ? 'Configured' : 'Not configured'">
+            </span>
+        </div>
+
+        <!-- SSH Access -->
+        <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">SSH Access:</span>
+            <span class="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                Available
+            </span>
+        </div>
+        
+        <!-- ArgoCD Access -->
+        <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="flex items-center justify-between">
+            <div class="flex items-center">
+                <span class="text-sm text-gray-500">ArgoCD:</span>
+                <button @click="showArgoCDInfo(server)" class="ml-1 text-gray-400 hover:text-gray-600 focus:outline-none" title="ArgoCD Access Information">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <span class="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-800 cursor-pointer" @click="showArgoCDInfo(server)">
+                View Credentials
+            </span>
+        </div>
+        
+        <!-- Cost Information -->
+        <div x-show="server.labels && server.labels.monthly_cost" class="flex items-center justify-between">
+            <div class="flex items-center">
+                <span class="text-sm text-gray-500">Monthly Cost:</span>
+                <button @click="showCostInfo()" class="ml-1 text-gray-400 hover:text-gray-600 focus:outline-none" title="Cost Information">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <span class="text-sm font-medium text-green-600" x-text="'€' + server.labels.monthly_cost + '/mo'"></span>
+        </div>
+        
+        <div x-show="server.labels && server.labels.accumulated_cost" class="flex items-center justify-between">
+            <div class="flex items-center">
+                <span class="text-sm text-gray-500">Accumulated Cost:</span>
+                <button @click="showAccumulatedCostInfo(server)" class="ml-1 text-gray-400 hover:text-gray-600 focus:outline-none" title="Accumulated Cost Information">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <span class="text-sm font-medium text-blue-600" x-text="'€' + server.labels.accumulated_cost"></span>
+        </div>
+        
+        <!-- Hourly Rate -->
+        <div x-show="server.labels && server.labels.hourly_cost" class="flex items-center justify-between">
+            <div class="flex items-center">
+                <span class="text-sm text-gray-500">Hourly Rate:</span>
+                <button @click="showHourlyRateInfo()" class="ml-1 text-gray-400 hover:text-gray-600 focus:outline-none" title="Hourly Rate Information">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path>
+                    </svg>
+                </button>
+            </div>
+            <span class="text-sm font-medium text-orange-600" x-text="'€' + server.labels.hourly_cost + '/hr'"></span>
+        </div>
+        
+        <!-- Created -->
+        <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">Created:</span>
+            <span class="text-sm font-medium text-gray-900" x-text="formatDate(server.created)"></span>
+        </div>
+        
+        <!-- Time Since Created -->
+        <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">Time Since Creation:</span>
+            <span class="text-sm font-medium text-gray-900" x-text="getTimeSinceCreation(server.created)"></span>
+        </div>
+    </div>
+</div>

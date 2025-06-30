@@ -1,0 +1,61 @@
+<div x-show="isValidApplication(app)" class="bg-white rounded-lg shadow-md border hover:shadow-lg transition-shadow">
+    <!-- Application Header -->
+    <div class="p-6 border-b border-gray-200">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="text-2xl mr-3" x-text="getPredefinedAppIcon(app.app_type)"></div>
+                <div>
+                    <h4 class="text-lg font-medium text-gray-900" x-text="app.name"></h4>
+                    <span class="text-sm text-gray-500" x-text="getPredefinedAppName(app.app_type)"></span>
+                </div>
+            </div>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  :class="{
+                      'bg-green-100 text-green-800': app.status === 'Running' || app.status === 'deployed',
+                      'bg-blue-100 text-blue-800': app.status === 'Deploying' || app.status === 'Creating',
+                      'bg-yellow-100 text-yellow-800': app.status === 'pending',
+                      'bg-red-100 text-red-800': app.status === 'Failed' || app.status === 'failed',
+                      'bg-gray-100 text-gray-800': app.status === 'Not Deployed',
+                      'bg-gray-100 text-gray-800': !['Running', 'deployed', 'Deploying', 'Creating', 'pending', 'Failed', 'failed', 'Not Deployed'].includes(app.status)
+                  }"
+                  x-text="app.status">
+            </span>
+        </div>
+        <p class="text-sm text-gray-500 mt-2" x-text="app.description || 'No description'"></p>
+    </div>
+
+    <!-- Application Details -->
+    <div class="p-6">
+        <div class="space-y-3">
+            <!-- URL -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-500">URL:</span>
+                <a :href="app.url" 
+                   target="_blank"
+                   class="text-sm font-medium text-purple-600 hover:text-purple-800 truncate max-w-48" 
+                   x-text="app.url.replace('https://', '')">
+                </a>
+            </div>
+            
+            <!-- VPS -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-500">VPS:</span>
+                <span class="text-sm font-medium text-gray-900" x-text="app.vps_name"></span>
+            </div>
+            
+            <!-- Version -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-500">Version:</span>
+                <span class="text-sm font-medium text-gray-900" x-text="app.app_version"></span>
+            </div>
+            
+            <!-- Created -->
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-500">Created:</span>
+                <span class="text-sm font-medium text-gray-900" x-text="formatDate(app.created_at)"></span>
+            </div>
+        </div>
+    </div>
+
+    {{template "partials/applications/app-actions.html" .}}
+</div>
