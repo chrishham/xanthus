@@ -67,7 +67,7 @@ extraVolumeMounts:
     mountPath: /tmp/vscode-settings
     readOnly: true
 
-# Init container to copy VS Code settings and install packages
+# Init container to setup full development environment with all required tools
 extraInitContainers: |
   - name: setup-environment
     image: ubuntu:22.04
@@ -77,22 +77,50 @@ extraInitContainers: |
       - -c
       - |
         set -e
-        echo "🚀 Starting environment setup..."
+        echo "🚀 Starting full development environment setup..."
         
         # Update package lists
         echo "📦 Updating package lists..."
         apt-get update
         
-        # Install basic packages
-        echo "🔧 Installing build-essential and ripgrep..."
-        apt-get install -y build-essential ripgrep curl
+        # Install essential packages
+        echo "🔧 Installing build-essential, ripgrep, and development tools..."
+        apt-get install -y build-essential ripgrep curl wget git vim nano
         
         # Create user if it doesn't exist and setup home directory
         if ! id -u coder > /dev/null 2>&1; then
           useradd -m -u 1000 -s /bin/bash coder
         fi
         
-        # Switch to coder user for remaining operations
+        # Install Go as root first (more reliable)
+        echo "🐹 Installing Go..."
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64 | arm64) ARCH="arm64" ;;
+          *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+        
+        # Use a specific stable Go version to avoid API issues
+        GO_VERSION="1.23.4"
+        TARFILE="go${GO_VERSION}.linux-${ARCH}.tar.gz"
+        DOWNLOAD_URL="https://go.dev/dl/${TARFILE}"
+        
+        echo "🔽 Downloading Go ${GO_VERSION}..."
+        cd /tmp
+        curl -LO "$DOWNLOAD_URL"
+        
+        if [ ! -f "${TARFILE}" ]; then
+          echo "❌ Failed to download Go tarball"
+          exit 1
+        fi
+        
+        echo "📦 Extracting Go to /usr/local..."
+        rm -rf /usr/local/go
+        tar -C /usr/local -xzf "${TARFILE}"
+        rm "${TARFILE}"
+        
+        # Now switch to coder user for the rest
         su - coder << 'EOF'
         set -e
         cd /home/coder
@@ -105,53 +133,57 @@ extraInitContainers: |
         export VOLTA_HOME="$HOME/.volta"
         export PATH="$VOLTA_HOME/bin:$PATH"
         
-        # Add to bashrc
-        echo 'export VOLTA_HOME="$HOME/.volta"' >> ~/.bashrc
-        echo 'export PATH="$VOLTA_HOME/bin:$PATH"' >> ~/.bashrc
-        
         # Install Node.js via Volta
         echo "📦 Installing Node.js..."
-        ~/.volta/bin/volta install node
+        ~/.volta/bin/volta install node@20
         
         # Install global npm packages
         echo "🔧 Installing Claude Code and ccusage..."
         ~/.volta/bin/npm install -g @anthropic-ai/claude-code
         ~/.volta/bin/npm install -g ccusage
         
-        # Install Go
-        echo "🐹 Installing Go..."
-        ARCH=$(uname -m)
-        case "$ARCH" in
-          x86_64) ARCH="amd64" ;;
-          aarch64 | arm64) ARCH="arm64" ;;
-          *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
-        esac
+        # Setup environment in bashrc
+        cat >> ~/.bashrc << 'BASHRC_EOF'
+        # Xanthus Code-Server Development Environment
+        export VOLTA_HOME="$HOME/.volta"
+        export PATH="$VOLTA_HOME/bin:$PATH"
+        export PATH="$PATH:/usr/local/go/bin"
+        export GOPATH="$HOME/go"
+        export PATH="$PATH:$GOPATH/bin"
         
-        # Get latest Go version
-        LATEST_VERSION=$(curl -s https://go.dev/dl/ | grep -oP "go[0-9]+\.[0-9]+(\.[0-9]+)?\.linux-${ARCH}\.tar\.gz" | sed -E "s/\.linux-${ARCH}\.tar\.gz//" | sort -Vr | head -n1)
-        TARFILE="${LATEST_VERSION}.linux-${ARCH}.tar.gz"
-        DOWNLOAD_URL="https://go.dev/dl/${TARFILE}"
+        # Useful aliases
+        alias ll='ls -alF'
+        alias la='ls -A'
+        alias l='ls -CF'
+        alias ..='cd ..'
+        alias ...='cd ../..'
         
-        echo "🔽 Downloading Go ${LATEST_VERSION}..."
-        curl -LO "$DOWNLOAD_URL"
-        EOF
+        # Development shortcuts
+        alias gst='git status'
+        alias gco='git checkout'
+        alias gc='git commit'
+        alias gp='git push'
+        alias gl='git log --oneline'
         
-        # Extract Go as root (needs sudo equivalent)
-        echo "📦 Extracting Go to /usr/local..."
-        rm -rf /usr/local/go
-        tar -C /usr/local -xzf /home/coder/${LATEST_VERSION}.linux-${ARCH}.tar.gz
-        rm /home/coder/${LATEST_VERSION}.linux-${ARCH}.tar.gz
+        # Welcome message
+        echo "🎉 Welcome to your Xanthus Code-Server development environment!"
+        echo "📝 Installed tools: Go $(go version | cut -d' ' -f3), Node.js $(node --version), npm $(npm --version)"
+        echo "🔧 Build tools, ripgrep, git, and development packages are ready!"
+        echo ""
+        BASHRC_EOF
         
-        # Continue as coder user
-        su - coder << 'EOF'
-        # Add Go to PATH
-        echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+        # Create development directories
+        mkdir -p ~/workspace ~/go/src ~/go/bin ~/go/pkg ~/.local/share/code-server/User
         
         # Verify installations
         echo "✅ Verifying installations..."
-        /usr/local/go/bin/go version || echo "Go installation failed"
-        ~/.volta/bin/node --version || echo "Node installation failed"
-        ~/.volta/bin/npm --version || echo "NPM installation failed"
+        /usr/local/go/bin/go version
+        ~/.volta/bin/node --version
+        ~/.volta/bin/npm --version
+        which gcc
+        which make
+        which rg
+        
         EOF
         
         # Setup VS Code settings if available
@@ -166,7 +198,7 @@ extraInitContainers: |
         echo "🔒 Fixing permissions..."
         chown -R 1000:1000 /home/coder
         
-        echo "🎉 Environment setup complete!"
+        echo "🎉 Full development environment setup complete!"
     securityContext:
       runAsUser: 0
     volumeMounts:

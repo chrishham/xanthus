@@ -297,26 +297,44 @@ export function applicationsManagement() {
                                 <p class="text-xs text-gray-500 mt-1">A friendly name for your application instance</p>
                             </div>
                             
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">VPS Server</label>
-                                <select id="app-vps" class="swal2-select m-0 w-full">
-                                    <option value="">Choose a VPS server</option>
+                            <!-- VPS Server Selection - Made more prominent -->
+                            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <label class="block text-sm font-medium text-blue-900 mb-2">
+                                    <span class="flex items-center">
+                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path>
+                                        </svg>
+                                        VPS Server *
+                                    </span>
+                                </label>
+                                <select id="app-vps" class="swal2-select m-0 w-full border-blue-300 focus:border-blue-500 focus:ring-blue-500" style="border: 2px solid #93c5fd;">
+                                    <option value="">👆 Click to choose a VPS server</option>
                                     ${serverOptions}
                                 </select>
+                                <p class="text-xs text-blue-700 mt-1">Select the server where your application will be deployed</p>
+                            </div>
+                            
+                            <!-- Domain Selection - Made more prominent and moved before subdomain -->
+                            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                                <label class="block text-sm font-medium text-green-900 mb-2">
+                                    <span class="flex items-center">
+                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"></path>
+                                        </svg>
+                                        Domain *
+                                    </span>
+                                </label>
+                                <select id="app-domain" class="swal2-select m-0 w-full border-green-300 focus:border-green-500 focus:ring-green-500" style="border: 2px solid #86efac;">
+                                    <option value="">👆 Click to select a domain</option>
+                                    ${domainOptions}
+                                </select>
+                                <p class="text-xs text-green-700 mt-1">Choose the domain for your application</p>
                             </div>
                             
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Subdomain</label>
                                 <input id="app-subdomain" class="swal2-input m-0 w-full" placeholder="${predefinedApp.id}">
                                 <p class="text-xs text-gray-500 mt-1">Your app will be available at subdomain.domain.com</p>
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Domain</label>
-                                <select id="app-domain" class="swal2-select m-0 w-full">
-                                    <option value="">Select a domain</option>
-                                    ${domainOptions}
-                                </select>
                             </div>
                             
                             <div>
@@ -346,11 +364,17 @@ export function applicationsManagement() {
                     const domain = document.getElementById('app-domain').value;
                     const description = document.getElementById('app-description').value.trim();
                     
+                    // Clear previous validation styling
+                    document.getElementById('app-vps').style.borderColor = '';
+                    document.getElementById('app-domain').style.borderColor = '';
+                    
                     if (!name) {
                         Swal.showValidationMessage('Application name is required');
                         return false;
                     }
                     if (!vps) {
+                        document.getElementById('app-vps').style.borderColor = '#dc2626';
+                        document.getElementById('app-vps').style.borderWidth = '2px';
                         Swal.showValidationMessage('VPS server is required');
                         return false;
                     }
@@ -359,6 +383,8 @@ export function applicationsManagement() {
                         return false;
                     }
                     if (!domain) {
+                        document.getElementById('app-domain').style.borderColor = '#dc2626';
+                        document.getElementById('app-domain').style.borderWidth = '2px';
                         Swal.showValidationMessage('Domain is required');
                         return false;
                     }

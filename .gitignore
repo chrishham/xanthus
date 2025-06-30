@@ -58,4 +58,4 @@ secrets.yaml
 node_modules
 bin
 
-pemxanthus-ssh-key.pem
+*.pem

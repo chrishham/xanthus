@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-setup
+  namespace: default
+spec:
+  restartPolicy: Never
+  containers:
+  - name: test-container
+    image: ubuntu:22.04
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        echo "🚀 Starting full development environment setup..."
+        
+        # Update package lists
+        echo "📦 Updating package lists..."
+        apt-get update
+        
+        # Install essential packages
+        echo "🔧 Installing build-essential, ripgrep, and development tools..."
+        apt-get install -y build-essential ripgrep curl wget git vim nano
+        
+        # Create user if it doesn't exist and setup home directory
+        if ! id -u coder > /dev/null 2>&1; then
+          useradd -m -u 1000 -s /bin/bash coder
+        fi
+        
+        # Install Go as root first (more reliable)
+        echo "🐹 Installing Go..."
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64 | arm64) ARCH="arm64" ;;
+          *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+        
+        # Use a specific stable Go version to avoid API issues
+        GO_VERSION="1.23.4"
+        TARFILE="go${GO_VERSION}.linux-${ARCH}.tar.gz"
+        DOWNLOAD_URL="https://go.dev/dl/${TARFILE}"
+        
+        echo "🔽 Downloading Go ${GO_VERSION}..."
+        cd /tmp
+        curl -LO "$DOWNLOAD_URL"
+        
+        if [ ! -f "${TARFILE}" ]; then
+          echo "❌ Failed to download Go tarball"
+          exit 1
+        fi
+        
+        echo "📦 Extracting Go to /usr/local..."
+        rm -rf /usr/local/go
+        tar -C /usr/local -xzf "${TARFILE}"
+        rm "${TARFILE}"
+        
+        # Now switch to coder user for the rest
+        su - coder << 'EOF'
+        set -e
+        cd /home/coder
+        
+        # Install Volta (Node.js version manager)
+        echo "🌐 Installing Volta..."
+        curl https://get.volta.sh | bash
+        
+        # Setup Volta environment
+        export VOLTA_HOME="$HOME/.volta"
+        export PATH="$VOLTA_HOME/bin:$PATH"
+        
+        # Install Node.js via Volta
+        echo "📦 Installing Node.js..."
+        ~/.volta/bin/volta install node@20
+        
+        # Install global npm packages
+        echo "🔧 Installing Claude Code and ccusage..."
+        ~/.volta/bin/npm install -g @anthropic-ai/claude-code
+        ~/.volta/bin/npm install -g ccusage
+        
+        # Verify installations
+        echo "✅ Verifying installations..."
+        /usr/local/go/bin/go version
+        ~/.volta/bin/node --version
+        ~/.volta/bin/npm --version
+        which gcc
+        which make
+        which rg
+        
+        EOF
+        
+        echo "🎉 Full development environment setup complete!"
+        echo "⏱️ Setup finished at: $(date)"
+        
+        # Keep container running for inspection
+        sleep 300
