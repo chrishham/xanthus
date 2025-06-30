@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="/static/css/output.css">
     <link rel="stylesheet" href="/static/css/sweetalert2.min.css">
     <script src="/static/js/vendor/htmx.min.js"></script>
-    <script src="/static/js/vendor/alpine.min.js" defer></script>
     <script src="/static/js/vendor/sweetalert2.min.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -484,11 +483,32 @@
         </div>
     </div>
 
-    <script type="module">
-        import { vpsCreationWizard } from '/static/js/modules/vps-creation-wizard.js';
+    <script>
+        // Wait for the module to load before starting Alpine.js
+        async function initializeAlpine() {
+            try {
+                const { vpsCreationWizard } = await import('/static/js/modules/vps-creation-wizard.js');
+                // Make the component available globally
+                window.vpsCreationWizard = vpsCreationWizard;
+                
+                // Now load and initialize Alpine.js
+                if (!window.Alpine) {
+                    const script = document.createElement('script');
+                    script.src = '/static/js/vendor/alpine.min.js';
+                    script.defer = true;
+                    document.head.appendChild(script);
+                }
+            } catch (error) {
+                console.error('Failed to load VPS creation wizard module:', error);
+            }
+        }
         
-        // Make the component available globally before Alpine initializes
-        window.vpsCreationWizard = vpsCreationWizard;
+        // Start the initialization when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeAlpine);
+        } else {
+            initializeAlpine();
+        }
     </script>
 </body>
 </html>
