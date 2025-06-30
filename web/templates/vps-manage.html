@@ -11,13 +11,12 @@
     <link rel="stylesheet" href="/static/css/output.css">
     <link rel="stylesheet" href="/static/css/sweetalert2.min.css">
     <script src="/static/js/vendor/htmx.min.js"></script>
-    <script src="/static/js/vendor/alpine.min.js" defer></script>
     <script src="/static/js/vendor/sweetalert2.min.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
     {{template "navbar.html" .}}
 
-    <div x-data="vpsManagement()" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div x-data="vpsData()" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- Loading Modal -->
         <div x-show="loading" x-transition.opacity class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div class="bg-white rounded-lg shadow-xl p-8 max-w-md mx-4">
@@ -304,15 +303,47 @@
         </div>
     </div>
 
+    <script>
+        // Set initial data for the component
+        window.initialServers = {{.Servers | toJSON}};
+        
+        // Create a wrapper function that will be available when Alpine.js loads
+        function vpsData() {
+            // Return default data if module not loaded yet
+            if (!window.vpsManagement) {
+                return {
+                    servers: window.initialServers || [],
+                    loading: false,
+                    loadingTitle: 'Processing...',
+                    loadingMessage: 'Please wait while the operation completes.',
+                    autoRefreshEnabled: true,
+                    init() {
+                        // Retry loading the actual component when DOM is ready
+                        setTimeout(() => {
+                            if (window.vpsManagement) {
+                                // Re-initialize with the actual component
+                                Object.assign(this, window.vpsManagement());
+                                if (this.init) this.init();
+                            }
+                        }, 100);
+                    }
+                };
+            }
+            return window.vpsManagement();
+        }
+        
+        // Make wrapper available globally
+        window.vpsData = vpsData;
+    </script>
+    
     <script type="module">
         import { vpsManagement } from '/static/js/modules/vps-management.js';
         import { FormattingUtils } from '/static/js/modules/common/formatting-utils.js';
         
-        // Set initial data for the component
-        window.initialServers = {{.Servers | toJSON}};
-        
         // Make the component available globally
         window.vpsManagement = vpsManagement;
     </script>
+    
+    <script src="/static/js/vendor/alpine.min.js" defer></script>
 </body>
 </html>
