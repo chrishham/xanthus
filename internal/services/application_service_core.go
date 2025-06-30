@@ -286,7 +286,8 @@ func (s *SimpleApplicationService) deleteApplicationDeployment(token, accountID 
 	}
 
 	// Uninstall Helm release
-	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	// Release name starts with subdomain as specified in requirements
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.AppType)
 	uninstallCmd := fmt.Sprintf("helm uninstall %s --namespace %s", releaseName, app.Namespace)
 
 	result, err := sshService.ExecuteCommand(conn, uninstallCmd)
@@ -379,7 +380,8 @@ func (s *SimpleApplicationService) GetApplicationRealTimeStatus(token, accountID
 	}
 
 	// Check Helm deployment status
-	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	// Release name starts with subdomain as specified in requirements
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.AppType)
 	statusCmd := fmt.Sprintf("helm status %s -n %s --output json 2>/dev/null || echo '{\"info\":{\"status\":\"not-found\"}}'",
 		releaseName, app.Namespace)
 

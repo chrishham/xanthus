@@ -61,7 +61,8 @@ func (ads *ApplicationDeploymentService) DeployApplication(token, accountID stri
 	defer conn.Close()
 
 	// Generate release name and namespace (using type-based namespace as per CLAUDE.md)
-	releaseName := fmt.Sprintf("%s-%s", predefinedApp.ID, appID)
+	// Release name starts with subdomain as specified in requirements
+	releaseName := fmt.Sprintf("%s-%s", subdomain, predefinedApp.ID)
 	namespace := predefinedApp.ID
 
 	// Create namespace if it doesn't exist
@@ -201,7 +202,8 @@ func (ads *ApplicationDeploymentService) performUpgrade(token, accountID string,
 	}
 
 	// Generate release name and namespace (same as deployment)
-	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	// Release name starts with subdomain as specified in requirements
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.AppType)
 	namespace := app.AppType // Use type-based namespace as per CLAUDE.md
 
 	// Generate updated values file with new version

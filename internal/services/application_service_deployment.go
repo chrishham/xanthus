@@ -45,7 +45,8 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 	}
 
 	// Generate release name and namespace
-	releaseName := fmt.Sprintf("%s-%s", predefinedApp.ID, appID)
+	// Release name starts with subdomain as specified in requirements
+	releaseName := fmt.Sprintf("%s-%s", subdomain, predefinedApp.ID)
 	namespace := predefinedApp.ID
 
 	// Create namespace if it doesn't exist
