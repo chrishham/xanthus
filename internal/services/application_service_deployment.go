@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/chrishham/xanthus/internal/models"
 	"github.com/chrishham/xanthus/internal/utils"
@@ -103,10 +104,14 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 		return fmt.Errorf("helm install failed: %v, output: %s", err, result.Output)
 	}
 
+	// Configure SSL certificates on VPS - this is required for HTTPS access
+	if err := s.configureVPSSSL(token, accountID, domain, vpsConfig, csrConfig); err != nil {
+		return fmt.Errorf("failed to configure SSL certificates on VPS: %v", err)
+	}
+
 	// Configure DNS record for the application
 	if err := s.configureApplicationDNS(token, subdomain, domain, vpsConfig.PublicIPv4); err != nil {
-		// Log the error but don't fail the deployment since the app is successfully deployed
-		fmt.Printf("Warning: Failed to configure DNS for application: %v\n", err)
+		return fmt.Errorf("failed to configure DNS for application: %v", err)
 	}
 
 	// Retrieve and store password for applications that generate them
@@ -115,6 +120,79 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 		fmt.Printf("Warning: Failed to retrieve application password: %v\n", err)
 	}
 
+	return nil
+}
+
+// configureVPSSSL configures SSL certificates on the VPS for the given domain
+func (s *SimpleApplicationService) configureVPSSSL(token, accountID, domain string, vpsConfig struct {
+	PublicIPv4 string `json:"public_ipv4"`
+	SSHUser    string `json:"ssh_user"`
+}, csrConfig struct {
+	PrivateKey string `json:"private_key"`
+}) error {
+	kvService := NewKVService()
+	sshService := NewSSHService()
+	cfService := NewCloudflareService()
+
+	// Check if SSL is already configured for this domain on this VPS
+	sslConfigKey := fmt.Sprintf("vps:%s:ssl:%s", vpsConfig.PublicIPv4, domain)
+	var existingSSLConfig map[string]interface{}
+	if err := kvService.GetValue(token, accountID, sslConfigKey, &existingSSLConfig); err == nil {
+		fmt.Printf("SSL already configured for domain %s on VPS %s\n", domain, vpsConfig.PublicIPv4)
+		return nil
+	}
+
+	// Get SSL configuration for the domain from Cloudflare
+	domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain)
+	if err != nil {
+		// Domain SSL not configured, create it
+		fmt.Printf("Creating SSL configuration for domain %s\n", domain)
+
+		// Generate CSR if needed
+		var csrData struct {
+			CSR        string `json:"csr"`
+			PrivateKey string `json:"private_key"`
+			CreatedAt  string `json:"created_at"`
+		}
+		if err := kvService.GetValue(token, accountID, "config:ssl:csr", &csrData); err != nil {
+			return fmt.Errorf("failed to get CSR configuration: %v", err)
+		}
+
+		// Configure domain SSL with Cloudflare
+		domainConfig, err = cfService.ConfigureDomainSSL(token, domain, csrData.CSR, csrData.PrivateKey)
+		if err != nil {
+			return fmt.Errorf("failed to configure domain SSL: %v", err)
+		}
+
+		// Store domain SSL configuration
+		err = kvService.StoreDomainSSLConfig(token, accountID, domainConfig)
+		if err != nil {
+			return fmt.Errorf("failed to store domain SSL config: %v", err)
+		}
+	}
+
+	// Connect to VPS and configure SSL certificates
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, 0)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Configure K3s with SSL certificates
+	if err := sshService.ConfigureK3s(conn, domainConfig.Certificate, domainConfig.PrivateKey); err != nil {
+		return fmt.Errorf("failed to configure K3s with SSL: %v", err)
+	}
+
+	// Mark SSL as configured for this VPS/domain combination
+	sslStatus := map[string]interface{}{
+		"configured_at": fmt.Sprintf("%d", time.Now().Unix()),
+		"domain":        domain,
+		"vps_ip":        vpsConfig.PublicIPv4,
+	}
+	if err := kvService.PutValue(token, accountID, sslConfigKey, sslStatus); err != nil {
+		fmt.Printf("Warning: Failed to store SSL configuration status: %v\n", err)
+	}
+
+	fmt.Printf("Successfully configured SSL certificates for domain %s on VPS %s\n", domain, vpsConfig.PublicIPv4)
 	return nil
 }
 

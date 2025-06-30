@@ -218,19 +218,130 @@ func (s *SimpleApplicationService) UpdateApplication(token, accountID string, ap
 	return nil
 }
 
-// DeleteApplication deletes an application
+// DeleteApplication deletes an application and cleans up all resources
 func (s *SimpleApplicationService) DeleteApplication(token, accountID, appID string) error {
 	kvService := NewKVService()
 
-	// Delete the main application key
+	// First, get the application details before deletion
+	app, err := s.GetApplication(token, accountID, appID)
+	if err != nil {
+		return fmt.Errorf("failed to get application details: %w", err)
+	}
+
+	// Delete Helm deployment from VPS
+	if err := s.deleteApplicationDeployment(token, accountID, app); err != nil {
+		fmt.Printf("Warning: Failed to delete Helm deployment for %s: %v\n", appID, err)
+		// Continue with cleanup even if Helm deletion fails
+	}
+
+	// Delete DNS A record from Cloudflare
+	if err := s.deleteApplicationDNS(token, app); err != nil {
+		fmt.Printf("Warning: Failed to delete DNS record for %s: %v\n", appID, err)
+		// Continue with cleanup even if DNS deletion fails
+	}
+
+	// Delete the main application key from KV
 	kvKey := fmt.Sprintf("app:%s", appID)
 	if err := kvService.DeleteValue(token, accountID, kvKey); err != nil {
-		return fmt.Errorf("failed to delete application: %w", err)
+		return fmt.Errorf("failed to delete application from KV: %w", err)
 	}
 
 	// Also delete the password key if it exists
 	passwordKey := fmt.Sprintf("app:%s:password", appID)
 	kvService.DeleteValue(token, accountID, passwordKey) // Ignore error - password key might not exist
+
+	fmt.Printf("Successfully deleted application %s and cleaned up resources\n", appID)
+	return nil
+}
+
+// deleteApplicationDeployment removes the Helm deployment from the VPS
+func (s *SimpleApplicationService) deleteApplicationDeployment(token, accountID string, app *models.Application) error {
+	if app.VPSID == "" {
+		return fmt.Errorf("no VPS ID associated with application")
+	}
+
+	sshService := NewSSHService()
+
+	// Get VPS configuration
+	serverID, _ := strconv.Atoi(app.VPSID)
+	vpsService := NewVPSService()
+	vpsConfig, err := vpsService.ValidateVPSAccess(token, accountID, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS config: %w", err)
+	}
+
+	// Get SSH private key from KV
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return fmt.Errorf("failed to get SSH key: %w", err)
+	}
+
+	// Establish SSH connection
+	conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %w", err)
+	}
+
+	// Uninstall Helm release
+	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	uninstallCmd := fmt.Sprintf("helm uninstall %s --namespace %s", releaseName, app.Namespace)
+
+	result, err := sshService.ExecuteCommand(conn, uninstallCmd)
+	if err != nil {
+		return fmt.Errorf("failed to uninstall Helm release: %v, output: %s", err, result.Output)
+	}
+
+	fmt.Printf("Successfully uninstalled Helm release %s from namespace %s\n", releaseName, app.Namespace)
+	return nil
+}
+
+// deleteApplicationDNS removes the DNS A record from Cloudflare
+func (s *SimpleApplicationService) deleteApplicationDNS(token string, app *models.Application) error {
+	cfService := NewCloudflareService()
+
+	// Get zone ID for the domain
+	zoneID, err := cfService.GetZoneID(token, app.Domain)
+	if err != nil {
+		return fmt.Errorf("failed to get zone ID for domain %s: %w", app.Domain, err)
+	}
+
+	// Get existing DNS records
+	records, err := cfService.GetDNSRecords(token, zoneID)
+	if err != nil {
+		return fmt.Errorf("failed to get DNS records: %w", err)
+	}
+
+	// Find and delete the A record for this application
+	var recordName string
+	if app.Subdomain == "" || app.Subdomain == "*" {
+		recordName = app.Domain
+	} else {
+		recordName = fmt.Sprintf("%s.%s", app.Subdomain, app.Domain)
+	}
+
+	recordsDeleted := 0
+	for _, record := range records {
+		// Normalize record name (remove trailing dot if present)
+		normalizedRecordName := strings.TrimSuffix(record.Name, ".")
+
+		// Check if this is the A record for our application
+		if record.Type == "A" && (normalizedRecordName == recordName || record.Name == recordName) {
+			fmt.Printf("Deleting DNS A record: %s -> %s (ID: %s)\n", record.Name, record.Content, record.ID)
+			if err := cfService.DeleteDNSRecord(token, zoneID, record.ID); err != nil {
+				return fmt.Errorf("failed to delete DNS record %s: %w", record.Name, err)
+			}
+			recordsDeleted++
+		}
+	}
+
+	if recordsDeleted == 0 {
+		fmt.Printf("Warning: No DNS A record found for %s\n", recordName)
+	} else {
+		fmt.Printf("Successfully deleted %d DNS record(s) for %s\n", recordsDeleted, recordName)
+	}
 
 	return nil
 }
