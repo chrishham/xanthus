@@ -109,6 +109,16 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 		return fmt.Errorf("failed to configure SSL certificates on VPS: %v", err)
 	}
 
+	// Create TLS secret in Kubernetes namespace for ingress
+	domainConfig, err := kvService.GetDomainSSLConfig(token, accountID, domain)
+	if err != nil {
+		return fmt.Errorf("failed to get domain SSL config for TLS secret creation: %v", err)
+	}
+
+	if err := sshService.CreateTLSSecret(conn, domain, domainConfig.Certificate, domainConfig.PrivateKey, namespace); err != nil {
+		return fmt.Errorf("failed to create TLS secret in namespace %s: %v", namespace, err)
+	}
+
 	// Configure DNS record for the application
 	if err := s.configureApplicationDNS(token, subdomain, domain, vpsConfig.PublicIPv4); err != nil {
 		return fmt.Errorf("failed to configure DNS for application: %v", err)
