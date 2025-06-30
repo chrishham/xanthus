@@ -615,8 +615,9 @@ func (p *PortForwardService) storePortForward(token, accountID, appID string, po
 
 // createKubernetesService creates a Kubernetes service for port forwarding
 func (p *PortForwardService) createKubernetesService(conn *services.SSHConnection, app *models.Application, portForward *PortForward) error {
-	// Generate release name (same as used in deployment)
-	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	// Use the actual deployment's release name pattern: subdomain-apptype
+	// This matches how applications are actually deployed
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.AppType)
 
 	serviceYAML := fmt.Sprintf(`apiVersion: v1
 kind: Service
