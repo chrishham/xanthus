@@ -167,11 +167,11 @@ func (h *VPSLifecycleHandler) HandleVPSCreate(c *gin.Context) {
 	log.Printf("✅ VPS created successfully. DNS records will be configured during application deployment")
 
 	log.Printf("✅ Created server: %s (ID: %d) with IPv4: %s", server.Name, server.ID, server.PublicNet.IPv4.IP)
-	
+
 	// Clean up temporary Hetzner key cache after successful VPS creation
 	utils.ClearTempHetznerKey(accountID)
 	log.Printf("Cleaned up temporary Hetzner key cache for account %s", accountID)
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Server created successfully with K3s and Helm. DNS will be configured when applications are deployed",

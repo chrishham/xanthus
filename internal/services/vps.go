@@ -148,3 +148,55 @@ func (vs *VPSService) DeleteVPSAndCleanup(token, accountID, hetznerKey string, s
 
 	return vpsConfig, nil
 }
+
+// GetServersFromKV retrieves server list from KV store instead of Hetzner API
+func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer, error) {
+	// Get all VPS configurations from KV
+	vpsConfigsMap, err := vs.kv.ListVPSConfigs(token, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VPS configs from KV: %w", err)
+	}
+
+	// Convert VPS configs to HetznerServer format for compatibility
+	servers := make([]HetznerServer, 0, len(vpsConfigsMap))
+	for _, vpsConfig := range vpsConfigsMap {
+		// Calculate accumulated cost
+		accumulatedCost, err := vs.kv.CalculateVPSCosts(vpsConfig)
+		if err != nil {
+			log.Printf("Warning: Could not calculate costs for VPS %d: %v", vpsConfig.ServerID, err)
+			accumulatedCost = 0
+		}
+
+		// Create HetznerServer from VPS config for UI compatibility
+		server := HetznerServer{
+			ID:      vpsConfig.ServerID,
+			Name:    vpsConfig.Name,
+			Status:  vpsConfig.Status,
+			Created: vpsConfig.CreatedAt,
+			ServerType: HetznerServerTypeInfo{
+				Name: vpsConfig.ServerType,
+				// Add other fields as needed
+			},
+			Datacenter: HetznerDatacenterInfo{
+				Location: HetznerLocation{
+					Description: vpsConfig.Location,
+				},
+			},
+			PublicNet: HetznerPublicNet{
+				IPv4: HetznerIPv4Info{
+					IP: vpsConfig.PublicIPv4,
+				},
+			},
+			Labels: map[string]string{
+				"managed_by":       "xanthus",
+				"accumulated_cost": fmt.Sprintf("%.2f", accumulatedCost),
+				"monthly_cost":     fmt.Sprintf("%.2f", vpsConfig.MonthlyRate),
+				"hourly_cost":      fmt.Sprintf("%.4f", vpsConfig.HourlyRate),
+			},
+		}
+
+		servers = append(servers, server)
+	}
+
+	return servers, nil
+}

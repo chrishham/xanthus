@@ -31,25 +31,12 @@ func (h *VPSMetaHandler) HandleVPSManagePage(c *gin.Context) {
 		return
 	}
 
-	// Get Hetzner API key
-	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
+	// Get VPS servers from KV store instead of Hetzner API
+	servers, err := h.vpsService.GetServersFromKV(token, accountID)
 	if err != nil {
-		log.Printf("Error getting Hetzner API key: %v", err)
-		c.Redirect(302, "/setup") // http.StatusTemporaryRedirect
-		return
-	}
-
-	// Initialize Hetzner service and list servers
-	servers, err := h.hetznerService.ListServers(hetznerKey)
-	if err != nil {
-		log.Printf("Error listing servers: %v", err)
+		log.Printf("Error getting servers from KV: %v", err)
+		// Continue with empty servers list instead of failing
 		servers = []services.HetznerServer{}
-	}
-
-	// Enhance servers with cost information using VPS service
-	if err := h.vpsService.EnhanceServersWithCosts(token, accountID, servers); err != nil {
-		log.Printf("Warning: Failed to enhance servers with costs: %v", err)
-		// Continue without costs rather than failing
 	}
 
 	c.HTML(200, "vps-manage.html", gin.H{ // http.StatusOK

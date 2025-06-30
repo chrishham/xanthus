@@ -1,4 +1,6 @@
 ## VPS
+sudo timedatectl set-timezone Europe/Athens
+sudo systemctl restart systemd-timesyncd
 
 @web/templates/vps-manage.html
 ram usage output is problematic

@@ -74,30 +74,30 @@ func ValidateHetznerAPIKey(apiKey string) bool {
 // GetHetznerAPIKey retrieves and decrypts the Hetzner API key, checking temporary cache first
 func GetHetznerAPIKey(token, accountID string) (string, error) {
 	log.Printf("GetHetznerAPIKey: Attempting to retrieve key for account %s", accountID)
-	
+
 	// First, check temporary cache for recently validated keys
 	if tempKey, exists := GetTempHetznerKey(accountID); exists {
 		log.Printf("GetHetznerAPIKey: Found key in temporary cache for account %s", accountID)
 		return tempKey, nil
 	}
-	
+
 	log.Printf("GetHetznerAPIKey: Key not in temporary cache, checking KV store for account %s", accountID)
-	
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	var encryptedKey string
-	
+
 	// Retry logic to handle Cloudflare KV eventual consistency
 	maxRetries := 3
 	retryDelay := 2 * time.Second
-	
+
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		log.Printf("GetHetznerAPIKey: KV attempt %d/%d for account %s", attempt, maxRetries, accountID)
-		
+
 		if err := GetKVValue(client, token, accountID, "config:hetzner:api_key", &encryptedKey); err != nil {
 			lastErr = err
 			log.Printf("GetHetznerAPIKey: KV retrieval attempt %d failed for account %s: %v", attempt, accountID, err)
-			
+
 			if attempt < maxRetries {
 				log.Printf("GetHetznerAPIKey: Waiting %v before retry for account %s", retryDelay, accountID)
 				time.Sleep(retryDelay)
@@ -105,7 +105,7 @@ func GetHetznerAPIKey(token, accountID string) (string, error) {
 			}
 		} else {
 			log.Printf("GetHetznerAPIKey: Successfully retrieved encrypted key for account %s on attempt %d, attempting decryption", accountID, attempt)
-			
+
 			decryptedKey, err := DecryptData(encryptedKey, token)
 			if err != nil {
 				log.Printf("GetHetznerAPIKey: Decryption failed for account %s: %v", accountID, err)
@@ -116,7 +116,7 @@ func GetHetznerAPIKey(token, accountID string) (string, error) {
 			return decryptedKey, nil
 		}
 	}
-	
+
 	log.Printf("GetHetznerAPIKey: All retry attempts failed for account %s", accountID)
 	return "", fmt.Errorf("failed to get Hetzner API key after %d attempts: %v", maxRetries, lastErr)
 }
