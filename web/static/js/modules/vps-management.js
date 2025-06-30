@@ -1,4 +1,6 @@
 // VPS Management Module - Alpine.js component
+import { webSocketTerminal } from './terminal.js';
+
 export function vpsManagement() {
     return {
         servers: window.initialServers || [],
@@ -738,101 +740,132 @@ export function vpsManagement() {
         },
 
         async openTerminal(serverId, serverName) {
-            this.setLoadingState('Opening Terminal', `Creating SSH terminal for "${serverName}"...`);
+            this.setLoadingState('Opening Terminal', `Creating WebSocket terminal for "${serverName}"...`);
+            
             try {
-                const response = await fetch(`/vps/${serverId}/terminal`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
+                // Get server details for SSH connection
+                const server = this.servers.find(s => s.id === serverId);
+                if (!server) {
+                    throw new Error('Server not found');
+                }
+
+                // Get SSH key
+                const keyResponse = await fetch('/vps/ssh-key');
+                const keyData = await keyResponse.json();
+                if (!keyResponse.ok) {
+                    throw new Error(keyData.error || 'Failed to get SSH key');
+                }
+
+                // Create WebSocket terminal instance
+                const terminal = webSocketTerminal();
+                
+                // Create terminal session
+                const sessionData = await terminal.createTerminalSession({
+                    serverId: serverId,
+                    host: server.public_ipv4,
+                    user: 'root',
+                    privateKey: keyData.private_key
+                });
+
+                // Create unique container ID for this terminal
+                const containerId = `terminal-${sessionData.session_id}`;
+                
+                // Open terminal in modal with xterm.js
+                Swal.fire({
+                    title: `WebSocket Terminal - ${serverName}`,
+                    html: `
+                        <div class="text-left">
+                            <div class="mb-4 text-sm text-gray-600">
+                                Server: ${serverName} | Session: ${sessionData.session_id}
+                            </div>
+                            <div id="${containerId}" style="height: 500px; background: #000; border-radius: 4px;"></div>
+                            <div class="mt-2 text-xs text-gray-500">
+                                WebSocket terminal - session will auto-close when dialog is closed.
+                            </div>
+                        </div>
+                    `,
+                    width: 900,
+                    showCloseButton: true,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        // Initialize terminal in the modal
+                        if (terminal.initTerminal(containerId)) {
+                            // Connect to WebSocket session
+                            const token = terminal.getAuthToken();
+                            terminal.connectToSession(sessionData.session_id, token);
+                        }
+                    },
+                    willClose: () => {
+                        // Clean up terminal session and WebSocket
+                        terminal.destroy();
+                        terminal.stopTerminalSession(sessionData.session_id)
+                            .catch(err => console.log('Failed to cleanup terminal session:', err));
                     }
                 });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    // Open terminal in a modal
-                    Swal.fire({
-                        title: `SSH Terminal - ${serverName}`,
-                        html: `
-                            <div class="text-left">
-                                <div class="mb-4 text-sm text-gray-600">
-                                    Server: ${serverName} | Session: ${data.session_id}
-                                </div>
-                                <iframe 
-                                    src="http://localhost:${data.port}" 
-                                    width="100%" 
-                                    height="500" 
-                                    frameborder="0"
-                                    style="border-radius: 4px; background: #000;">
-                                </iframe>
-                                <div class="mt-2 text-xs text-gray-500">
-                                    Terminal session will auto-close when this dialog is closed.
-                                </div>
-                            </div>
-                        `,
-                        width: 900,
-                        showCloseButton: true,
-                        showConfirmButton: false,
-                        willClose: () => {
-                            // Clean up terminal session when modal closes
-                            fetch(`/terminal/${data.session_id}`, {
-                                method: 'DELETE'
-                            }).catch(err => console.log('Failed to cleanup terminal session:', err));
-                        }
-                    });
-                } else {
-                    Swal.fire('Error', data.error || 'Failed to create terminal session', 'error');
-                }
+
             } catch (error) {
-                console.error('Error opening terminal:', error);
-                Swal.fire('Error', 'Failed to open terminal', 'error');
+                console.error('Error opening WebSocket terminal:', error);
+                Swal.fire('Error', error.message || 'Failed to open terminal', 'error');
             } finally {
                 this.loading = false;
             }
         },
 
         async openTerminalNewTab(serverId, serverName) {
-            this.setLoadingState('Opening Terminal', `Creating SSH terminal for "${serverName}"...`);
+            this.setLoadingState('Opening Terminal', `Creating WebSocket terminal for "${serverName}"...`);
+            
             try {
-                const response = await fetch(`/vps/${serverId}/terminal`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (response.ok) {
-                    // Open terminal in new tab
-                    const terminalUrl = `http://localhost:${data.port}`;
-                    const newTab = window.open(terminalUrl, '_blank');
-                    
-                    if (newTab) {
-                        Swal.fire({
-                            title: 'Terminal Opened',
-                            html: `
-                                <div class="text-left text-sm">
-                                    <p class="mb-2">SSH terminal opened in new tab for <strong>${serverName}</strong></p>
-                                    <div class="bg-gray-100 p-2 rounded mb-2">
-                                        <strong>Session ID:</strong> ${data.session_id}<br>
-                                        <strong>URL:</strong> <a href="${terminalUrl}" target="_blank" class="text-blue-600">${terminalUrl}</a>
-                                    </div>
-                                    <p class="text-gray-600">Close the tab when done to free up resources.</p>
-                                </div>
-                            `,
-                            icon: 'success',
-                            confirmButtonText: 'OK'
-                        });
-                    } else {
-                        Swal.fire('Popup Blocked', 'Please allow popups for this site to open terminal in new tab', 'warning');
-                    }
-                } else {
-                    Swal.fire('Error', data.error || 'Failed to create terminal session', 'error');
+                // Get server details for SSH connection
+                const server = this.servers.find(s => s.id === serverId);
+                if (!server) {
+                    throw new Error('Server not found');
                 }
+
+                // Get SSH key
+                const keyResponse = await fetch('/vps/ssh-key');
+                const keyData = await keyResponse.json();
+                if (!keyResponse.ok) {
+                    throw new Error(keyData.error || 'Failed to get SSH key');
+                }
+
+                // Create WebSocket terminal instance
+                const terminal = webSocketTerminal();
+                
+                // Create terminal session
+                const sessionData = await terminal.createTerminalSession({
+                    serverId: serverId,
+                    host: server.public_ipv4,
+                    user: 'root',
+                    privateKey: keyData.private_key
+                });
+
+                // Create a standalone terminal page URL
+                const terminalUrl = `/terminal-page/${sessionData.session_id}?server=${encodeURIComponent(serverName)}`;
+                const newTab = window.open(terminalUrl, '_blank');
+                
+                if (newTab) {
+                    Swal.fire({
+                        title: 'WebSocket Terminal Opened',
+                        html: `
+                            <div class="text-left text-sm">
+                                <p class="mb-2">WebSocket terminal opened in new tab for <strong>${serverName}</strong></p>
+                                <div class="bg-gray-100 p-2 rounded mb-2">
+                                    <strong>Session ID:</strong> ${sessionData.session_id}<br>
+                                    <strong>Connection:</strong> WebSocket (production-ready)
+                                </div>
+                                <p class="text-gray-600">Terminal will work through port 443/80. Close the tab when done.</p>
+                            </div>
+                        `,
+                        icon: 'success',
+                        confirmButtonText: 'OK'
+                    });
+                } else {
+                    Swal.fire('Popup Blocked', 'Please allow popups for this site to open terminal in new tab', 'warning');
+                }
+
             } catch (error) {
-                console.error('Error opening terminal:', error);
-                Swal.fire('Error', 'Failed to open terminal', 'error');
+                console.error('Error opening WebSocket terminal:', error);
+                Swal.fire('Error', error.message || 'Failed to open terminal', 'error');
             } finally {
                 this.loading = false;
             }

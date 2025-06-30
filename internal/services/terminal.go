@@ -12,7 +12,8 @@ import (
 	"time"
 )
 
-// TerminalService handles web terminal sessions using GoTTY
+// TerminalService handles web terminal sessions using GoTTY (DEPRECATED)
+// Use WebSocketTerminalService for new implementations
 type TerminalService struct {
 	sessions map[string]*TerminalSession
 }
@@ -38,7 +39,8 @@ func NewTerminalService() *TerminalService {
 	}
 }
 
-// CreateSession creates a new terminal session for SSH connection to VPS
+// CreateSession creates a new terminal session for SSH connection to VPS (DEPRECATED)
+// Use WebSocketTerminalService.CreateSession for new implementations
 func (ts *TerminalService) CreateSession(serverID int, host, user, privateKey string) (*TerminalSession, error) {
 	// Generate unique session ID
 	sessionID, err := generateSessionID()

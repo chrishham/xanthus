@@ -46,3 +46,22 @@ func (h *PagesHandler) HandleSetupPage(c *gin.Context) {
 		"existing_key": existingKey,
 	})
 }
+
+// HandleTerminalPage renders a standalone terminal page for WebSocket terminals
+func (h *PagesHandler) HandleTerminalPage(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	serverName := c.Query("server")
+	
+	if sessionID == "" {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{
+			"error": "Session ID required",
+		})
+		return
+	}
+
+	c.HTML(http.StatusOK, "terminal.html", gin.H{
+		"session_id":   sessionID,
+		"server_name":  serverName,
+		"ActivePage":   "terminal",
+	})
+}

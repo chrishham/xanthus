@@ -45,19 +45,21 @@ func main() {
 	vpsMetaHandler := vps.NewVPSMetaHandler()
 	appsHandler := applications.NewHandler()
 	terminalHandler := handlers.NewTerminalHandler()
+	webSocketTerminalHandler := handlers.NewWebSocketTerminalHandler()
 	pagesHandler := handlers.NewPagesHandler()
 
 	// Configure routes
 	routeConfig := router.RouteConfig{
-		AuthHandler:         authHandler,
-		DNSHandler:          dnsHandler,
-		VPSLifecycleHandler: vpsLifecycleHandler,
-		VPSInfoHandler:      vpsInfoHandler,
-		VPSConfigHandler:    vpsConfigHandler,
-		VPSMetaHandler:      vpsMetaHandler,
-		AppsHandler:         appsHandler,
-		TerminalHandler:     terminalHandler,
-		PagesHandler:        pagesHandler,
+		AuthHandler:             authHandler,
+		DNSHandler:              dnsHandler,
+		VPSLifecycleHandler:     vpsLifecycleHandler,
+		VPSInfoHandler:          vpsInfoHandler,
+		VPSConfigHandler:        vpsConfigHandler,
+		VPSMetaHandler:          vpsMetaHandler,
+		AppsHandler:             appsHandler,
+		TerminalHandler:         terminalHandler,
+		WebSocketTerminalHandler: webSocketTerminalHandler,
+		PagesHandler:            pagesHandler,
 	}
 
 	router.SetupRoutes(r, routeConfig)

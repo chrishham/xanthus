@@ -10,15 +10,16 @@ import (
 
 // RouteConfig holds all the handler instances
 type RouteConfig struct {
-	AuthHandler         *handlers.AuthHandler
-	DNSHandler          *handlers.DNSHandler
-	VPSLifecycleHandler *vps.VPSLifecycleHandler
-	VPSInfoHandler      *vps.VPSInfoHandler
-	VPSConfigHandler    *vps.VPSConfigHandler
-	VPSMetaHandler      *vps.VPSMetaHandler
-	AppsHandler         *applications.Handler
-	TerminalHandler     *handlers.TerminalHandler
-	PagesHandler        *handlers.PagesHandler
+	AuthHandler             *handlers.AuthHandler
+	DNSHandler              *handlers.DNSHandler
+	VPSLifecycleHandler     *vps.VPSLifecycleHandler
+	VPSInfoHandler          *vps.VPSInfoHandler
+	VPSConfigHandler        *vps.VPSConfigHandler
+	VPSMetaHandler          *vps.VPSMetaHandler
+	AppsHandler             *applications.Handler
+	TerminalHandler         *handlers.TerminalHandler
+	WebSocketTerminalHandler *handlers.WebSocketTerminalHandler
+	PagesHandler            *handlers.PagesHandler
 }
 
 // SetupRoutes configures all application routes
@@ -47,6 +48,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	protected.GET("/main", config.PagesHandler.HandleMainPage)
 	protected.GET("/setup", config.PagesHandler.HandleSetupPage)
 	protected.POST("/setup/hetzner", config.VPSConfigHandler.HandleSetupHetzner)
+	protected.GET("/terminal-page/:session_id", config.PagesHandler.HandleTerminalPage)
 	protected.GET("/logout", config.AuthHandler.HandleLogout)
 
 	// DNS management routes
@@ -91,11 +93,25 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.POST("/:id/deploy", config.VPSConfigHandler.HandleVPSDeploy)
 	}
 
-	// Terminal management routes
+	// Terminal management routes (legacy GoTTY)
 	terminal := protected.Group("/terminal")
 	{
 		terminal.GET("/:session_id", config.TerminalHandler.HandleTerminalView)
 		terminal.DELETE("/:session_id", config.TerminalHandler.HandleTerminalStop)
+	}
+
+	// WebSocket terminal routes
+	wsTerminal := protected.Group("/ws-terminal")
+	{
+		wsTerminal.POST("/create", config.WebSocketTerminalHandler.HandleTerminalCreate)
+		wsTerminal.GET("/list", config.WebSocketTerminalHandler.HandleTerminalList)
+		wsTerminal.DELETE("/:session_id", config.WebSocketTerminalHandler.HandleTerminalStop)
+	}
+
+	// WebSocket endpoint (with special auth handling)
+	ws := r.Group("/ws")
+	{
+		ws.GET("/terminal/:session_id", config.WebSocketTerminalHandler.HandleWebSocketTerminal)
 	}
 
 	// Applications management routes
