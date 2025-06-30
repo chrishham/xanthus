@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="/static/css/output.css">
     <link rel="stylesheet" href="/static/css/sweetalert2.min.css">
     <script src="/static/js/vendor/htmx.min.js"></script>
-    <script src="/static/js/vendor/alpine.min.js" defer></script>
     <script src="/static/js/vendor/sweetalert2.min.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -242,15 +241,36 @@
         </div>
     </div>
 
-    <script type="module">
-        import { applicationsManagement } from '/static/js/modules/applications-management.js';
+    <script>
+        // Wait for the module to load before starting Alpine.js
+        async function initializeAlpine() {
+            try {
+                const { applicationsManagement } = await import('/static/js/modules/applications-management.js');
+                // Make the component available globally
+                window.applicationsManagement = applicationsManagement;
+                
+                // Set initial data for the component
+                window.initialApplications = {{.Applications | toJSON}};
+                window.initialPredefinedApps = {{.PredefinedApps | toJSON}};
+                
+                // Now load and initialize Alpine.js
+                if (!window.Alpine) {
+                    const script = document.createElement('script');
+                    script.src = '/static/js/vendor/alpine.min.js';
+                    script.defer = true;
+                    document.head.appendChild(script);
+                }
+            } catch (error) {
+                console.error('Failed to load applications management module:', error);
+            }
+        }
         
-        // Set initial data for the component
-        window.initialApplications = {{.Applications | toJSON}};
-        window.initialPredefinedApps = {{.PredefinedApps | toJSON}};
-        
-        // Make the component available globally
-        window.applicationsManagement = applicationsManagement;
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeAlpine);
+        } else {
+            initializeAlpine();
+        }
     </script>
 </body>
 </html>
