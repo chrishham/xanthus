@@ -2,6 +2,7 @@ package vps
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -67,6 +68,7 @@ func (h *BaseHandler) getVPSConfig(c *gin.Context, serverIDStr string) (*service
 func (h *BaseHandler) getHetznerKey(c *gin.Context, token, accountID string) (string, bool) {
 	hetznerKey, err := utils.GetHetznerAPIKey(token, accountID)
 	if err != nil {
+		log.Printf("getHetznerKey failed for account %s: %v", accountID, err)
 		utils.JSONHetznerKeyMissing(c)
 		return "", false
 	}

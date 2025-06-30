@@ -5,10 +5,40 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/chrishham/xanthus/internal/models"
 )
+
+// Temporary in-memory cache for validated Hetzner API keys
+// This allows immediate use of validated keys without waiting for KV store propagation
+var (
+	tempHetznerKeys = make(map[string]string)
+	tempKeysMutex   sync.RWMutex
+)
+
+// SetTempHetznerKey stores a Hetzner API key temporarily in memory
+func SetTempHetznerKey(accountID, apiKey string) {
+	tempKeysMutex.Lock()
+	defer tempKeysMutex.Unlock()
+	tempHetznerKeys[accountID] = apiKey
+}
+
+// GetTempHetznerKey retrieves a temporarily stored Hetzner API key
+func GetTempHetznerKey(accountID string) (string, bool) {
+	tempKeysMutex.RLock()
+	defer tempKeysMutex.RUnlock()
+	key, exists := tempHetznerKeys[accountID]
+	return key, exists
+}
+
+// ClearTempHetznerKey removes a temporarily stored Hetzner API key
+func ClearTempHetznerKey(accountID string) {
+	tempKeysMutex.Lock()
+	defer tempKeysMutex.Unlock()
+	delete(tempHetznerKeys, accountID)
+}
 
 // ValidateHetznerAPIKey validates a Hetzner Cloud API key by making a test API call
 func ValidateHetznerAPIKey(apiKey string) bool {
@@ -41,21 +71,54 @@ func ValidateHetznerAPIKey(apiKey string) bool {
 	return false
 }
 
-// GetHetznerAPIKey retrieves and decrypts the Hetzner API key from KV
+// GetHetznerAPIKey retrieves and decrypts the Hetzner API key, checking temporary cache first
 func GetHetznerAPIKey(token, accountID string) (string, error) {
+	log.Printf("GetHetznerAPIKey: Attempting to retrieve key for account %s", accountID)
+	
+	// First, check temporary cache for recently validated keys
+	if tempKey, exists := GetTempHetznerKey(accountID); exists {
+		log.Printf("GetHetznerAPIKey: Found key in temporary cache for account %s", accountID)
+		return tempKey, nil
+	}
+	
+	log.Printf("GetHetznerAPIKey: Key not in temporary cache, checking KV store for account %s", accountID)
+	
 	client := &http.Client{Timeout: 10 * time.Second}
 	var encryptedKey string
+	
+	// Retry logic to handle Cloudflare KV eventual consistency
+	maxRetries := 3
+	retryDelay := 2 * time.Second
+	
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		log.Printf("GetHetznerAPIKey: KV attempt %d/%d for account %s", attempt, maxRetries, accountID)
+		
+		if err := GetKVValue(client, token, accountID, "config:hetzner:api_key", &encryptedKey); err != nil {
+			lastErr = err
+			log.Printf("GetHetznerAPIKey: KV retrieval attempt %d failed for account %s: %v", attempt, accountID, err)
+			
+			if attempt < maxRetries {
+				log.Printf("GetHetznerAPIKey: Waiting %v before retry for account %s", retryDelay, accountID)
+				time.Sleep(retryDelay)
+				continue
+			}
+		} else {
+			log.Printf("GetHetznerAPIKey: Successfully retrieved encrypted key for account %s on attempt %d, attempting decryption", accountID, attempt)
+			
+			decryptedKey, err := DecryptData(encryptedKey, token)
+			if err != nil {
+				log.Printf("GetHetznerAPIKey: Decryption failed for account %s: %v", accountID, err)
+				return "", fmt.Errorf("failed to decrypt Hetzner API key: %v", err)
+			}
 
-	if err := GetKVValue(client, token, accountID, "config:hetzner:api_key", &encryptedKey); err != nil {
-		return "", fmt.Errorf("failed to get Hetzner API key: %v", err)
+			log.Printf("GetHetznerAPIKey: Successfully decrypted key for account %s", accountID)
+			return decryptedKey, nil
+		}
 	}
-
-	decryptedKey, err := DecryptData(encryptedKey, token)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt Hetzner API key: %v", err)
-	}
-
-	return decryptedKey, nil
+	
+	log.Printf("GetHetznerAPIKey: All retry attempts failed for account %s", accountID)
+	return "", fmt.Errorf("failed to get Hetzner API key after %d attempts: %v", maxRetries, lastErr)
 }
 
 // FetchHetznerLocations fetches available datacenter locations from Hetzner API

@@ -168,17 +168,26 @@ func (h *VPSConfigHandler) HandleVPSValidateKey(c *gin.Context) {
 	}
 
 	// Store the key
+	log.Printf("HandleVPSValidateKey: Storing API key for account %s", accountID)
 	client := &http.Client{Timeout: 10 * time.Second}
 	encryptedKey, err := utils.EncryptData(apiKey, token)
 	if err != nil {
+		log.Printf("HandleVPSValidateKey: Encryption failed for account %s: %v", accountID, err)
 		utils.JSONInternalServerError(c, "Failed to encrypt API key")
 		return
 	}
 
 	if err := utils.PutKVValue(client, token, accountID, "config:hetzner:api_key", encryptedKey); err != nil {
+		log.Printf("HandleVPSValidateKey: KV storage failed for account %s: %v", accountID, err)
 		utils.JSONInternalServerError(c, "Failed to store API key")
 		return
 	}
+
+	log.Printf("HandleVPSValidateKey: Successfully stored API key for account %s", accountID)
+
+	// Store the key temporarily in memory cache for immediate use (e.g., name validation)
+	utils.SetTempHetznerKey(accountID, apiKey)
+	log.Printf("HandleVPSValidateKey: Stored temporary key in cache for account %s", accountID)
 
 	utils.JSONResponse(c, http.StatusOK, gin.H{"success": true})
 }

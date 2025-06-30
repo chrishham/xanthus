@@ -52,10 +52,13 @@ func (h *VPSLifecycleHandler) HandleVPSCreate(c *gin.Context) {
 	}
 
 	// Get Hetzner API key
+	log.Printf("VPS Create: Attempting to retrieve Hetzner API key for account %s", accountID)
 	hetznerKey, valid := h.getHetznerKey(c, token, accountID)
 	if !valid {
+		log.Printf("VPS Create: Failed to retrieve Hetzner API key for account %s", accountID)
 		return
 	}
+	log.Printf("VPS Create: Successfully retrieved Hetzner API key for account %s", accountID)
 
 	// Get SSL CSR configuration
 	client := &http.Client{Timeout: 10 * time.Second}
@@ -149,11 +152,13 @@ func (h *VPSLifecycleHandler) HandleVPSCreate(c *gin.Context) {
 		// Check for specific error types and provide user-friendly messages
 		errorStr := err.Error()
 		if strings.Contains(errorStr, "server name is already used") || strings.Contains(errorStr, "uniqueness_error") {
+			utils.ClearTempHetznerKey(accountID) // Clean up on error
 			c.JSON(http.StatusConflict, gin.H{"error": "A server with this name already exists. Please choose a different name."})
 			return
 		}
 
 		// Generic error for other cases
+		utils.ClearTempHetznerKey(accountID) // Clean up on error
 		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to create server: %v", err))
 		return
 	}
@@ -162,6 +167,11 @@ func (h *VPSLifecycleHandler) HandleVPSCreate(c *gin.Context) {
 	log.Printf("✅ VPS created successfully. DNS records will be configured during application deployment")
 
 	log.Printf("✅ Created server: %s (ID: %d) with IPv4: %s", server.Name, server.ID, server.PublicNet.IPv4.IP)
+	
+	// Clean up temporary Hetzner key cache after successful VPS creation
+	utils.ClearTempHetznerKey(accountID)
+	log.Printf("Cleaned up temporary Hetzner key cache for account %s", accountID)
+	
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Server created successfully with K3s and Helm. DNS will be configured when applications are deployed",
