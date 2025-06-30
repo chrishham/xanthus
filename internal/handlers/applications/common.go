@@ -1,6 +1,7 @@
 package applications
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -137,6 +138,86 @@ func (v *ValidationHelper) ValidateApplicationData(data interface{}) error {
 	}
 
 	return nil
+}
+
+// ValidateSubdomainAvailability checks if subdomain is already taken for the domain
+func (v *ValidationHelper) ValidateSubdomainAvailability(token, accountID, subdomain, domain string) error {
+	kvService := services.NewKVService()
+
+	// Get all existing applications
+	applications, err := v.getExistingApplications(token, accountID, kvService)
+	if err != nil {
+		return fmt.Errorf("failed to check existing applications: %v", err)
+	}
+
+	// Check if subdomain + domain combination is already taken
+	targetURL := fmt.Sprintf("https://%s.%s", subdomain, domain)
+	for _, app := range applications {
+		if app.URL == targetURL {
+			return fmt.Errorf("subdomain '%s' is already taken for domain '%s'", subdomain, domain)
+		}
+	}
+
+	return nil
+}
+
+// getExistingApplications retrieves all existing applications from KV store
+func (v *ValidationHelper) getExistingApplications(token, accountID string, kvService *services.KVService) ([]models.Application, error) {
+	// Get the Xanthus namespace ID
+	namespaceID, err := kvService.GetXanthusNamespaceID(token, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get namespace ID: %w", err)
+	}
+
+	// List all keys with app: prefix
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/keys?prefix=app:",
+		accountID, namespaceID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var keysResp struct {
+		Success bool `json:"success"`
+		Result  []struct {
+			Name string `json:"name"`
+		} `json:"result"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&keysResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !keysResp.Success {
+		return nil, fmt.Errorf("KV API failed")
+	}
+
+	applications := []models.Application{}
+
+	// Fetch each application, but skip password keys
+	for _, key := range keysResp.Result {
+		// Skip password keys (they end with ":password")
+		if strings.HasSuffix(key.Name, ":password") {
+			continue
+		}
+
+		var app models.Application
+		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
+			applications = append(applications, app)
+		}
+	}
+
+	return applications, nil
 }
 
 // ValidatePassword validates password requirements

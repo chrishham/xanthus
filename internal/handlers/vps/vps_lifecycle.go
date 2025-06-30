@@ -169,19 +169,13 @@ func (h *VPSLifecycleHandler) HandleVPSCreate(c *gin.Context) {
 		return
 	}
 
-	// Configure DNS records for the VPS
-	log.Printf("🔧 Starting DNS configuration for domain: %s, VPS IP: %s", domain, server.PublicNet.IPv4.IP)
-	if err := h.cfService.ConfigureDNSForVPS(token, domain, server.PublicNet.IPv4.IP); err != nil {
-		log.Printf("❌ Failed to configure DNS for domain %s: %v", domain, err)
-		// Don't fail the creation, but log the warning
-	} else {
-		log.Printf("✅ DNS configured for domain %s pointing to %s", domain, server.PublicNet.IPv4.IP)
-	}
+	// DNS records will be configured when applications are deployed
+	log.Printf("✅ VPS created successfully. DNS records will be configured during application deployment")
 
 	log.Printf("✅ Created server: %s (ID: %d) with IPv4: %s", server.Name, server.ID, server.PublicNet.IPv4.IP)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "Server created successfully with K3s, Helm, and DNS configuration",
+		"message": "Server created successfully with K3s and Helm. DNS will be configured when applications are deployed",
 		"server":  server,
 		"config":  vpsConfig,
 	})

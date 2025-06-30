@@ -134,6 +134,12 @@ func (h *Handler) HandleApplicationsCreate(c *gin.Context) {
 		return
 	}
 
+	// Check if subdomain is already taken
+	if err := validator.ValidateSubdomainAvailability(token, accountID, appData.Subdomain, appData.Domain); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Validate that app type exists in catalog
 	predefinedApp, exists := h.catalog.GetApplicationByID(appData.AppType)
 	if !exists {

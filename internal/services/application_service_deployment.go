@@ -103,6 +103,12 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 		return fmt.Errorf("helm install failed: %v, output: %s", err, result.Output)
 	}
 
+	// Configure DNS record for the application
+	if err := s.configureApplicationDNS(token, subdomain, domain, vpsConfig.PublicIPv4); err != nil {
+		// Log the error but don't fail the deployment since the app is successfully deployed
+		fmt.Printf("Warning: Failed to configure DNS for application: %v\n", err)
+	}
+
 	// Retrieve and store password for applications that generate them
 	if err := s.retrieveApplicationPassword(token, accountID, predefinedApp.ID, appID, vpsID, releaseName, namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey); err != nil {
 		// Log the error but don't fail the deployment since the app is successfully deployed
@@ -110,6 +116,29 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 	}
 
 	return nil
+}
+
+// configureApplicationDNS creates DNS A record for the application subdomain
+func (s *SimpleApplicationService) configureApplicationDNS(token, subdomain, domain, vpsIP string) error {
+	cfService := NewCloudflareService()
+
+	// Get zone ID for the domain
+	zoneID, err := cfService.GetZoneID(token, domain)
+	if err != nil {
+		return fmt.Errorf("failed to get zone ID for domain %s: %v", domain, err)
+	}
+
+	// Handle bare domain (blank or asterisk subdomain)
+	if subdomain == "" || subdomain == "*" {
+		// Create A record for bare domain
+		_, err := cfService.CreateDNSRecord(token, zoneID, "A", domain, vpsIP, true)
+		return err
+	}
+
+	// Create A record for subdomain
+	recordName := fmt.Sprintf("%s.%s", subdomain, domain)
+	_, err = cfService.CreateDNSRecord(token, zoneID, "A", recordName, vpsIP, true)
+	return err
 }
 
 // retrieveApplicationPassword retrieves and stores the auto-generated password for applications that create them
