@@ -35,16 +35,11 @@ func (h *VPSLifecycleHandler) HandleVPSCreate(c *gin.Context) {
 
 	// Validate required parameters
 	name := c.PostForm("name")
-	domain := c.PostForm("domain")
 	location := c.PostForm("location")
 	serverType := c.PostForm("server_type")
 
 	if name == "" {
 		utils.JSONBadRequest(c, "Server name is required")
-		return
-	}
-	if domain == "" {
-		utils.JSONBadRequest(c, "Domain is required")
 		return
 	}
 	if location == "" {
@@ -108,15 +103,9 @@ func (h *VPSLifecycleHandler) HandleVPSCreate(c *gin.Context) {
 	sshKeyName = sshKey.Name
 	log.Printf("✅ Using SSH key: %s (ID: %d)", sshKeyName, sshKey.ID)
 
-	// Get domain SSL configuration for cloud-init template
+	// SSL certificates will be configured when applications are deployed
 	var domainCert, domainKey string
-	if domainConfig, err := h.kvService.GetDomainSSLConfig(token, accountID, domain); err == nil {
-		domainCert = domainConfig.Certificate
-		domainKey = domainConfig.PrivateKey
-		log.Printf("✅ Retrieved SSL configuration for domain %s", domain)
-	} else {
-		log.Printf("Warning: Could not get SSL config for domain %s: %v", domain, err)
-	}
+	log.Printf("✅ VPS will be created without SSL certificates. SSL will be configured during application deployment")
 
 	// Get server type pricing information
 	serverTypes, err := utils.FetchHetznerServerTypes(hetznerKey)
@@ -149,7 +138,7 @@ func (h *VPSLifecycleHandler) HandleVPSCreate(c *gin.Context) {
 	// Create VPS using the VPS service
 	server, vpsConfig, err := h.vpsService.CreateVPSWithConfig(
 		token, accountID, hetznerKey,
-		name, serverType, location, domain,
+		name, serverType, location, "",
 		sshKeyName, sshPublicKey,
 		domainCert, domainKey,
 		hourlyRate, monthlyRate,

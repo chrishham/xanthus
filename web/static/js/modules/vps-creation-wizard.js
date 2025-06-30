@@ -7,28 +7,22 @@ export function vpsCreationWizard() {
         validatingKey: false,
         creating: false,
         
-        // Step 1: Domain Selection
-        managedDomains: [],
-        selectedDomain: null,
-        hasManagedDomains: false,
-        checkingDomains: false,
-        
-        // Step 2: Hetzner Key
+        // Step 1: Hetzner Key
         hetznerKey: '',
         existingKey: '',
         
-        // Step 3: Location
+        // Step 2: Location
         locations: [],
         selectedLocation: null,
         
-        // Step 4: Server Type
+        // Step 3: Server Type
         serverTypes: [],
         filteredServerTypes: [],
         selectedServerType: null,
         architectureFilter: '',
         sortBy: 'price_asc',
         
-        // Step 5: Review
+        // Step 4: Review
         serverName: '',
         nameValidationState: '', // '', 'checking', 'valid', 'invalid'
         nameValidationMessage: '',
@@ -36,33 +30,11 @@ export function vpsCreationWizard() {
         
         async init() {
             this.serverName = `xanthus-k3s-${Date.now()}`;
-            await this.checkManagedDomains();
+            await this.checkExistingKey();
             // Validate initial name
             await this.validateName();
         },
         
-        async checkManagedDomains() {
-            this.checkingDomains = true;
-            
-            try {
-                const response = await fetch('/dns/list');
-                if (response.ok) {
-                    const data = await response.json();
-                    this.managedDomains = (data.domains || []).filter(domain => domain.managed);
-                    this.hasManagedDomains = this.managedDomains.length > 0;
-                }
-            } catch (error) {
-                console.error('Error checking managed domains:', error);
-                this.managedDomains = [];
-                this.hasManagedDomains = false;
-            } finally {
-                this.checkingDomains = false;
-            }
-        },
-        
-        selectDomain(domain) {
-            this.selectedDomain = domain;
-        },
         
         async checkExistingKey() {
             this.loading = true;
@@ -88,7 +60,7 @@ export function vpsCreationWizard() {
         },
         
         async useExistingKey() {
-            this.currentStep = 3;
+            this.currentStep = 2;
             await this.loadLocations();
         },
         
@@ -108,7 +80,7 @@ export function vpsCreationWizard() {
                 const data = await response.json();
                 
                 if (response.ok) {
-                    this.currentStep = 3;
+                    this.currentStep = 2;
                     await this.loadLocations();
                 } else {
                     Swal.fire('Invalid Key', data.error || 'The Hetzner API key is invalid', 'error');
@@ -229,14 +201,11 @@ export function vpsCreationWizard() {
         },
         
         async nextStep() {
-            if (this.currentStep === 1 && this.selectedDomain) {
-                this.currentStep = 2;
-                await this.checkExistingKey();
-            } else if (this.currentStep === 3 && this.selectedLocation) {
-                this.currentStep = 4;
+            if (this.currentStep === 2 && this.selectedLocation) {
+                this.currentStep = 3;
                 await this.loadServerTypes();
-            } else if (this.currentStep === 4 && this.selectedServerType) {
-                this.currentStep = 5;
+            } else if (this.currentStep === 3 && this.selectedServerType) {
+                this.currentStep = 4;
             }
         },
         
@@ -319,7 +288,7 @@ export function vpsCreationWizard() {
         },
         
         async createVPS() {
-            if (!this.serverName || !this.selectedDomain || !this.selectedLocation || !this.selectedServerType || this.nameValidationState !== 'valid') return;
+            if (!this.serverName || !this.selectedLocation || !this.selectedServerType || this.nameValidationState !== 'valid') return;
             
             this.creating = true;
             try {
@@ -328,7 +297,7 @@ export function vpsCreationWizard() {
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: `name=${encodeURIComponent(this.serverName)}&domain=${encodeURIComponent(this.selectedDomain.name)}&location=${encodeURIComponent(this.selectedLocation.name)}&server_type=${encodeURIComponent(this.selectedServerType.name)}`
+                    body: `name=${encodeURIComponent(this.serverName)}&location=${encodeURIComponent(this.selectedLocation.name)}&server_type=${encodeURIComponent(this.selectedServerType.name)}`
                 });
                 
                 const data = await response.json();

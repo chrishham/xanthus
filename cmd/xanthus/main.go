@@ -94,7 +94,7 @@ func setupTemplates(r *gin.Engine) {
 			return value
 		},
 	}
-	
+
 	// Load main templates and partials
 	tmpl := template.New("").Funcs(funcMap)
 	tmpl = template.Must(tmpl.ParseGlob("web/templates/*.html"))

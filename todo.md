@@ -5,6 +5,8 @@ ram usage output is problematic
 ArgoCD: View Credentials  delete
 
 - when a vps is deleted , then delete all associated entries from applications.
+
+- when user presses create vps then for a split second some error message appears at the ui before the wizard takes over.
 - when a vps is created then show a loading modal , show that user cant press anything else
 - When a vps is created then dont check for available dns records created by Xanthus and dont touch A records.
 - Dont touch A records when creating a vps. when user creates an application then for the domain associated (or blank or asterisk for the bare domain) only then create an A record. 
