@@ -67,26 +67,106 @@ extraVolumeMounts:
     mountPath: /tmp/vscode-settings
     readOnly: true
 
-# Init container to copy VS Code settings to persistent volume
+# Init container to copy VS Code settings and install packages
 extraInitContainers: |
-  - name: copy-vscode-settings
-    image: busybox:latest
+  - name: setup-environment
+    image: ubuntu:22.04
     imagePullPolicy: IfNotPresent
     command:
-      - sh
+      - bash
       - -c
       - |
+        set -e
+        echo "🚀 Starting environment setup..."
+        
+        # Update package lists
+        echo "📦 Updating package lists..."
+        apt-get update
+        
+        # Install basic packages
+        echo "🔧 Installing build-essential and ripgrep..."
+        apt-get install -y build-essential ripgrep curl
+        
+        # Create user if it doesn't exist and setup home directory
+        if ! id -u coder > /dev/null 2>&1; then
+          useradd -m -u 1000 -s /bin/bash coder
+        fi
+        
+        # Switch to coder user for remaining operations
+        su - coder << 'EOF'
+        set -e
+        cd /home/coder
+        
+        # Install Volta (Node.js version manager)
+        echo "🌐 Installing Volta..."
+        curl https://get.volta.sh | bash
+        
+        # Setup Volta environment
+        export VOLTA_HOME="$HOME/.volta"
+        export PATH="$VOLTA_HOME/bin:$PATH"
+        
+        # Add to bashrc
+        echo 'export VOLTA_HOME="$HOME/.volta"' >> ~/.bashrc
+        echo 'export PATH="$VOLTA_HOME/bin:$PATH"' >> ~/.bashrc
+        
+        # Install Node.js via Volta
+        echo "📦 Installing Node.js..."
+        ~/.volta/bin/volta install node
+        
+        # Install global npm packages
+        echo "🔧 Installing Claude Code and ccusage..."
+        ~/.volta/bin/npm install -g @anthropic-ai/claude-code
+        ~/.volta/bin/npm install -g ccusage
+        
+        # Install Go
+        echo "🐹 Installing Go..."
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ARCH="amd64" ;;
+          aarch64 | arm64) ARCH="arm64" ;;
+          *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
+        esac
+        
+        # Get latest Go version
+        LATEST_VERSION=$(curl -s https://go.dev/dl/ | grep -oP "go[0-9]+\.[0-9]+(\.[0-9]+)?\.linux-${ARCH}\.tar\.gz" | sed -E "s/\.linux-${ARCH}\.tar\.gz//" | sort -Vr | head -n1)
+        TARFILE="${LATEST_VERSION}.linux-${ARCH}.tar.gz"
+        DOWNLOAD_URL="https://go.dev/dl/${TARFILE}"
+        
+        echo "🔽 Downloading Go ${LATEST_VERSION}..."
+        curl -LO "$DOWNLOAD_URL"
+        EOF
+        
+        # Extract Go as root (needs sudo equivalent)
+        echo "📦 Extracting Go to /usr/local..."
+        rm -rf /usr/local/go
+        tar -C /usr/local -xzf /home/coder/${LATEST_VERSION}.linux-${ARCH}.tar.gz
+        rm /home/coder/${LATEST_VERSION}.linux-${ARCH}.tar.gz
+        
+        # Continue as coder user
+        su - coder << 'EOF'
+        # Add Go to PATH
+        echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
+        
+        # Verify installations
+        echo "✅ Verifying installations..."
+        /usr/local/go/bin/go version || echo "Go installation failed"
+        ~/.volta/bin/node --version || echo "Node installation failed"
+        ~/.volta/bin/npm --version || echo "NPM installation failed"
+        EOF
+        
+        # Setup VS Code settings if available
         if [ -d /tmp/vscode-settings ]; then
-          echo "Copying VS Code settings to persistent volume..."
+          echo "📝 Copying VS Code settings..."
           mkdir -p /home/coder/.local/share/code-server/User
           cp -f /tmp/vscode-settings/settings.json /home/coder/.local/share/code-server/User/settings.json 2>/dev/null || echo "No settings.json found, skipping..."
           cp -f /tmp/vscode-settings/keybindings.json /home/coder/.local/share/code-server/User/keybindings.json 2>/dev/null || echo "No keybindings.json found, skipping..."
-          echo "Fixing permissions for .local directory..."
-          chown -R 1000:1000 /home/coder/.local
-          echo "VS Code settings copied successfully"
-        else
-          echo "No VS Code settings ConfigMap mounted, skipping..."
         fi
+        
+        # Fix all permissions
+        echo "🔒 Fixing permissions..."
+        chown -R 1000:1000 /home/coder
+        
+        echo "🎉 Environment setup complete!"
     securityContext:
       runAsUser: 0
     volumeMounts:
