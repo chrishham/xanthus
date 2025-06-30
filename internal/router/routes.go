@@ -10,16 +10,16 @@ import (
 
 // RouteConfig holds all the handler instances
 type RouteConfig struct {
-	AuthHandler             *handlers.AuthHandler
-	DNSHandler              *handlers.DNSHandler
-	VPSLifecycleHandler     *vps.VPSLifecycleHandler
-	VPSInfoHandler          *vps.VPSInfoHandler
-	VPSConfigHandler        *vps.VPSConfigHandler
-	VPSMetaHandler          *vps.VPSMetaHandler
-	AppsHandler             *applications.Handler
-	TerminalHandler         *handlers.TerminalHandler
+	AuthHandler              *handlers.AuthHandler
+	DNSHandler               *handlers.DNSHandler
+	VPSLifecycleHandler      *vps.VPSLifecycleHandler
+	VPSInfoHandler           *vps.VPSInfoHandler
+	VPSConfigHandler         *vps.VPSConfigHandler
+	VPSMetaHandler           *vps.VPSMetaHandler
+	AppsHandler              *applications.Handler
+	TerminalHandler          *handlers.TerminalHandler
 	WebSocketTerminalHandler *handlers.WebSocketTerminalHandler
-	PagesHandler            *handlers.PagesHandler
+	PagesHandler             *handlers.PagesHandler
 }
 
 // SetupRoutes configures all application routes
@@ -48,7 +48,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	protected.GET("/main", config.PagesHandler.HandleMainPage)
 	protected.GET("/setup", config.PagesHandler.HandleSetupPage)
 	protected.POST("/setup/hetzner", config.VPSConfigHandler.HandleSetupHetzner)
-	protected.GET("/terminal-page/:session_id", config.PagesHandler.HandleTerminalPage)
+	protected.GET("/terminal-page/:session_id", config.TerminalHandler.HandleTerminalPage)
 	protected.GET("/logout", config.AuthHandler.HandleLogout)
 
 	// DNS management routes

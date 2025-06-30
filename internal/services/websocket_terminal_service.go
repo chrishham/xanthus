@@ -23,23 +23,23 @@ type WebSocketTerminalService struct {
 
 // WebSocketTerminalSession represents a WebSocket terminal session with SSH bridge
 type WebSocketTerminalSession struct {
-	ID            string                 `json:"id"`
-	ServerID      int                    `json:"server_id"`
-	Host          string                 `json:"host"`
-	User          string                 `json:"user"`
-	Status        string                 `json:"status"`
-	StartedAt     time.Time              `json:"started_at"`
-	LastActivity  time.Time              `json:"last_activity"`
-	AccountID     string                 `json:"account_id"`
-	sshClient     *ssh.Client
-	sshSession    *ssh.Session
-	stdin         io.WriteCloser
-	stdout        io.Reader
-	stderr        io.Reader
-	context       context.Context
-	cancel        context.CancelFunc
-	connections   map[*websocket.Conn]bool
-	connMutex     sync.RWMutex
+	ID           string    `json:"id"`
+	ServerID     int       `json:"server_id"`
+	Host         string    `json:"host"`
+	User         string    `json:"user"`
+	Status       string    `json:"status"`
+	StartedAt    time.Time `json:"started_at"`
+	LastActivity time.Time `json:"last_activity"`
+	AccountID    string    `json:"account_id"`
+	sshClient    *ssh.Client
+	sshSession   *ssh.Session
+	stdin        io.WriteCloser
+	stdout       io.Reader
+	stderr       io.Reader
+	context      context.Context
+	cancel       context.CancelFunc
+	connections  map[*websocket.Conn]bool
+	connMutex    sync.RWMutex
 }
 
 // TerminalMessage represents a message sent over WebSocket
@@ -53,10 +53,10 @@ func NewWebSocketTerminalService() *WebSocketTerminalService {
 	service := &WebSocketTerminalService{
 		sessions: make(map[string]*WebSocketTerminalSession),
 	}
-	
+
 	// Start cleanup routine
 	go service.cleanupRoutine()
-	
+
 	return service
 }
 
@@ -221,6 +221,12 @@ func (s *WebSocketTerminalService) HandleWebSocketConnection(sessionID string, c
 
 		session.Status = "running"
 
+		// Send ready signal to all connected clients
+		s.broadcastToSession(session, map[string]string{
+			"type":    "ready",
+			"message": "Terminal ready for input",
+		})
+
 		// Start output forwarding to all WebSocket connections
 		go s.forwardOutput(session, stdout, "stdout")
 		go s.forwardOutput(session, stderr, "stderr")
@@ -228,6 +234,24 @@ func (s *WebSocketTerminalService) HandleWebSocketConnection(sessionID string, c
 
 	// Handle WebSocket messages (input from client)
 	return s.handleWebSocketMessages(session, conn)
+}
+
+// broadcastToSession sends a message to all connections in a session
+func (s *WebSocketTerminalService) broadcastToSession(session *WebSocketTerminalSession, message map[string]string) {
+	data, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("Failed to marshal broadcast message: %v", err)
+		return
+	}
+
+	session.connMutex.RLock()
+	defer session.connMutex.RUnlock()
+
+	for conn := range session.connections {
+		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			log.Printf("Failed to send broadcast message: %v", err)
+		}
+	}
 }
 
 // forwardOutput forwards SSH output to all WebSocket connections
@@ -385,30 +409,30 @@ func (s *WebSocketTerminalService) cleanupInactiveSessions() {
 	defer s.mutex.Unlock()
 
 	cutoff := time.Now().Add(-30 * time.Minute) // 30 minutes timeout
-	
+
 	for sessionID, session := range s.sessions {
 		if session.LastActivity.Before(cutoff) {
 			log.Printf("Cleaning up inactive session %s", sessionID)
-			
+
 			// Cancel context and close connections
 			if session.cancel != nil {
 				session.cancel()
 			}
-			
+
 			if session.sshSession != nil {
 				session.sshSession.Close()
 			}
-			
+
 			if session.sshClient != nil {
 				session.sshClient.Close()
 			}
-			
+
 			session.connMutex.Lock()
 			for conn := range session.connections {
 				conn.Close()
 			}
 			session.connMutex.Unlock()
-			
+
 			delete(s.sessions, sessionID)
 		}
 	}

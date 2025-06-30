@@ -82,7 +82,7 @@ export function webSocketTerminal() {
         },
 
         // Connect to WebSocket terminal session
-        async connectToSession(sessionId, token) {
+        async connectToSession(sessionId) {
             if (this.isConnecting || this.isConnected) {
                 console.log('Already connecting or connected');
                 return;
@@ -96,15 +96,12 @@ export function webSocketTerminal() {
                 // Determine WebSocket URL
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const host = window.location.host;
-                const wsUrl = `${protocol}//${host}/ws/terminal/${sessionId}?token=${encodeURIComponent(token)}`;
-
-                console.log('Connecting to WebSocket:', wsUrl);
+                const wsUrl = `${protocol}//${host}/ws/terminal/${sessionId}`;
 
                 // Create WebSocket connection
                 this.socket = new WebSocket(wsUrl);
 
                 this.socket.onopen = () => {
-                    console.log('WebSocket connected');
                     this.isConnected = true;
                     this.isConnecting = false;
                     this.connectionAttempts = 0;
@@ -119,7 +116,6 @@ export function webSocketTerminal() {
                 };
 
                 this.socket.onclose = (event) => {
-                    console.log('WebSocket closed:', event.code, event.reason);
                     this.isConnected = false;
                     this.isConnecting = false;
 
@@ -130,13 +126,12 @@ export function webSocketTerminal() {
                     // Attempt reconnection if not a clean close
                     if (!event.wasClean && this.connectionAttempts < this.maxReconnectAttempts) {
                         setTimeout(() => {
-                            this.connectToSession(sessionId, token);
+                            this.connectToSession(sessionId);
                         }, this.reconnectDelay * this.connectionAttempts);
                     }
                 };
 
                 this.socket.onerror = (error) => {
-                    console.error('WebSocket error:', error);
                     this.isConnecting = false;
                     
                     if (this.terminal) {
@@ -145,7 +140,6 @@ export function webSocketTerminal() {
                 };
 
             } catch (error) {
-                console.error('Failed to create WebSocket connection:', error);
                 this.isConnecting = false;
                 
                 if (this.terminal) {
@@ -166,18 +160,20 @@ export function webSocketTerminal() {
                         }
                         break;
                     
+                    case 'ready':
+                        if (this.terminal) {
+                            this.terminal.write(`\r\n\x1b[32m${message.message}\x1b[0m\r\n`);
+                        }
+                        break;
+                    
                     case 'error':
-                        console.error('Terminal error:', message.message);
                         if (this.terminal) {
                             this.terminal.write(`\r\n\x1b[31mError: ${message.message}\x1b[0m\r\n`);
                         }
                         break;
-                    
-                    default:
-                        console.log('Unknown message type:', message.type);
                 }
             } catch (error) {
-                console.error('Failed to parse WebSocket message:', error);
+                // Silently handle parse errors
             }
         },
 
@@ -229,31 +225,13 @@ export function webSocketTerminal() {
             this.webLinksAddon = null;
         },
 
-        // Get terminal authentication token from cookies
-        getAuthToken() {
-            const cookies = document.cookie.split(';');
-            for (let cookie of cookies) {
-                const [name, value] = cookie.trim().split('=');
-                if (name === 'cf_token') {
-                    return decodeURIComponent(value);
-                }
-            }
-            return null;
-        },
-
         // Create a new terminal session
         async createTerminalSession(serverData) {
             try {
-                const token = this.getAuthToken();
-                if (!token) {
-                    throw new Error('Authentication token not found');
-                }
-
                 const response = await fetch('/ws-terminal/create', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         server_id: serverData.serverId,
@@ -272,7 +250,6 @@ export function webSocketTerminal() {
                 return sessionData;
 
             } catch (error) {
-                console.error('Failed to create terminal session:', error);
                 throw error;
             }
         },
@@ -280,16 +257,9 @@ export function webSocketTerminal() {
         // Stop a terminal session
         async stopTerminalSession(sessionId) {
             try {
-                const token = this.getAuthToken();
-                if (!token) {
-                    throw new Error('Authentication token not found');
-                }
-
                 const response = await fetch(`/ws-terminal/${sessionId}`, {
                     method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    credentials: 'include'
                 });
 
                 if (!response.ok) {
@@ -300,7 +270,6 @@ export function webSocketTerminal() {
                 return await response.json();
 
             } catch (error) {
-                console.error('Failed to stop terminal session:', error);
                 throw error;
             }
         }

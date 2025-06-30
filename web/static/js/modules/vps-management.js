@@ -1,5 +1,4 @@
 // VPS Management Module - Alpine.js component
-import { webSocketTerminal } from './terminal.js';
 
 export function vpsManagement() {
     return {
@@ -756,13 +755,25 @@ export function vpsManagement() {
                     throw new Error(keyData.error || 'Failed to get SSH key');
                 }
 
+                // Dynamically import terminal module with cache-busting
+                const { webSocketTerminal } = await import(`./terminal.js?v=${Date.now()}`);
+                
                 // Create WebSocket terminal instance
                 const terminal = webSocketTerminal();
                 
+                // Extract the correct IP address path
+                const publicIp = server.public_net?.ipv4?.ip;
+                
+                // Validate server data
+                if (!publicIp) {
+                    throw new Error('Server does not have a public IPv4 address');
+                }
+
+
                 // Create terminal session
                 const sessionData = await terminal.createTerminalSession({
                     serverId: serverId,
-                    host: server.public_ipv4,
+                    host: publicIp,
                     user: 'root',
                     privateKey: keyData.private_key
                 });
@@ -791,8 +802,7 @@ export function vpsManagement() {
                         // Initialize terminal in the modal
                         if (terminal.initTerminal(containerId)) {
                             // Connect to WebSocket session
-                            const token = terminal.getAuthToken();
-                            terminal.connectToSession(sessionData.session_id, token);
+                            terminal.connectToSession(sessionData.session_id);
                         }
                     },
                     willClose: () => {
@@ -828,17 +838,33 @@ export function vpsManagement() {
                     throw new Error(keyData.error || 'Failed to get SSH key');
                 }
 
+                // Dynamically import terminal module with cache-busting
+                const { webSocketTerminal } = await import(`./terminal.js?v=${Date.now()}`);
+                
                 // Create WebSocket terminal instance
                 const terminal = webSocketTerminal();
                 
+                // Extract the correct IP address path
+                const publicIp = server.public_net?.ipv4?.ip;
+                
+                // Validate server data
+                if (!publicIp) {
+                    throw new Error('Server does not have a public IPv4 address');
+                }
+
+
                 // Create terminal session
                 const sessionData = await terminal.createTerminalSession({
                     serverId: serverId,
-                    host: server.public_ipv4,
+                    host: publicIp,
                     user: 'root',
                     privateKey: keyData.private_key
                 });
 
+
+                // Wait a moment for session to be fully registered
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
                 // Create a standalone terminal page URL
                 const terminalUrl = `/terminal-page/${sessionData.session_id}?server=${encodeURIComponent(serverName)}`;
                 const newTab = window.open(terminalUrl, '_blank');

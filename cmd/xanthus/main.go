@@ -10,6 +10,7 @@ import (
 	"github.com/chrishham/xanthus/internal/handlers/applications"
 	"github.com/chrishham/xanthus/internal/handlers/vps"
 	"github.com/chrishham/xanthus/internal/router"
+	"github.com/chrishham/xanthus/internal/services"
 	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/gin-gonic/gin"
 )
@@ -36,6 +37,9 @@ func main() {
 	// Setup static files
 	r.Static("/static", "web/static")
 
+	// Initialize shared services
+	wsTerminalService := services.NewWebSocketTerminalService()
+
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler()
 	dnsHandler := handlers.NewDNSHandler()
@@ -44,22 +48,22 @@ func main() {
 	vpsConfigHandler := vps.NewVPSConfigHandler()
 	vpsMetaHandler := vps.NewVPSMetaHandler()
 	appsHandler := applications.NewHandler()
-	terminalHandler := handlers.NewTerminalHandler()
-	webSocketTerminalHandler := handlers.NewWebSocketTerminalHandler()
+	terminalHandler := handlers.NewTerminalHandlerWithService(wsTerminalService)
+	webSocketTerminalHandler := handlers.NewWebSocketTerminalHandlerWithService(wsTerminalService)
 	pagesHandler := handlers.NewPagesHandler()
 
 	// Configure routes
 	routeConfig := router.RouteConfig{
-		AuthHandler:             authHandler,
-		DNSHandler:              dnsHandler,
-		VPSLifecycleHandler:     vpsLifecycleHandler,
-		VPSInfoHandler:          vpsInfoHandler,
-		VPSConfigHandler:        vpsConfigHandler,
-		VPSMetaHandler:          vpsMetaHandler,
-		AppsHandler:             appsHandler,
-		TerminalHandler:         terminalHandler,
+		AuthHandler:              authHandler,
+		DNSHandler:               dnsHandler,
+		VPSLifecycleHandler:      vpsLifecycleHandler,
+		VPSInfoHandler:           vpsInfoHandler,
+		VPSConfigHandler:         vpsConfigHandler,
+		VPSMetaHandler:           vpsMetaHandler,
+		AppsHandler:              appsHandler,
+		TerminalHandler:          terminalHandler,
 		WebSocketTerminalHandler: webSocketTerminalHandler,
-		PagesHandler:            pagesHandler,
+		PagesHandler:             pagesHandler,
 	}
 
 	router.SetupRoutes(r, routeConfig)

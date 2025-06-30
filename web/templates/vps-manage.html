@@ -10,8 +10,13 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
     <link rel="stylesheet" href="/static/css/output.css">
     <link rel="stylesheet" href="/static/css/sweetalert2.min.css">
+    <link rel="stylesheet" href="/static/css/xterm.css">
     <script src="/static/js/vendor/htmx.min.js"></script>
     <script src="/static/js/vendor/sweetalert2.min.js"></script>
+    <!-- Terminal dependencies -->
+    <script src="/static/js/vendor/xterm.js"></script>
+    <script src="/static/js/vendor/addon-fit.js"></script>
+    <script src="/static/js/vendor/addon-web-links.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen">
     {{template "navbar.html" .}}
@@ -307,8 +312,9 @@
         // Wait for the module to load before starting Alpine.js
         async function initializeAlpine() {
             try {
-                const { vpsManagement } = await import('/static/js/modules/vps-management.js');
-                const { FormattingUtils } = await import('/static/js/modules/common/formatting-utils.js');
+                const timestamp = Date.now();
+                const { vpsManagement } = await import(`/static/js/modules/vps-management.js?v=${timestamp}`);
+                const { FormattingUtils } = await import(`/static/js/modules/common/formatting-utils.js?v=${timestamp}`);
                 
                 // Make the components available globally
                 window.vpsManagement = vpsManagement;

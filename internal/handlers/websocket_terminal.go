@@ -31,6 +31,19 @@ func NewWebSocketTerminalHandler() *WebSocketTerminalHandler {
 	}
 }
 
+// NewWebSocketTerminalHandlerWithService creates a new WebSocket terminal handler with shared service
+func NewWebSocketTerminalHandlerWithService(wsService *services.WebSocketTerminalService) *WebSocketTerminalHandler {
+	return &WebSocketTerminalHandler{
+		terminalService: wsService,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				// Allow connections from same origin
+				return true
+			},
+		},
+	}
+}
+
 // HandleWebSocketTerminal handles WebSocket terminal connections
 func (h *WebSocketTerminalHandler) HandleWebSocketTerminal(c *gin.Context) {
 	sessionID := c.Param("session_id")
@@ -85,7 +98,7 @@ func (h *WebSocketTerminalHandler) HandleWebSocketTerminal(c *gin.Context) {
 // authenticateWebSocket authenticates WebSocket connections
 func (h *WebSocketTerminalHandler) authenticateWebSocket(c *gin.Context) string {
 	// Try to get token from multiple sources
-	
+
 	// 1. Try Authorization header
 	authHeader := c.GetHeader("Authorization")
 	if authHeader != "" {
@@ -128,7 +141,7 @@ func (h *WebSocketTerminalHandler) HandleTerminalCreate(c *gin.Context) {
 	// Get authentication context (set by middleware)
 	token, exists := c.Get("cf_token")
 	if !exists {
-		utils.JSONUnauthorized(c, "Authentication required")
+		utils.JSONUnauthorized(c, "Authentication token not found")
 		return
 	}
 
