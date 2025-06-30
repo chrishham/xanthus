@@ -151,9 +151,20 @@
                 </div>
             </div>
 
+            <!-- Loading Modal -->
+            <div x-show="loading" x-transition.opacity class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-lg shadow-xl p-8 max-w-md mx-4">
+                    <div class="text-center">
+                        <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                        <h3 class="text-lg font-medium text-gray-900 mb-2">Processing...</h3>
+                        <p class="text-gray-600" x-text="loadingMessage">Creating your VPS server...</p>
+                    </div>
+                </div>
+            </div>
+
             <!-- Submit Button -->
             <div class="bg-white p-6 rounded-lg shadow-md" x-show="selectedLocation && selectedServerType">
-                <form hx-post="/setup/server" hx-target="#error-message" hx-swap="innerHTML" hx-trigger="submit">
+                <form @submit="handleSubmit($event)" hx-post="/setup/server" hx-target="#error-message" hx-swap="innerHTML" hx-trigger="submit">
                     <input type="hidden" name="location" :value="selectedLocation">
                     <input type="hidden" name="server_type" :value="selectedServerType">
                     
@@ -164,8 +175,10 @@
                             <span x-text="'Selected: ' + selectedServerTypeDescription + ' in ' + selectedLocationDescription"></span>
                         </div>
                         <button type="submit" 
-                                class="bg-blue-600 text-white py-2 px-6 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200">
-                            Continue to Step 3
+                                :disabled="loading"
+                                class="bg-blue-600 text-white py-2 px-6 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200 disabled:opacity-50">
+                            <span x-show="!loading">Continue to Step 3</span>
+                            <span x-show="loading">Creating Server...</span>
                         </button>
                     </div>
                 </form>
@@ -184,6 +197,8 @@
                 archFilter: 'all',
                 allServers: {{.ServerTypes}},
                 filteredServers: [],
+                loading: false,
+                loadingMessage: 'Creating your VPS server...',
 
                 init() {
                     this.processServers();
@@ -273,6 +288,27 @@
                                 return 0;
                         }
                     });
+                },
+
+                handleSubmit(event) {
+                    this.loading = true;
+                    this.loadingMessage = `Creating VPS with ${this.selectedServerTypeDescription} in ${this.selectedLocationDescription}...`;
+                    
+                    // Listen for HTMX events to handle loading state
+                    document.body.addEventListener('htmx:afterRequest', (e) => {
+                        if (e.detail.xhr.status === 200 && !e.detail.xhr.responseText.includes('❌')) {
+                            this.loadingMessage = 'VPS created successfully! Redirecting...';
+                            setTimeout(() => {
+                                this.loading = false;
+                            }, 1500);
+                        } else {
+                            this.loading = false;
+                        }
+                    }, { once: true });
+                    
+                    document.body.addEventListener('htmx:responseError', () => {
+                        this.loading = false;
+                    }, { once: true });
                 }
             }
         }

@@ -291,6 +291,9 @@ export function vpsCreationWizard() {
             if (!this.serverName || !this.selectedLocation || !this.selectedServerType || this.nameValidationState !== 'valid') return;
             
             this.creating = true;
+            this.loading = true;
+            this.loadingMessage = `Creating VPS "${this.serverName}"...`;
+            
             try {
                 const response = await fetch('/vps/create', {
                     method: 'POST',
@@ -303,6 +306,11 @@ export function vpsCreationWizard() {
                 const data = await response.json();
                 
                 if (response.ok) {
+                    this.loadingMessage = 'VPS created successfully! Redirecting...';
+                    
+                    // Brief pause to show success message
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
                     await Swal.fire({
                         title: 'VPS Created Successfully!',
                         html: `
@@ -318,10 +326,12 @@ export function vpsCreationWizard() {
                     
                     window.location.href = '/vps';
                 } else {
+                    this.loading = false;
                     Swal.fire('Error', data.error || 'Failed to create VPS', 'error');
                 }
             } catch (error) {
                 console.error('Error creating VPS:', error);
+                this.loading = false;
                 Swal.fire('Error', 'Failed to create VPS', 'error');
             } finally {
                 this.creating = false;
