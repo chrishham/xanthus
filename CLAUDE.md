@@ -288,7 +288,7 @@ make build        # Creates bin/xanthus executable
 
 ## Vps investigation
 
-You can ssh to the vps at any time to investigate issues by using the @xanthus-ssh-key.pem and ssh -i xanthus-ssh-key.pem root@188.245.79.245
+You can ssh to the vps at any time to investigate issues by using the @xanthus-key.pem and ssh -i xanthus-key.pem root@91.99.236.70
 
 ## Important!!!
 

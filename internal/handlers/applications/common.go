@@ -515,9 +515,18 @@ func (p *PortForwardService) CreatePortForward(token, accountID, appID string, p
 		return nil, fmt.Errorf("failed to create Kubernetes ingress: %v", err)
 	}
 
+	// Create DNS A record for the port forward subdomain
+	if err := p.createPortForwardDNS(token, accountID, app.VPSID, portForward); err != nil {
+		// Cleanup resources if DNS creation fails
+		p.deleteKubernetesIngress(conn, app.Namespace, ingressName)
+		p.deleteKubernetesService(conn, app.Namespace, serviceName)
+		return nil, fmt.Errorf("failed to create DNS record: %v", err)
+	}
+
 	// Store port forward in KV
 	if err := p.storePortForward(token, accountID, appID, portForward); err != nil {
 		// Cleanup resources if storage fails
+		p.deletePortForwardDNS(token, portForward.Subdomain, portForward.Domain)
 		p.deleteKubernetesIngress(conn, app.Namespace, ingressName)
 		p.deleteKubernetesService(conn, app.Namespace, serviceName)
 		return nil, fmt.Errorf("failed to store port forward: %v", err)
@@ -567,6 +576,9 @@ func (p *PortForwardService) DeletePortForward(token, accountID, appID, portForw
 	// Delete Kubernetes resources
 	p.deleteKubernetesIngress(conn, app.Namespace, targetPortForward.IngressName)
 	p.deleteKubernetesService(conn, app.Namespace, targetPortForward.ServiceName)
+
+	// Delete DNS A record
+	p.deletePortForwardDNS(token, targetPortForward.Subdomain, targetPortForward.Domain)
 
 	// Update KV store
 	return p.kvService.PutValue(token, accountID, fmt.Sprintf("app:%s:port-forwards", appID), updatedPortForwards)
@@ -689,4 +701,74 @@ func (p *PortForwardService) deleteKubernetesIngress(conn *services.SSHConnectio
 	cmd := fmt.Sprintf("kubectl delete ingress --namespace %s %s --ignore-not-found=true", namespace, ingressName)
 	_, err := p.sshService.ExecuteCommand(conn, cmd)
 	return err
+}
+
+// createPortForwardDNS creates a DNS A record for the port forward subdomain
+func (p *PortForwardService) createPortForwardDNS(token, accountID, vpsID string, portForward *PortForward) error {
+	// Get VPS configuration to retrieve the public IP
+	vpsHelper := NewVPSConnectionHelper()
+	vpsConfig, err := vpsHelper.GetVPSConfigByID(token, accountID, vpsID)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS configuration: %v", err)
+	}
+
+	// Create Cloudflare DNS service
+	cfService := services.NewCloudflareService()
+
+	// Get zone ID for the domain
+	zoneID, err := cfService.GetZoneID(token, portForward.Domain)
+	if err != nil {
+		return fmt.Errorf("failed to get zone ID for domain %s: %v", portForward.Domain, err)
+	}
+
+	// Create A record for subdomain
+	recordName := fmt.Sprintf("%s.%s", portForward.Subdomain, portForward.Domain)
+	_, err = cfService.CreateDNSRecord(token, zoneID, "A", recordName, vpsConfig.PublicIPv4, true)
+	if err != nil {
+		return fmt.Errorf("failed to create DNS A record for %s: %v", recordName, err)
+	}
+
+	return nil
+}
+
+// deletePortForwardDNS deletes the DNS A record for a port forward subdomain
+func (p *PortForwardService) deletePortForwardDNS(token, subdomain, domain string) error {
+	// Create Cloudflare DNS service
+	cfService := services.NewCloudflareService()
+
+	// Get zone ID for the domain
+	zoneID, err := cfService.GetZoneID(token, domain)
+	if err != nil {
+		// Log error but don't fail the deletion - DNS cleanup is best effort
+		fmt.Printf("Warning: Failed to get zone ID for domain %s during DNS cleanup: %v\n", domain, err)
+		return nil
+	}
+
+	// Get all DNS records for the domain
+	records, err := cfService.GetDNSRecords(token, zoneID)
+	if err != nil {
+		// Log error but don't fail the deletion - DNS cleanup is best effort
+		fmt.Printf("Warning: Failed to list DNS records for domain %s during cleanup: %v\n", domain, err)
+		return nil
+	}
+
+	// Find and delete A records matching the subdomain
+	recordName := fmt.Sprintf("%s.%s", subdomain, domain)
+	for _, record := range records {
+		// Normalize record names by removing trailing dots
+		normalizedRecordName := strings.TrimSuffix(record.Name, ".")
+		normalizedTargetName := strings.TrimSuffix(recordName, ".")
+
+		if record.Type == "A" && normalizedRecordName == normalizedTargetName {
+			err := cfService.DeleteDNSRecord(token, zoneID, record.ID)
+			if err != nil {
+				// Log error but don't fail the deletion - DNS cleanup is best effort
+				fmt.Printf("Warning: Failed to delete DNS record %s during cleanup: %v\n", record.ID, err)
+			} else {
+				fmt.Printf("Successfully deleted DNS A record for %s\n", recordName)
+			}
+		}
+	}
+
+	return nil
 }
