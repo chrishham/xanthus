@@ -430,3 +430,128 @@ func (h *Handler) HandleApplicationDelete(c *gin.Context) {
 		"message": SuccessMessages.ApplicationDeleted,
 	})
 }
+
+// HandlePortForwardsList returns the list of port forwards for an application
+func (h *Handler) HandlePortForwardsList(c *gin.Context) {
+	token := c.GetString("cf_token")
+	accountID := c.GetString("account_id")
+	appID := c.Param("id")
+
+	// Get application details
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Application not found"})
+		return
+	}
+
+	if app.AppType != string(TypeCodeServer) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Port forwarding is only supported for code-server applications"})
+		return
+	}
+
+	// Get port forwards using service
+	portForwardService := NewPortForwardService()
+	portForwards, err := portForwardService.ListPortForwards(token, accountID, appID)
+	if err != nil {
+		log.Printf("Error getting port forwards: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get port forwards"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"port_forwards": portForwards,
+	})
+}
+
+// HandlePortForwardsCreate creates a new port forward for an application
+func (h *Handler) HandlePortForwardsCreate(c *gin.Context) {
+	token := c.GetString("cf_token")
+	accountID := c.GetString("account_id")
+	appID := c.Param("id")
+
+	var portForwardData struct {
+		Port      int    `json:"port"`
+		Subdomain string `json:"subdomain"`
+	}
+
+	if err := c.ShouldBindJSON(&portForwardData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
+		return
+	}
+
+	// Validate input
+	if portForwardData.Port < 1 || portForwardData.Port > 65535 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Port must be between 1 and 65535"})
+		return
+	}
+
+	if portForwardData.Subdomain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Subdomain is required"})
+		return
+	}
+
+	// Get application details
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Application not found"})
+		return
+	}
+
+	if app.AppType != string(TypeCodeServer) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Port forwarding is only supported for code-server applications"})
+		return
+	}
+
+	// Create port forward using service
+	portForwardService := NewPortForwardService()
+	portForward, err := portForwardService.CreatePortForward(token, accountID, appID, portForwardData.Port, portForwardData.Subdomain)
+	if err != nil {
+		log.Printf("Error creating port forward: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create port forward"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":      true,
+		"message":      "Port forward created successfully",
+		"port_forward": portForward,
+	})
+}
+
+// HandlePortForwardsDelete removes a port forward for an application
+func (h *Handler) HandlePortForwardsDelete(c *gin.Context) {
+	token := c.GetString("cf_token")
+	accountID := c.GetString("account_id")
+	appID := c.Param("id")
+	portForwardID := c.Param("port_id")
+
+	// Get application details
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Application not found"})
+		return
+	}
+
+	if app.AppType != string(TypeCodeServer) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Port forwarding is only supported for code-server applications"})
+		return
+	}
+
+	// Delete port forward using service
+	portForwardService := NewPortForwardService()
+	err = portForwardService.DeletePortForward(token, accountID, appID, portForwardID)
+	if err != nil {
+		log.Printf("Error deleting port forward: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete port forward"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Port forward removed successfully",
+	})
+}

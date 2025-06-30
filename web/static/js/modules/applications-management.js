@@ -12,6 +12,15 @@ export function applicationsManagement() {
         countdownInterval: null,
         countdown: 0,
         isRefreshing: false, // Prevent concurrent requests
+        
+        // Port forwarding modal state
+        portForwardingModal: {
+            show: false,
+            app: null,
+            domain: '',
+            ports: [],
+            newPort: { port: '', subdomain: '' }
+        },
 
         init() {
             // Initialize applications list
@@ -843,6 +852,119 @@ export function applicationsManagement() {
         getPredefinedAppName(appType) {
             const app = this.predefinedApps.find(a => a.id === appType);
             return app ? app.name : appType;
+        },
+
+        // Port Forwarding Functions
+        async showPortForwardingModal(app) {
+            this.portForwardingModal.app = app;
+            this.portForwardingModal.domain = this.extractDomain(app.url);
+            this.portForwardingModal.ports = [];
+            this.portForwardingModal.newPort = { port: '', subdomain: '' };
+            this.portForwardingModal.show = true;
+            
+            // Load existing port forwards
+            await this.loadPortForwards(app.id);
+        },
+
+        async loadPortForwards(appId) {
+            try {
+                const response = await fetch(`/applications/${appId}/port-forwards`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.portForwardingModal.ports = data.port_forwards || [];
+                }
+            } catch (error) {
+                console.error('Error loading port forwards:', error);
+            }
+        },
+
+        async addPortForward() {
+            const { port, subdomain } = this.portForwardingModal.newPort;
+            const appId = this.portForwardingModal.app.id;
+            
+            if (!port || !subdomain) {
+                Swal.fire('Error', 'Please fill in both port and subdomain', 'error');
+                return;
+            }
+
+            this.setLoadingState('Adding Port Forward', 'Creating service and ingress...');
+            
+            try {
+                const response = await fetch(`/applications/${appId}/port-forwards`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        port: parseInt(port),
+                        subdomain: subdomain.trim()
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    Swal.fire('Success!', `Port forward created: https://${subdomain}.${this.portForwardingModal.domain}`, 'success');
+                    this.portForwardingModal.newPort = { port: '', subdomain: '' };
+                    await this.loadPortForwards(appId);
+                } else {
+                    Swal.fire('Error', data.error || 'Failed to create port forward', 'error');
+                }
+            } catch (error) {
+                console.error('Error adding port forward:', error);
+                Swal.fire('Error', 'Failed to create port forward', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async removePortForward(portForwardId) {
+            const result = await Swal.fire({
+                title: 'Remove Port Forward?',
+                text: 'This will delete the service and ingress for this port forward.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Yes, remove it!'
+            });
+
+            if (result.isConfirmed) {
+                const appId = this.portForwardingModal.app.id;
+                this.setLoadingState('Removing Port Forward', 'Deleting service and ingress...');
+                
+                try {
+                    const response = await fetch(`/applications/${appId}/port-forwards/${portForwardId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        Swal.fire('Removed!', 'Port forward has been removed.', 'success');
+                        await this.loadPortForwards(appId);
+                    } else {
+                        Swal.fire('Error', data.error || 'Failed to remove port forward', 'error');
+                    }
+                } catch (error) {
+                    console.error('Error removing port forward:', error);
+                    Swal.fire('Error', 'Failed to remove port forward', 'error');
+                } finally {
+                    this.loading = false;
+                }
+            }
+        },
+
+        extractDomain(url) {
+            try {
+                const urlObj = new URL(url);
+                const parts = urlObj.hostname.split('.');
+                // Remove the first part (subdomain) and return the domain
+                return parts.slice(1).join('.');
+            } catch (error) {
+                console.error('Error extracting domain from URL:', url, error);
+                return '';
+            }
         }
     }
 }

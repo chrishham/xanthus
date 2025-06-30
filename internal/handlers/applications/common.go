@@ -420,3 +420,273 @@ func (p *PasswordHelper) retrieveArgoCDPasswordFromVPS(conn *services.SSHConnect
 func (p *PasswordHelper) DeletePassword(token, accountID, appID string) error {
 	return p.kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s:password", appID))
 }
+
+// PortForwardService manages port forwarding operations
+type PortForwardService struct {
+	kvService  *services.KVService
+	sshService *services.SSHService
+}
+
+// NewPortForwardService creates a new port forward service
+func NewPortForwardService() *PortForwardService {
+	return &PortForwardService{
+		kvService:  services.NewKVService(),
+		sshService: services.NewSSHService(),
+	}
+}
+
+// PortForward represents a port forwarding configuration
+type PortForward struct {
+	ID          string `json:"id"`
+	AppID       string `json:"app_id"`
+	Port        int    `json:"port"`
+	Subdomain   string `json:"subdomain"`
+	Domain      string `json:"domain"`
+	URL         string `json:"url"`
+	ServiceName string `json:"service_name"`
+	IngressName string `json:"ingress_name"`
+	CreatedAt   string `json:"created_at"`
+}
+
+// ListPortForwards retrieves all port forwards for an application
+func (p *PortForwardService) ListPortForwards(token, accountID, appID string) ([]PortForward, error) {
+	var portForwards []PortForward
+
+	// Get port forwards from KV store
+	err := p.kvService.GetValue(token, accountID, fmt.Sprintf("app:%s:port-forwards", appID), &portForwards)
+	if err != nil {
+		// Return empty list if not found
+		return []PortForward{}, nil
+	}
+
+	return portForwards, nil
+}
+
+// CreatePortForward creates a new port forward with Kubernetes service and ingress
+func (p *PortForwardService) CreatePortForward(token, accountID, appID string, port int, subdomain string) (*PortForward, error) {
+	// Get application details
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get application: %v", err)
+	}
+
+	// Extract domain from application URL
+	domain, err := p.extractDomainFromURL(app.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract domain: %v", err)
+	}
+
+	// Generate unique names
+	portForwardID := fmt.Sprintf("pf-%d", time.Now().Unix())
+	serviceName := fmt.Sprintf("%s-port-%d", app.ID, port)
+	ingressName := fmt.Sprintf("%s-port-%d-ingress", app.ID, port)
+	url := fmt.Sprintf("https://%s.%s", subdomain, domain)
+
+	// Create the port forward configuration
+	portForward := &PortForward{
+		ID:          portForwardID,
+		AppID:       appID,
+		Port:        port,
+		Subdomain:   subdomain,
+		Domain:      domain,
+		URL:         url,
+		ServiceName: serviceName,
+		IngressName: ingressName,
+		CreatedAt:   time.Now().Format(time.RFC3339),
+	}
+
+	// Get VPS connection
+	vpsHelper := NewVPSConnectionHelper()
+	conn, err := vpsHelper.GetVPSConnection(token, accountID, app.VPSID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Create Kubernetes service
+	if err := p.createKubernetesService(conn, app, portForward); err != nil {
+		return nil, fmt.Errorf("failed to create Kubernetes service: %v", err)
+	}
+
+	// Create Kubernetes ingress
+	if err := p.createKubernetesIngress(conn, app, portForward); err != nil {
+		// Cleanup service if ingress creation fails
+		p.deleteKubernetesService(conn, app.Namespace, serviceName)
+		return nil, fmt.Errorf("failed to create Kubernetes ingress: %v", err)
+	}
+
+	// Store port forward in KV
+	if err := p.storePortForward(token, accountID, appID, portForward); err != nil {
+		// Cleanup resources if storage fails
+		p.deleteKubernetesIngress(conn, app.Namespace, ingressName)
+		p.deleteKubernetesService(conn, app.Namespace, serviceName)
+		return nil, fmt.Errorf("failed to store port forward: %v", err)
+	}
+
+	return portForward, nil
+}
+
+// DeletePortForward removes a port forward and cleans up Kubernetes resources
+func (p *PortForwardService) DeletePortForward(token, accountID, appID, portForwardID string) error {
+	// Get application details
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		return fmt.Errorf("failed to get application: %v", err)
+	}
+
+	// Get existing port forwards
+	portForwards, err := p.ListPortForwards(token, accountID, appID)
+	if err != nil {
+		return fmt.Errorf("failed to get port forwards: %v", err)
+	}
+
+	// Find the port forward to delete
+	var targetPortForward *PortForward
+	var updatedPortForwards []PortForward
+
+	for _, pf := range portForwards {
+		if pf.ID == portForwardID {
+			targetPortForward = &pf
+		} else {
+			updatedPortForwards = append(updatedPortForwards, pf)
+		}
+	}
+
+	if targetPortForward == nil {
+		return fmt.Errorf("port forward not found")
+	}
+
+	// Get VPS connection
+	vpsHelper := NewVPSConnectionHelper()
+	conn, err := vpsHelper.GetVPSConnection(token, accountID, app.VPSID)
+	if err != nil {
+		return fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Delete Kubernetes resources
+	p.deleteKubernetesIngress(conn, app.Namespace, targetPortForward.IngressName)
+	p.deleteKubernetesService(conn, app.Namespace, targetPortForward.ServiceName)
+
+	// Update KV store
+	return p.kvService.PutValue(token, accountID, fmt.Sprintf("app:%s:port-forwards", appID), updatedPortForwards)
+}
+
+// extractDomainFromURL extracts the domain from a URL
+func (p *PortForwardService) extractDomainFromURL(urlStr string) (string, error) {
+	// Simple domain extraction - assumes URL format is https://subdomain.domain.tld
+	if !strings.HasPrefix(urlStr, "https://") {
+		return "", fmt.Errorf("invalid URL format")
+	}
+
+	hostname := strings.TrimPrefix(urlStr, "https://")
+	parts := strings.Split(hostname, ".")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("invalid hostname format")
+	}
+
+	// Return domain without the first subdomain part
+	return strings.Join(parts[1:], "."), nil
+}
+
+// storePortForward stores a port forward in the KV store
+func (p *PortForwardService) storePortForward(token, accountID, appID string, portForward *PortForward) error {
+	// Get existing port forwards
+	existingPortForwards, _ := p.ListPortForwards(token, accountID, appID)
+
+	// Add new port forward
+	existingPortForwards = append(existingPortForwards, *portForward)
+
+	// Store updated list
+	return p.kvService.PutValue(token, accountID, fmt.Sprintf("app:%s:port-forwards", appID), existingPortForwards)
+}
+
+// createKubernetesService creates a Kubernetes service for port forwarding
+func (p *PortForwardService) createKubernetesService(conn *services.SSHConnection, app *models.Application, portForward *PortForward) error {
+	// Generate release name (same as used in deployment)
+	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+
+	serviceYAML := fmt.Sprintf(`apiVersion: v1
+kind: Service
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    app: %s
+    port-forward: "true"
+spec:
+  selector:
+    app.kubernetes.io/name: %s
+    app.kubernetes.io/instance: %s
+  ports:
+  - name: port-%d
+    port: 80
+    targetPort: %d
+    protocol: TCP
+  type: ClusterIP
+`, portForward.ServiceName, app.Namespace, portForward.ServiceName, app.AppType, releaseName, portForward.Port, portForward.Port)
+
+	// Apply the service using kubectl
+	cmd := fmt.Sprintf("cat <<'EOF' | kubectl apply -f -\n%s\nEOF", serviceYAML)
+	result, err := p.sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create service: %v, output: %s", err, result.Output)
+	}
+
+	return nil
+}
+
+// createKubernetesIngress creates a Kubernetes ingress for port forwarding
+func (p *PortForwardService) createKubernetesIngress(conn *services.SSHConnection, app *models.Application, portForward *PortForward) error {
+	ingressYAML := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    app: %s
+    port-forward: "true"
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  tls:
+  - secretName: %s-tls
+    hosts:
+    - %s.%s
+  rules:
+  - host: %s.%s
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: %s
+            port:
+              number: 80
+`, portForward.IngressName, app.Namespace, portForward.ServiceName, portForward.Domain, portForward.Subdomain, portForward.Domain, portForward.Subdomain, portForward.Domain, portForward.ServiceName)
+
+	// Apply the ingress using kubectl
+	cmd := fmt.Sprintf("cat <<'EOF' | kubectl apply -f -\n%s\nEOF", ingressYAML)
+	result, err := p.sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		return fmt.Errorf("failed to create ingress: %v, output: %s", err, result.Output)
+	}
+
+	return nil
+}
+
+// deleteKubernetesService deletes a Kubernetes service
+func (p *PortForwardService) deleteKubernetesService(conn *services.SSHConnection, namespace, serviceName string) error {
+	cmd := fmt.Sprintf("kubectl delete service --namespace %s %s --ignore-not-found=true", namespace, serviceName)
+	_, err := p.sshService.ExecuteCommand(conn, cmd)
+	return err
+}
+
+// deleteKubernetesIngress deletes a Kubernetes ingress
+func (p *PortForwardService) deleteKubernetesIngress(conn *services.SSHConnection, namespace, ingressName string) error {
+	cmd := fmt.Sprintf("kubectl delete ingress --namespace %s %s --ignore-not-found=true", namespace, ingressName)
+	_, err := p.sshService.ExecuteCommand(conn, cmd)
+	return err
+}

@@ -109,6 +109,9 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		apps.POST("/:id/upgrade", config.AppsHandler.HandleApplicationUpgrade)
 		apps.GET("/:id/password", config.AppsHandler.HandleApplicationPasswordGet)
 		apps.POST("/:id/password", config.AppsHandler.HandleApplicationPasswordChange)
+		apps.GET("/:id/port-forwards", config.AppsHandler.HandlePortForwardsList)
+		apps.POST("/:id/port-forwards", config.AppsHandler.HandlePortForwardsCreate)
+		apps.DELETE("/:id/port-forwards/:port_id", config.AppsHandler.HandlePortForwardsDelete)
 		apps.DELETE("/:id", config.AppsHandler.HandleApplicationDelete)
 	}
 }
