@@ -132,7 +132,8 @@ type Application struct {
 	VPSName     string `json:"vps_name"`
 	Namespace   string `json:"namespace"`
 	Status      string `json:"status"`
-	URL         string `json:"url"` // Full URL to access the application
+	ErrorMsg    string `json:"error_msg,omitempty"` // Error message for failed deployments
+	URL         string `json:"url"`                 // Full URL to access the application
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 	// Legacy fields for backward compatibility

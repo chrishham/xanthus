@@ -1,0 +1,6 @@
+apiVersion: v2
+name: xanthus-code-server
+description: Xanthus Code-Server deployment with persistent home and setup script
+type: application
+version: 1.0.0
+appVersion: "4.101.1"

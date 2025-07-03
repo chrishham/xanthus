@@ -1,0 +1,29 @@
+# Use original code-server image
+image:
+  repository: codercom/code-server
+  tag: "4.101.1"
+  pullPolicy: IfNotPresent
+
+# Persistent storage for user home
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""  # Use default storage class
+  
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Setup script configuration
+setupScript:
+  enabled: true
+  mountPath: /home/coder/setup-dev-environment.sh
+  
+# VS Code settings
+vscodeSettings:
+  enabled: true
+  mountPath: /home/coder/.local/share/code-server/User/settings.json
+
+# Code-server configuration
+password: ""  # Will be generated

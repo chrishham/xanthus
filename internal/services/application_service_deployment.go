@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -60,7 +61,14 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 	// Handle different chart repository types based on HelmChart configuration
 	helmConfig := predefinedApp.HelmChart
 
-	if strings.Contains(helmConfig.Repository, "github.com") {
+	if predefinedApp.ID == "code-server" && helmConfig.Repository == "local" {
+		// Use local chart for code-server
+		chartPath := "/tmp/xanthus-code-server"
+		if err := s.copyLocalChartToVPS(conn, sshService, chartPath); err != nil {
+			return fmt.Errorf("failed to copy local chart to VPS: %v", err)
+		}
+		chartName = chartPath
+	} else if strings.Contains(helmConfig.Repository, "github.com") {
 		// Clone GitHub repository for the chart
 		repoDir := fmt.Sprintf("/tmp/%s-chart", predefinedApp.ID)
 		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, helmConfig.Repository, repoDir))
@@ -102,6 +110,10 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 
 	result, err := sshService.ExecuteCommand(conn, installCmd)
 	if err != nil {
+		// Check for resource exhaustion and clean up if detected
+		if deploymentErr := s.handleDeploymentFailure(conn, sshService, releaseName, namespace, result.Output, err); deploymentErr != nil {
+			return deploymentErr
+		}
 		return fmt.Errorf("helm install failed: %v, output: %s", err, result.Output)
 	}
 
@@ -312,6 +324,175 @@ func (s *SimpleApplicationService) storeEncryptedPassword(token, accountID, appI
 	})
 	if err != nil {
 		return fmt.Errorf("failed to store encrypted password: %v", err)
+	}
+
+	return nil
+}
+
+// copyLocalChartToVPS copies the local Helm chart to the VPS
+func (s *SimpleApplicationService) copyLocalChartToVPS(conn *SSHConnection, sshService *SSHService, remotePath string) error {
+	localChartPath := "charts/xanthus-code-server"
+
+	// Create remote directory
+	_, err := sshService.ExecuteCommand(conn, fmt.Sprintf("mkdir -p %s", remotePath))
+	if err != nil {
+		return fmt.Errorf("failed to create remote chart directory: %v", err)
+	}
+
+	// Copy Chart.yaml
+	if err := s.copyFileToVPS(conn, sshService, fmt.Sprintf("%s/Chart.yaml", localChartPath), fmt.Sprintf("%s/Chart.yaml", remotePath)); err != nil {
+		return fmt.Errorf("failed to copy Chart.yaml: %v", err)
+	}
+
+	// Copy values.yaml
+	if err := s.copyFileToVPS(conn, sshService, fmt.Sprintf("%s/values.yaml", localChartPath), fmt.Sprintf("%s/values.yaml", remotePath)); err != nil {
+		return fmt.Errorf("failed to copy values.yaml: %v", err)
+	}
+
+	// Create templates directory
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("mkdir -p %s/templates", remotePath))
+	if err != nil {
+		return fmt.Errorf("failed to create templates directory: %v", err)
+	}
+
+	// Copy all template files
+	templateFiles := []string{
+		"_helpers.tpl",
+		"deployment.yaml",
+		"service.yaml",
+		"pvc.yaml",
+		"configmap.yaml",
+	}
+
+	for _, file := range templateFiles {
+		localFile := fmt.Sprintf("%s/templates/%s", localChartPath, file)
+		remoteFile := fmt.Sprintf("%s/templates/%s", remotePath, file)
+		if err := s.copyFileToVPS(conn, sshService, localFile, remoteFile); err != nil {
+			return fmt.Errorf("failed to copy template %s: %v", file, err)
+		}
+	}
+
+	return nil
+}
+
+// copyFileToVPS copies a local file to the VPS via SSH
+func (s *SimpleApplicationService) copyFileToVPS(conn *SSHConnection, sshService *SSHService, localPath, remotePath string) error {
+	// Read local file
+	content, err := os.ReadFile(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to read local file %s: %v", localPath, err)
+	}
+
+	// Write to remote file using cat with heredoc
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", remotePath, string(content)))
+	if err != nil {
+		return fmt.Errorf("failed to write remote file %s: %v", remotePath, err)
+	}
+
+	return nil
+}
+
+// handleDeploymentFailure detects resource exhaustion and automatically cleans up failed deployments
+func (s *SimpleApplicationService) handleDeploymentFailure(conn *SSHConnection, sshService *SSHService, releaseName, namespace, output string, originalErr error) error {
+	// Check for resource exhaustion patterns
+	resourceExhaustion := s.isResourceExhaustion(output)
+	if !resourceExhaustion {
+		// Not a resource issue, return original error
+		return nil
+	}
+
+	fmt.Printf("🚨 Resource exhaustion detected for deployment %s. Initiating automatic cleanup...\n", releaseName)
+
+	// Perform cleanup
+	cleanupErr := s.cleanupFailedDeployment(conn, sshService, releaseName, namespace)
+	if cleanupErr != nil {
+		fmt.Printf("❌ Warning: Failed to clean up deployment %s: %v\n", releaseName, cleanupErr)
+	} else {
+		fmt.Printf("✅ Successfully cleaned up failed deployment %s\n", releaseName)
+	}
+
+	// Return user-friendly error message
+	return fmt.Errorf("deployment failed due to insufficient resources on VPS. " +
+		"Current VPS has reached CPU/memory capacity limits. " +
+		"Please consider: 1) Upgrading VPS resources, 2) Removing unused applications, or 3) Optimizing resource allocation. " +
+		"The failed deployment has been automatically cleaned up")
+}
+
+// isResourceExhaustion checks if the error output indicates resource exhaustion
+func (s *SimpleApplicationService) isResourceExhaustion(output string) bool {
+	resourcePatterns := []string{
+		"Insufficient cpu",
+		"Insufficient memory",
+		"nodes are available",
+		"preemption: 0/1 nodes are available",
+		"No preemption victims found",
+		"pod didn't trigger scale-up",
+		"Insufficient ephemeral-storage",
+		"Too many pods",
+	}
+
+	outputLower := strings.ToLower(output)
+	for _, pattern := range resourcePatterns {
+		if strings.Contains(outputLower, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+	return false
+}
+
+// cleanupFailedDeployment removes all resources associated with a failed deployment
+func (s *SimpleApplicationService) cleanupFailedDeployment(conn *SSHConnection, sshService *SSHService, releaseName, namespace string) error {
+	var cleanupErrors []string
+
+	// 1. Uninstall Helm release (if it exists)
+	fmt.Printf("🧹 Cleaning up Helm release %s...\n", releaseName)
+	_, err := sshService.ExecuteCommand(conn, fmt.Sprintf("helm uninstall %s -n %s", releaseName, namespace))
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to uninstall Helm release: %v", err))
+	}
+
+	// 2. Delete PVC (if it exists)
+	fmt.Printf("🧹 Cleaning up PVC %s...\n", releaseName)
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl delete pvc %s -n %s --ignore-not-found=true", releaseName, namespace))
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete PVC: %v", err))
+	}
+
+	// 3. Delete secrets (if they exist)
+	fmt.Printf("🧹 Cleaning up secrets for %s...\n", releaseName)
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl delete secret %s -n %s --ignore-not-found=true", releaseName, namespace))
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete secret: %v", err))
+	}
+
+	// 4. Delete configmaps (if they exist)
+	fmt.Printf("🧹 Cleaning up configmaps for %s...\n", releaseName)
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl delete configmap %s-setup-script -n %s --ignore-not-found=true", releaseName, namespace))
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete setup-script configmap: %v", err))
+	}
+
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl delete configmap %s-vscode-settings -n %s --ignore-not-found=true", releaseName, namespace))
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete vscode-settings configmap: %v", err))
+	}
+
+	// 5. Delete any remaining pods (force delete if necessary)
+	fmt.Printf("🧹 Cleaning up remaining pods for %s...\n", releaseName)
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl delete pods -l app.kubernetes.io/instance=%s -n %s --ignore-not-found=true --force --grace-period=0", releaseName, namespace))
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete pods: %v", err))
+	}
+
+	// 6. Clean up temporary files
+	fmt.Printf("🧹 Cleaning up temporary files...\n")
+	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -f /tmp/%s-values.yaml", releaseName))
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete values file: %v", err))
+	}
+
+	if len(cleanupErrors) > 0 {
+		return fmt.Errorf("cleanup completed with errors: %s", strings.Join(cleanupErrors, "; "))
 	}
 
 	return nil

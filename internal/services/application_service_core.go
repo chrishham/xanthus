@@ -189,9 +189,11 @@ func (s *SimpleApplicationService) CreateApplication(token, accountID string, ap
 	if err != nil {
 		fmt.Printf("Deployment failed for %s: %v\n", appID, err)
 		app.Status = "Failed"
+		app.ErrorMsg = err.Error() // Store the detailed error message including resource exhaustion info
 	} else {
 		fmt.Printf("Deployment successful for %s\n", appID)
 		app.Status = "Running"
+		app.ErrorMsg = "" // Clear any previous error messages
 	}
 
 	// Update application status
