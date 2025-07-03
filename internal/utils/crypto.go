@@ -8,6 +8,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math/big"
+	"strings"
+
+	"gopkg.in/yaml.v2"
 )
 
 // EncryptData encrypts data using AES-256-GCM with a key derived from the CF token
@@ -83,4 +87,34 @@ func DecryptData(encryptedData, token string) (string, error) {
 // Base64Encode encodes a string to base64
 func Base64Encode(data string) string {
 	return base64.StdEncoding.EncodeToString([]byte(data))
+}
+
+// GenerateSecurePassword generates a cryptographically secure random password
+func GenerateSecurePassword(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+
+	password := make([]byte, length)
+	charsetLen := big.NewInt(int64(len(charset)))
+
+	for i := range password {
+		randomIndex, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			// Fallback to a simpler character if crypto/rand fails
+			password[i] = charset[i%len(charset)]
+		} else {
+			password[i] = charset[randomIndex.Int64()]
+		}
+	}
+
+	return string(password)
+}
+
+// ConvertToYAML converts a map to YAML string
+func ConvertToYAML(data map[string]interface{}) (string, error) {
+	yamlBytes, err := yaml.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal to YAML: %v", err)
+	}
+
+	return strings.TrimSpace(string(yamlBytes)), nil
 }

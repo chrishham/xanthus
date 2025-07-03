@@ -22,7 +22,7 @@ func main() {
 		log.Fatal("Could not find an available port")
 	}
 
-	fmt.Printf("🚀 Xanthus is starting on http://localhost:%s\n", port)
+	fmt.Printf("🚀 Xanthus v2.0 (with shared ConfigMap support) is starting on http://localhost:%s\n", port)
 
 	// Initialize Gin
 	gin.SetMode(gin.ReleaseMode)

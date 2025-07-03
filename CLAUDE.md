@@ -290,6 +290,10 @@ make build        # Creates bin/xanthus executable
 
 You can ssh to the vps at any time to investigate issues by using the @xanthus-key.pem and ssh -i xanthus-key.pem root@91.99.236.70
 
+You can login to the app with the CLOUDFARE_API_TOKEN found at .env
+
+Always use instructions at @logic/curl-commands.md to interact with the app, check changes and iterate.
+
 ## Important!!!
 
 All *.go files shouldn't exceed the 500 lines limit. If you encounter such a case please tell me and suggest a refactor plan.

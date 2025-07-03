@@ -11,16 +11,25 @@ import (
 )
 
 // ApplicationDeploymentService handles application deployment operations
-type ApplicationDeploymentService struct{}
+type ApplicationDeploymentService struct {
+	helmService *HelmService
+	sshService  *SSHService
+	kvService   *KVService
+}
 
 // NewApplicationDeploymentService creates a new ApplicationDeploymentService
 func NewApplicationDeploymentService() *ApplicationDeploymentService {
-	return &ApplicationDeploymentService{}
+	return &ApplicationDeploymentService{
+		helmService: NewHelmService(),
+		sshService:  NewSSHService(),
+		kvService:   NewKVService(),
+	}
 }
 
 // DeployApplication deploys an application using Helm and appropriate handlers
 func (ads *ApplicationDeploymentService) DeployApplication(token, accountID string, appData interface{}, predefinedApp *models.PredefinedApplication, appID string) error {
-	log.Printf("Deploying application %s with type %s", appID, predefinedApp.ID)
+	log.Printf("🚀 CLAUDE DEBUG: DeployApplication called for %s with type %s", appID, predefinedApp.ID)
+	log.Printf("🚀 CLAUDE DEBUG: Helm config: %+v", predefinedApp.HelmChart)
 
 	// Convert appData to map for easier access
 	appDataMap, ok := appData.(map[string]interface{})
@@ -28,8 +37,8 @@ func (ads *ApplicationDeploymentService) DeployApplication(token, accountID stri
 		return fmt.Errorf("invalid application data format")
 	}
 
-	kvService := NewKVService()
-	sshService := NewSSHService()
+	kvService := ads.kvService
+	sshService := ads.sshService
 
 	subdomain := appDataMap["subdomain"].(string)
 	domain := appDataMap["domain"].(string)
@@ -71,6 +80,109 @@ func (ads *ApplicationDeploymentService) DeployApplication(token, accountID stri
 		return fmt.Errorf("failed to create namespace: %v", err)
 	}
 
+	// Deploy based on application type and repository configuration
+	var deployErr error
+	helmConfig := predefinedApp.HelmChart
+
+	log.Printf("DEBUG: Deployment decision - App ID: %s, Repository: '%s'", predefinedApp.ID, helmConfig.Repository)
+
+	if predefinedApp.ID == "code-server" && helmConfig.Repository == "local" {
+		log.Printf("DEBUG: Using LOCAL CHART for code-server")
+		deployErr = ads.deployCodeServerWithLocalChart(conn, predefinedApp, releaseName, namespace, subdomain, domain, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	} else {
+		log.Printf("DEBUG: Using EXTERNAL CHART - App: %s, Repo: %s", predefinedApp.ID, helmConfig.Repository)
+		deployErr = ads.deployWithExternalChart(conn, predefinedApp, releaseName, namespace, subdomain, domain)
+	}
+
+	if deployErr != nil {
+		return deployErr
+	}
+
+	// Retrieve and store password for applications that generate them
+	if err := ads.retrieveApplicationPassword(token, accountID, predefinedApp.ID, appID, vpsID, releaseName, namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey); err != nil {
+		// Log the error but don't fail the deployment since the app is successfully deployed
+		log.Printf("Warning: Failed to retrieve application password: %v", err)
+	}
+
+	return nil
+}
+
+// deployCodeServerWithLocalChart deploys code-server using the local Helm chart
+func (ads *ApplicationDeploymentService) deployCodeServerWithLocalChart(conn *SSHConnection, predefinedApp *models.PredefinedApplication, releaseName, namespace, subdomain, domain, vpsIP, sshUser, privateKey string) error {
+	// Get latest version
+	versionService := NewDefaultVersionService()
+	version, err := versionService.GetLatestVersion(predefinedApp.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get latest version: %v", err)
+	}
+
+	// Generate password
+	password := utils.GenerateSecurePassword(20)
+
+	// Prepare values for local chart
+	values := map[string]interface{}{
+		"image": map[string]interface{}{
+			"repository": "codercom/code-server",
+			"tag":        version,
+		},
+		"password": password,
+		"persistence": map[string]interface{}{
+			"enabled": true,
+			"size":    "10Gi",
+		},
+		"setupScript": map[string]interface{}{
+			"enabled": true,
+		},
+		"vscodeSettings": map[string]interface{}{
+			"enabled": true,
+		},
+	}
+
+	// Copy local chart to VPS
+	chartPath := "/tmp/xanthus-code-server"
+	if err := ads.copyLocalChartToVPS(conn, chartPath); err != nil {
+		return fmt.Errorf("failed to copy local chart to VPS: %v", err)
+	}
+
+	// Write values file
+	valuesPath := fmt.Sprintf("/tmp/%s-values.yaml", releaseName)
+	if err := ads.writeValuesFile(conn, valuesPath, values); err != nil {
+		return fmt.Errorf("failed to write values file: %v", err)
+	}
+
+	// Install using Helm (first check if release exists)
+	checkCmd := fmt.Sprintf("helm list -n %s | grep %s", namespace, releaseName)
+	result, err := ads.sshService.ExecuteCommand(conn, checkCmd)
+
+	if err != nil || strings.TrimSpace(result.Output) == "" {
+		// Release doesn't exist, install it
+		return ads.helmService.InstallChart(
+			vpsIP,
+			sshUser,
+			privateKey,
+			releaseName,
+			chartPath,
+			version,
+			namespace,
+			valuesPath,
+		)
+	} else {
+		// Release exists, upgrade it
+		return ads.helmService.UpgradeChart(
+			vpsIP,
+			sshUser,
+			privateKey,
+			releaseName,
+			chartPath,
+			version,
+			namespace,
+			valuesPath,
+		)
+	}
+}
+
+// deployWithExternalChart deploys applications using external charts (ArgoCD, etc.)
+func (ads *ApplicationDeploymentService) deployWithExternalChart(conn *SSHConnection, predefinedApp *models.PredefinedApplication, releaseName, namespace, subdomain, domain string) error {
 	var chartName string
 
 	// Handle different chart repository types based on HelmChart configuration
@@ -79,7 +191,7 @@ func (ads *ApplicationDeploymentService) DeployApplication(token, accountID stri
 	if strings.Contains(helmConfig.Repository, "github.com") {
 		// Clone GitHub repository for the chart
 		repoDir := fmt.Sprintf("/tmp/%s-chart", predefinedApp.ID)
-		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, helmConfig.Repository, repoDir))
+		_, err := ads.sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, helmConfig.Repository, repoDir))
 		if err != nil {
 			return fmt.Errorf("failed to clone chart repository: %v", err)
 		}
@@ -87,13 +199,13 @@ func (ads *ApplicationDeploymentService) DeployApplication(token, accountID stri
 	} else {
 		// Add Helm repository
 		repoName := predefinedApp.ID
-		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo add %s %s", repoName, helmConfig.Repository))
+		_, err := ads.sshService.ExecuteCommand(conn, fmt.Sprintf("helm repo add %s %s", repoName, helmConfig.Repository))
 		if err != nil {
 			return fmt.Errorf("failed to add Helm repository: %v", err)
 		}
 
 		// Update Helm repositories
-		_, err = sshService.ExecuteCommand(conn, "helm repo update")
+		_, err = ads.sshService.ExecuteCommand(conn, "helm repo update")
 		if err != nil {
 			return fmt.Errorf("failed to update Helm repositories: %v", err)
 		}
@@ -107,24 +219,105 @@ func (ads *ApplicationDeploymentService) DeployApplication(token, accountID stri
 	}
 
 	valuesPath := fmt.Sprintf("/tmp/%s-values.yaml", releaseName)
-	_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", valuesPath, valuesContent))
+	_, err = ads.sshService.ExecuteCommand(conn, fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", valuesPath, valuesContent))
 	if err != nil {
 		return fmt.Errorf("failed to upload values file: %v", err)
+	}
+
+	// Create ConfigMaps for code-server applications before Helm deployment
+	if predefinedApp.ID == "code-server" {
+		if err := ads.createCodeServerConfigMaps(conn, releaseName, namespace); err != nil {
+			return fmt.Errorf("failed to create code-server ConfigMaps: %v", err)
+		}
 	}
 
 	// Install via Helm
 	installCmd := fmt.Sprintf("helm install %s %s --namespace %s --values %s --wait --timeout 10m",
 		releaseName, chartName, namespace, valuesPath)
 
-	result, err := sshService.ExecuteCommand(conn, installCmd)
+	result, err := ads.sshService.ExecuteCommand(conn, installCmd)
 	if err != nil {
 		return fmt.Errorf("helm install failed: %v, output: %s", err, result.Output)
 	}
 
-	// Retrieve and store password for applications that generate them
-	if err := ads.retrieveApplicationPassword(token, accountID, predefinedApp.ID, appID, vpsID, releaseName, namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey); err != nil {
-		// Log the error but don't fail the deployment since the app is successfully deployed
-		log.Printf("Warning: Failed to retrieve application password: %v", err)
+	return nil
+}
+
+// writeValuesFile writes a values map to a YAML file on the remote server
+func (ads *ApplicationDeploymentService) writeValuesFile(conn *SSHConnection, filePath string, values map[string]interface{}) error {
+	// Convert values to YAML
+	yamlContent, err := utils.ConvertToYAML(values)
+	if err != nil {
+		return fmt.Errorf("failed to convert values to YAML: %v", err)
+	}
+
+	// Write to remote file
+	_, err = ads.sshService.ExecuteCommand(conn, fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", filePath, yamlContent))
+	if err != nil {
+		return fmt.Errorf("failed to write values file: %v", err)
+	}
+
+	return nil
+}
+
+// copyLocalChartToVPS copies the local Helm chart to the VPS
+func (ads *ApplicationDeploymentService) copyLocalChartToVPS(conn *SSHConnection, remotePath string) error {
+	localChartPath := "charts/xanthus-code-server"
+
+	// Create remote directory
+	_, err := ads.sshService.ExecuteCommand(conn, fmt.Sprintf("mkdir -p %s", remotePath))
+	if err != nil {
+		return fmt.Errorf("failed to create remote chart directory: %v", err)
+	}
+
+	// Copy Chart.yaml
+	if err := ads.copyFileToVPS(conn, fmt.Sprintf("%s/Chart.yaml", localChartPath), fmt.Sprintf("%s/Chart.yaml", remotePath)); err != nil {
+		return fmt.Errorf("failed to copy Chart.yaml: %v", err)
+	}
+
+	// Copy values.yaml
+	if err := ads.copyFileToVPS(conn, fmt.Sprintf("%s/values.yaml", localChartPath), fmt.Sprintf("%s/values.yaml", remotePath)); err != nil {
+		return fmt.Errorf("failed to copy values.yaml: %v", err)
+	}
+
+	// Create templates directory
+	_, err = ads.sshService.ExecuteCommand(conn, fmt.Sprintf("mkdir -p %s/templates", remotePath))
+	if err != nil {
+		return fmt.Errorf("failed to create templates directory: %v", err)
+	}
+
+	// Copy all template files
+	templateFiles := []string{
+		"_helpers.tpl",
+		"deployment.yaml",
+		"service.yaml",
+		"pvc.yaml",
+		"configmap.yaml",
+	}
+
+	for _, file := range templateFiles {
+		localFile := fmt.Sprintf("%s/templates/%s", localChartPath, file)
+		remoteFile := fmt.Sprintf("%s/templates/%s", remotePath, file)
+		if err := ads.copyFileToVPS(conn, localFile, remoteFile); err != nil {
+			return fmt.Errorf("failed to copy template %s: %v", file, err)
+		}
+	}
+
+	return nil
+}
+
+// copyFileToVPS copies a local file to the VPS via SSH
+func (ads *ApplicationDeploymentService) copyFileToVPS(conn *SSHConnection, localPath, remotePath string) error {
+	// Read local file
+	content, err := os.ReadFile(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to read local file %s: %v", localPath, err)
+	}
+
+	// Write to remote file using cat with heredoc
+	_, err = ads.sshService.ExecuteCommand(conn, fmt.Sprintf("cat > %s << 'EOF'\n%s\nEOF", remotePath, string(content)))
+	if err != nil {
+		return fmt.Errorf("failed to write remote file %s: %v", remotePath, err)
 	}
 
 	return nil
@@ -309,6 +502,84 @@ func (ads *ApplicationDeploymentService) generateValuesFromTemplate(predefinedAp
 		content = strings.ReplaceAll(content, fmt.Sprintf("{{%s}}", placeholder), value)
 	}
 
+	// For code-server applications, override configuration to use shared ConfigMap and external chart format
+	if predefinedApp.ID == "code-server" {
+		content += `
+
+# External chart overrides - use extraConfigmapMounts for ConfigMaps
+extraConfigmapMounts:
+  - name: vscode-settings
+    mountPath: /tmp/vscode-settings
+    configMap: "` + releaseName + `-vscode-settings"
+    readOnly: true
+  - name: setup-script
+    mountPath: /tmp/setup-script
+    configMap: "code-server-setup-script"
+    readOnly: true
+
+# External chart overrides - use extraInitContainers
+extraInitContainers: |
+  - name: setup-environment
+    image: ubuntu:22.04
+    imagePullPolicy: IfNotPresent
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        echo "🚀 Starting basic code-server environment setup..."
+        
+        # Create user if it doesn't exist and setup home directory
+        if ! id -u coder > /dev/null 2>&1; then
+          useradd -m -u 1000 -s /bin/bash coder
+        fi
+        
+        # Copy development setup script to user home directory
+        if [ -f /tmp/setup-script/setup-dev-environment.sh ]; then
+          echo "📝 Copying development setup script..."
+          cp /tmp/setup-script/setup-dev-environment.sh /home/coder/setup-dev-environment.sh
+          chmod +x /home/coder/setup-dev-environment.sh
+        fi
+        
+        # Setup basic environment in bashrc
+        cat >> /home/coder/.bashrc << 'BASHRC_EOF'
+        # Xanthus Code-Server Environment
+        echo "🎉 Welcome to your Xanthus Code-Server environment!"
+        echo "📝 To install additional development tools, run:"
+        echo "    ./setup-dev-environment.sh"
+        echo ""
+        BASHRC_EOF
+        
+        # Create basic directories
+        mkdir -p /home/coder/workspace /home/coder/.local/share/code-server/User
+        
+        # Setup VS Code settings if available
+        if [ -d /tmp/vscode-settings ]; then
+          echo "📝 Copying VS Code settings..."
+          cp -f /tmp/vscode-settings/settings.json /home/coder/.local/share/code-server/User/settings.json 2>/dev/null || echo "No settings.json found, skipping..."
+          cp -f /tmp/vscode-settings/keybindings.json /home/coder/.local/share/code-server/User/keybindings.json 2>/dev/null || echo "No keybindings.json found, skipping..."
+        fi
+        
+        # Fix all permissions
+        echo "🔒 Fixing permissions..."
+        chown -R 1000:1000 /home/coder
+        
+        echo "🎉 Basic environment setup complete!"
+        echo "📝 Development tools can be installed by running: ./setup-dev-environment.sh"
+    securityContext:
+      runAsUser: 0
+    volumeMounts:
+      - name: data
+        mountPath: /home/coder
+      - name: vscode-settings
+        mountPath: /tmp/vscode-settings
+        readOnly: true
+      - name: setup-script
+        mountPath: /tmp/setup-script
+        readOnly: true
+`
+	}
+
 	return content, nil
 }
 
@@ -394,6 +665,72 @@ func (ads *ApplicationDeploymentService) storeEncryptedPassword(token, accountID
 	})
 	if err != nil {
 		return fmt.Errorf("failed to store encrypted password: %v", err)
+	}
+
+	return nil
+}
+
+// createCodeServerConfigMaps creates ConfigMaps for code-server applications
+func (ads *ApplicationDeploymentService) createCodeServerConfigMaps(conn *SSHConnection, releaseName, namespace string) error {
+	sshService := NewSSHService()
+
+	// Create VS Code settings ConfigMap (per-instance)
+	settingsJSON := `{
+    "workbench.colorTheme": "Default Dark+",
+    "workbench.iconTheme": "vs-seti",
+    "editor.fontSize": 14,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": true,
+    "editor.renderWhitespace": "selection",
+    "editor.rulers": [80, 120],
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    "explorer.confirmDelete": false,
+    "explorer.confirmDragAndDrop": false,
+    "git.enableSmartCommit": true,
+    "git.confirmSync": false,
+    "terminal.integrated.fontSize": 14,
+    "workbench.startupEditor": "newUntitledFile"
+}`
+
+	settingsConfigMapName := fmt.Sprintf("%s-vscode-settings", releaseName)
+	createSettingsConfigMapCmd := fmt.Sprintf(`kubectl create configmap %s -n %s --from-literal=settings.json='%s' --dry-run=client -o yaml | kubectl apply -f -`,
+		settingsConfigMapName, namespace, settingsJSON)
+
+	_, err := sshService.ExecuteCommand(conn, createSettingsConfigMapCmd)
+	if err != nil {
+		return fmt.Errorf("failed to create VS Code settings ConfigMap: %v", err)
+	}
+
+	log.Printf("Created VS Code settings ConfigMap: %s in namespace %s", settingsConfigMapName, namespace)
+
+	// Create shared setup script ConfigMap (once per namespace)
+	sharedScriptConfigMapName := "code-server-setup-script"
+
+	// Check if shared ConfigMap already exists
+	checkConfigMapCmd := fmt.Sprintf("kubectl get configmap %s -n %s", sharedScriptConfigMapName, namespace)
+	_, err = sshService.ExecuteCommand(conn, checkConfigMapCmd)
+
+	if err != nil {
+		// ConfigMap doesn't exist, create it
+		setupScriptPath := "/home/coder/Projects/xanthus/internal/templates/applications/setup-dev-environment.sh"
+		setupScriptContent, err := os.ReadFile(setupScriptPath)
+		if err != nil {
+			return fmt.Errorf("failed to read setup script template: %v", err)
+		}
+
+		createScriptConfigMapCmd := fmt.Sprintf(`kubectl create configmap %s -n %s --from-literal=setup-dev-environment.sh=%s`,
+			sharedScriptConfigMapName, namespace, string(setupScriptContent))
+
+		_, err = sshService.ExecuteCommand(conn, createScriptConfigMapCmd)
+		if err != nil {
+			return fmt.Errorf("failed to create shared setup script ConfigMap: %v", err)
+		}
+
+		log.Printf("Created shared setup script ConfigMap: %s in namespace %s", sharedScriptConfigMapName, namespace)
+	} else {
+		log.Printf("Shared setup script ConfigMap already exists: %s in namespace %s", sharedScriptConfigMapName, namespace)
 	}
 
 	return nil

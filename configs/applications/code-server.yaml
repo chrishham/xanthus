@@ -10,13 +10,13 @@ version_source:
   pattern: "v*"
 
 helm_chart:
-  repository: https://github.com/coder/code-server
-  chart: ci/helm-chart
-  version: main
+  repository: local
+  chart: xanthus-code-server
+  version: 1.0.0
   namespace: code-server
   values_template: code-server.yaml
   placeholders:
-    VERSION: "{{.Version}}"
+    APPLICATION_VERSION: "{{.Version}}"
 
 default_port: 8080
 
@@ -31,7 +31,9 @@ features:
   - Terminal access
   - Extension support
   - Docker integration
-  - Persistent workspace
+  - Persistent workspace (10GB)
+  - On-demand development environment setup
+  - Pre-configured VS Code settings
 
 documentation: https://coder.com/docs/code-server
 

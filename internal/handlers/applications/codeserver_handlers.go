@@ -3,6 +3,7 @@ package applications
 import (
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
@@ -150,5 +151,30 @@ func (cs *CodeServerHandlers) CreateVSCodeSettingsConfigMap(conn *services.SSHCo
 	}
 
 	log.Printf("Created VS Code settings ConfigMap: %s in namespace %s", configMapName, namespace)
+	return nil
+}
+
+// CreateSetupScriptConfigMap creates a ConfigMap with the development environment setup script
+func (cs *CodeServerHandlers) CreateSetupScriptConfigMap(conn *services.SSHConnection, releaseName, namespace string) error {
+	sshService := services.NewSSHService()
+
+	// Read the setup script from the template file
+	setupScriptPath := "/home/coder/Projects/xanthus/internal/templates/applications/setup-dev-environment.sh"
+	setupScriptContent, err := os.ReadFile(setupScriptPath)
+	if err != nil {
+		return fmt.Errorf("failed to read setup script template: %v", err)
+	}
+
+	// Create ConfigMap with the setup script
+	configMapName := fmt.Sprintf("%s-setup-script", releaseName)
+	createConfigMapCmd := fmt.Sprintf(`kubectl create configmap %s -n %s --from-literal=setup-dev-environment.sh=%s --dry-run=client -o yaml | kubectl apply -f -`,
+		configMapName, namespace, string(setupScriptContent))
+
+	_, err = sshService.ExecuteCommand(conn, createConfigMapCmd)
+	if err != nil {
+		return fmt.Errorf("failed to create setup script ConfigMap: %v", err)
+	}
+
+	log.Printf("Created setup script ConfigMap: %s in namespace %s", configMapName, namespace)
 	return nil
 }
