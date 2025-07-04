@@ -360,7 +360,8 @@ func (p *PasswordHelper) retrievePasswordFromVPS(token, accountID, appID string)
 	}
 
 	// Generate release name (should match the deployment logic)
-	releaseName := fmt.Sprintf("%s-%s", app.AppType, app.ID)
+	// Release name format: subdomain-apptype (e.g., final-test-code-server)
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.AppType)
 
 	// Retrieve password based on application type
 	switch app.AppType {
@@ -378,13 +379,29 @@ func (p *PasswordHelper) retrieveCodeServerPasswordFromVPS(conn *services.SSHCon
 	sshService := services.NewSSHService()
 
 	// Retrieve password from Kubernetes secret
-	// The secret name is the same as the release name for code-server
+	// For custom xanthus-code-server chart, the secret name follows the fullname pattern: releaseName-chartName
+	// For official code-server chart, the secret name is the same as release name
 	secretName := releaseName
-	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
+	
+	// Try the custom chart secret name first (release-name + "-xanthus-code-server")
+	customSecretName := fmt.Sprintf("%s-xanthus-code-server", releaseName)
+	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, customSecretName)
 
+	fmt.Printf("DEBUG: Trying custom chart secret: %s\n", customSecretName)
 	result, err := sshService.ExecuteCommand(conn, cmd)
+	if err == nil && strings.TrimSpace(result.Output) != "" {
+		// Success with custom chart secret
+		return strings.TrimSpace(result.Output), nil
+	}
+	
+	// Fall back to original secret name for official chart
+	cmd = fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
+	fmt.Printf("DEBUG: Trying official chart secret: %s\n", secretName)
+	result, err = sshService.ExecuteCommand(conn, cmd)
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve code-server password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+		fmt.Printf("DEBUG: Both secret lookups failed. Last error: %v\n", err)
+		fmt.Printf("DEBUG: Last command output: %s\n", result.Output)
+		return "", fmt.Errorf("failed to retrieve code-server password from secret '%s' or '%s' in namespace '%s': %v", customSecretName, secretName, namespace, err)
 	}
 
 	password := strings.TrimSpace(result.Output)

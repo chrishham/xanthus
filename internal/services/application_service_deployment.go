@@ -362,6 +362,8 @@ func (s *SimpleApplicationService) copyLocalChartToVPS(conn *SSHConnection, sshS
 		"service.yaml",
 		"pvc.yaml",
 		"configmap.yaml",
+		"ingress.yaml",
+		"secret.yaml",
 	}
 
 	for _, file := range templateFiles {

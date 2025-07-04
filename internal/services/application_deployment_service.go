@@ -293,6 +293,8 @@ func (ads *ApplicationDeploymentService) copyLocalChartToVPS(conn *SSHConnection
 		"service.yaml",
 		"pvc.yaml",
 		"configmap.yaml",
+		"ingress.yaml",
+		"secret.yaml",
 	}
 
 	for _, file := range templateFiles {
