@@ -417,7 +417,14 @@ func (ads *ApplicationDeploymentService) performUpgrade(token, accountID string,
 	var chartName string
 	helmConfig := predefinedApp.HelmChart
 
-	if strings.Contains(helmConfig.Repository, "github.com") {
+	if predefinedApp.ID == "code-server" && helmConfig.Repository == "local" {
+		// Use local chart for code-server (copy to VPS)
+		chartPath := "/tmp/xanthus-code-server"
+		if err := ads.copyLocalChartToVPS(conn, chartPath); err != nil {
+			return fmt.Errorf("failed to copy local chart to VPS: %v", err)
+		}
+		chartName = chartPath
+	} else if strings.Contains(helmConfig.Repository, "github.com") {
 		// Clone GitHub repository for the chart
 		repoDir := fmt.Sprintf("/tmp/%s-chart", predefinedApp.ID)
 		_, err = sshService.ExecuteCommand(conn, fmt.Sprintf("rm -rf %s && git clone %s %s", repoDir, helmConfig.Repository, repoDir))
@@ -492,9 +499,17 @@ func (ads *ApplicationDeploymentService) generateValuesFromTemplate(predefinedAp
 	// Add additional placeholders from config
 	if predefinedApp.HelmChart.Placeholders != nil {
 		for key, value := range predefinedApp.HelmChart.Placeholders {
+			// Don't allow config placeholders to override VERSION
+			if key == "VERSION" {
+				log.Printf("WARNING: Config placeholder '%s' attempted to override VERSION, ignoring", key)
+				continue
+			}
 			placeholders[key] = value
 		}
 	}
+	
+	// Ensure VERSION is not overridden (final safeguard)
+	placeholders["VERSION"] = version
 
 	// Replace placeholders in template - add {{ }} formatting here
 	content := string(templateContent)

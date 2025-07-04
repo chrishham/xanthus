@@ -6,9 +6,9 @@ import (
 	"strconv"
 )
 
-// FindAvailablePort finds an available port in the range 8080-8095
+// FindAvailablePort finds an available port in the range 8080-8110
 func FindAvailablePort() string {
-	for port := 8080; port <= 8095; port++ {
+	for port := 8080; port <= 8110; port++ {
 		address := fmt.Sprintf(":%d", port)
 		listener, err := net.Listen("tcp", address)
 		if err == nil {
