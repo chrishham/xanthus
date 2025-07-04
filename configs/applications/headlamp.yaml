@@ -18,7 +18,7 @@ helm_chart:
   placeholders:
     APPLICATION_VERSION: "{{.Version}}"
 
-default_port: 4654
+default_port: 80
 
 requirements:
   min_cpu: 0.25

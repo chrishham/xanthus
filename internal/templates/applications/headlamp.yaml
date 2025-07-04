@@ -3,14 +3,15 @@
 
 # Image configuration
 image:
-  repository: docker.io/headlampk8s/headlamp
+  registry: ghcr.io
+  repository: headlamp-k8s/headlamp
   tag: "v0.32.0"
   pullPolicy: IfNotPresent
 
 # Service configuration
 service:
   type: ClusterIP
-  port: 4654
+  port: 80
   targetPort: 4654
 
 # Ingress configuration with Traefik
