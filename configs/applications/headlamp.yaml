@@ -1,0 +1,45 @@
+id: headlamp
+name: Headlamp
+description: A user-friendly Kubernetes web UI that is fully-featured and extensible
+icon: 🖥️
+category: DevOps
+
+version_source:
+  type: helm
+  source: https://kubernetes-sigs.github.io/headlamp/
+  chart: headlamp
+
+helm_chart:
+  repository: https://kubernetes-sigs.github.io/headlamp/
+  chart: headlamp
+  version: stable
+  namespace: headlamp
+  values_template: headlamp.yaml
+  placeholders:
+    APPLICATION_VERSION: "{{.Version}}"
+
+default_port: 4654
+
+requirements:
+  min_cpu: 0.25
+  min_memory_gb: 0.5
+  min_disk_gb: 1
+
+features:
+  - Full-featured Kubernetes web UI
+  - Multi-cluster support
+  - Real-time resource monitoring
+  - Plugin system for extensibility
+  - RBAC integration
+  - Terminal access to pods
+  - Log streaming
+  - Resource editing and management
+  - Secure kubeconfig management
+  - Responsive design for mobile/desktop
+
+documentation: https://headlamp.dev/
+
+metadata:
+  maintainer: Kubernetes SIG UI
+  support: https://github.com/kubernetes-sigs/headlamp/issues
+  license: Apache-2.0
