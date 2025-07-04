@@ -99,11 +99,8 @@ func (ads *ApplicationDeploymentService) DeployApplication(token, accountID stri
 		return deployErr
 	}
 
-	// Retrieve and store password for applications that generate them
-	if err := ads.retrieveApplicationPassword(token, accountID, predefinedApp.ID, appID, vpsID, releaseName, namespace, vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey); err != nil {
-		// Log the error but don't fail the deployment since the app is successfully deployed
-		log.Printf("Warning: Failed to retrieve application password: %v", err)
-	}
+	// Password retrieval is now handled on-demand when user requests it
+	// No need to retrieve and store passwords during deployment
 
 	return nil
 }
@@ -599,7 +596,7 @@ func (ads *ApplicationDeploymentService) retrieveApplicationPassword(token, acco
 	}
 }
 
-// retrieveCodeServerPassword retrieves the auto-generated password from code-server Kubernetes secret
+// retrieveCodeServerPassword retrieves the auto-generated password from code-server config file
 func (ads *ApplicationDeploymentService) retrieveCodeServerPassword(token, accountID, appID, releaseName, namespace, vpsIP, sshUser, privateKey string) error {
 	sshService := NewSSHService()
 
@@ -609,50 +606,54 @@ func (ads *ApplicationDeploymentService) retrieveCodeServerPassword(token, accou
 	}
 	defer conn.Close()
 
-	// Retrieve password from Kubernetes secret with retry logic
-	// Try custom chart secret name first (release-name + "-xanthus-code-server")
-	customSecretName := fmt.Sprintf("%s-xanthus-code-server", releaseName)
-	officialSecretName := releaseName
-	
+	// Find the pod name for the code-server deployment
+	podNameCmd := fmt.Sprintf("kubectl get pods -n %s -l app.kubernetes.io/name=xanthus-code-server -o jsonpath='{.items[0].metadata.name}'", namespace)
+	result, err := sshService.ExecuteCommand(conn, podNameCmd)
+	if err != nil {
+		return fmt.Errorf("failed to get pod name: %v", err)
+	}
+
+	podName := strings.TrimSpace(result.Output)
+	if podName == "" {
+		return fmt.Errorf("no code-server pod found in namespace %s", namespace)
+	}
+
 	var password string
 	var retrievalErr error
-	
+
 	// Retry up to 30 times with 2-second intervals (1 minute total)
+	// Wait for code-server to start and generate its config file
 	for attempt := 1; attempt <= 30; attempt++ {
-		fmt.Printf("Password retrieval attempt %d/30 for app %s\n", attempt, appID)
-		
-		// Try custom chart secret first
-		cmd := fmt.Sprintf("set -o pipefail; kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, customSecretName)
-		result, err := sshService.ExecuteCommand(conn, cmd)
+		fmt.Printf("Password retrieval attempt %d/30 for app %s from pod %s\n", attempt, appID, podName)
+
+		// Try to read password from code-server config file
+		configCmd := fmt.Sprintf("kubectl exec -n %s %s -- cat /home/coder/.config/code-server/config.yaml 2>/dev/null | grep '^password:' | awk '{print $2}'", namespace, podName)
+		result, err := sshService.ExecuteCommand(conn, configCmd)
 		if err == nil && strings.TrimSpace(result.Output) != "" && !strings.Contains(result.Output, "Error from server") {
 			password = strings.TrimSpace(result.Output)
-			fmt.Printf("Successfully retrieved password from custom secret %s on attempt %d\n", customSecretName, attempt)
+			fmt.Printf("Successfully retrieved password from config file on attempt %d: %s\n", attempt, password)
 			break
 		}
-		
-		// Try official chart secret as fallback
-		cmd = fmt.Sprintf("set -o pipefail; kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, officialSecretName)
-		result, err = sshService.ExecuteCommand(conn, cmd)
-		if err == nil && strings.TrimSpace(result.Output) != "" && !strings.Contains(result.Output, "Error from server") {
-			password = strings.TrimSpace(result.Output)
-			fmt.Printf("Successfully retrieved password from official secret %s on attempt %d\n", officialSecretName, attempt)
-			break
-		}
-		
+
 		if attempt == 30 {
-			retrievalErr = fmt.Errorf("failed to retrieve password from secrets '%s' or '%s' in namespace '%s' after 30 attempts", customSecretName, officialSecretName, namespace)
+			retrievalErr = fmt.Errorf("failed to retrieve password from config file in pod '%s' in namespace '%s' after 30 attempts", podName, namespace)
 		} else {
-			fmt.Printf("Password not ready yet, waiting 2 seconds before retry %d...\n", attempt+1)
+			fmt.Printf("Config file not ready yet, waiting 2 seconds before retry %d...\n", attempt+1)
 			time.Sleep(2 * time.Second)
 		}
 	}
-	
+
 	if retrievalErr != nil {
 		return retrievalErr
 	}
 
-	// Store password in KV store
-	return ads.storeEncryptedPassword(token, accountID, appID, password)
+	if password == "" {
+		return fmt.Errorf("retrieved empty password from config file")
+	}
+
+	// No longer storing code-server passwords - they are retrieved on-demand from config file
+	fmt.Printf("Successfully retrieved password from config file (not storing in KV): %s\n", password)
+	return nil
 }
 
 // retrieveArgoCDPassword retrieves the auto-generated admin password from ArgoCD

@@ -308,15 +308,31 @@ func (p *PasswordHelper) StoreEncryptedPassword(token, accountID, appID, passwor
 	})
 }
 
-// GetDecryptedPassword retrieves and decrypts a stored password
-// If not found in KV, attempts to retrieve from VPS and store it
+// GetDecryptedPassword retrieves the current password directly from VPS
+// For code-server: always gets from config file (supports user password changes)
+// For other apps: tries KV first, then VPS as fallback
 func (p *PasswordHelper) GetDecryptedPassword(token, accountID, appID string) (string, error) {
+	// Get application details to determine type
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get application details: %v", err)
+	}
+
+	// For code-server, always retrieve from VPS config file to get current password
+	// Don't store in KV since users can change passwords and we always need the current one
+	if app.AppType == "code-server" {
+		fmt.Printf("Retrieving current password from config file for code-server app %s (no KV storage)\n", appID)
+		return p.retrievePasswordFromVPSWithoutStorage(token, accountID, appID)
+	}
+
+	// For other application types, use KV cache with VPS fallback
 	var passwordData struct {
 		Password string `json:"password"`
 	}
 
 	// First try to get from KV store
-	err := p.kvService.GetValue(token, accountID, fmt.Sprintf("app:%s:password", appID), &passwordData)
+	err = p.kvService.GetValue(token, accountID, fmt.Sprintf("app:%s:password", appID), &passwordData)
 	if err == nil {
 		// Found in KV, decrypt and return
 		password, err := utils.DecryptData(passwordData.Password, token)
@@ -333,7 +349,7 @@ func (p *PasswordHelper) GetDecryptedPassword(token, accountID, appID string) (s
 		return "", fmt.Errorf("failed to retrieve password from VPS: %v", err)
 	}
 
-	// Store the retrieved password in KV for future use
+	// Store the retrieved password in KV for future use (non-code-server apps only)
 	if storeErr := p.StoreEncryptedPassword(token, accountID, appID, password); storeErr != nil {
 		fmt.Printf("Warning: Failed to store retrieved password in KV: %v\n", storeErr)
 	} else {
@@ -341,6 +357,37 @@ func (p *PasswordHelper) GetDecryptedPassword(token, accountID, appID string) (s
 	}
 
 	return password, nil
+}
+
+// retrievePasswordFromVPSWithoutStorage retrieves password directly from VPS without storing in KV
+func (p *PasswordHelper) retrievePasswordFromVPSWithoutStorage(token, accountID, appID string) (string, error) {
+	// Get application details
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get application details: %v", err)
+	}
+
+	// Get VPS connection
+	vpsHelper := NewVPSConnectionHelper()
+	conn, err := vpsHelper.GetVPSConnection(token, accountID, app.VPSID)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to VPS: %v", err)
+	}
+
+	// Generate release name (should match the deployment logic)
+	// Release name format: subdomain-apptype (e.g., final-test-code-server)
+	releaseName := fmt.Sprintf("%s-%s", app.Subdomain, app.AppType)
+
+	// Retrieve password based on application type
+	switch app.AppType {
+	case "code-server":
+		return p.retrieveCodeServerPasswordFromVPS(conn, releaseName, app.Namespace)
+	case "argocd":
+		return p.retrieveArgoCDPasswordFromVPS(conn, releaseName, app.Namespace)
+	default:
+		return "", fmt.Errorf("password retrieval not supported for application type: %s", app.AppType)
+	}
 }
 
 // retrievePasswordFromVPS retrieves password directly from VPS for a given application
@@ -374,41 +421,37 @@ func (p *PasswordHelper) retrievePasswordFromVPS(token, accountID, appID string)
 	}
 }
 
-// retrieveCodeServerPasswordFromVPS retrieves code-server password from VPS
+// retrieveCodeServerPasswordFromVPS retrieves code-server password from VPS config file
 func (p *PasswordHelper) retrieveCodeServerPasswordFromVPS(conn *services.SSHConnection, releaseName, namespace string) (string, error) {
 	sshService := services.NewSSHService()
 
-	// Retrieve password from Kubernetes secret
-	// For custom xanthus-code-server chart, the secret name follows the fullname pattern: releaseName-chartName
-	// For official code-server chart, the secret name is the same as release name
-	secretName := releaseName
-	
-	// Try the custom chart secret name first (release-name + "-xanthus-code-server")
-	customSecretName := fmt.Sprintf("%s-xanthus-code-server", releaseName)
-	cmd := fmt.Sprintf("set -o pipefail; kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, customSecretName)
-
-	fmt.Printf("DEBUG: Trying custom chart secret: %s\n", customSecretName)
-	result, err := sshService.ExecuteCommand(conn, cmd)
-	if err == nil && strings.TrimSpace(result.Output) != "" && !strings.Contains(result.Output, "Error from server") {
-		// Success with custom chart secret - make sure it's not an error message
-		return strings.TrimSpace(result.Output), nil
-	}
-	
-	// Fall back to original secret name for official chart
-	cmd = fmt.Sprintf("set -o pipefail; kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, secretName)
-	fmt.Printf("DEBUG: Trying official chart secret: %s\n", secretName)
-	result, err = sshService.ExecuteCommand(conn, cmd)
+	// Find the pod name for the specific code-server deployment using release name
+	podNameCmd := fmt.Sprintf("kubectl get pods -n %s -l app.kubernetes.io/instance=%s -o jsonpath='{.items[0].metadata.name}'", namespace, releaseName)
+	result, err := sshService.ExecuteCommand(conn, podNameCmd)
 	if err != nil {
-		fmt.Printf("DEBUG: Both secret lookups failed. Last error: %v\n", err)
-		fmt.Printf("DEBUG: Last command output: %s\n", result.Output)
-		return "", fmt.Errorf("failed to retrieve code-server password from secret '%s' or '%s' in namespace '%s': %v", customSecretName, secretName, namespace, err)
+		return "", fmt.Errorf("failed to get pod name: %v", err)
+	}
+
+	podName := strings.TrimSpace(result.Output)
+	if podName == "" {
+		return "", fmt.Errorf("no code-server pod found in namespace %s", namespace)
+	}
+
+	// Try to read password from code-server config file
+	configCmd := fmt.Sprintf("kubectl exec -n %s %s -- cat /home/coder/.config/code-server/config.yaml 2>/dev/null | grep '^password:' | awk '{print $2}'", namespace, podName)
+	result, err = sshService.ExecuteCommand(conn, configCmd)
+	if err != nil {
+		fmt.Printf("DEBUG: Failed to read config file from pod %s: %v\n", podName, err)
+		fmt.Printf("DEBUG: Command output: %s\n", result.Output)
+		return "", fmt.Errorf("failed to retrieve code-server password from config file in pod '%s' in namespace '%s': %v", podName, namespace, err)
 	}
 
 	password := strings.TrimSpace(result.Output)
 	if password == "" || strings.Contains(password, "Error from server") {
-		return "", fmt.Errorf("retrieved empty password or error from code-server secret")
+		return "", fmt.Errorf("retrieved empty password or error from code-server config file")
 	}
 
+	fmt.Printf("DEBUG: Successfully retrieved password from config file: %s\n", password)
 	return password, nil
 }
 
