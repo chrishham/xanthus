@@ -46,68 +46,79 @@
                 </div>
 
                 <div class="p-6">
-                    <!-- Existing Port Forwards -->
-                    <div class="mb-6">
-                        <h4 class="text-sm font-medium text-gray-900 mb-3">Active Port Forwards</h4>
-                        <div x-show="portForwardingModal.ports.length === 0" class="text-sm text-gray-500 italic">
-                            No port forwards configured
-                        </div>
-                        <div x-show="portForwardingModal.ports.length > 0" class="space-y-2">
-                            <template x-for="port in portForwardingModal.ports" :key="port.id">
-                                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                                    <div class="flex-1">
-                                        <div class="flex items-center space-x-4">
-                                            <span class="text-sm font-medium text-gray-900">Port:</span>
-                                            <span class="text-sm text-gray-600" x-text="port.port"></span>
-                                        </div>
-                                        <div class="flex items-center space-x-4 mt-1">
-                                            <span class="text-sm font-medium text-gray-900">URL:</span>
-                                            <a :href="port.url" target="_blank" class="text-sm text-indigo-600 hover:text-indigo-800" x-text="port.url"></a>
-                                        </div>
-                                    </div>
-                                    <button @click="removePortForward(port.id)" 
-                                            class="text-red-600 hover:text-red-800 text-sm px-2 py-1 rounded hover:bg-red-50">
-                                        Remove
-                                    </button>
-                                </div>
-                            </template>
+                    <!-- Loading State -->
+                    <div x-show="portForwardingModal.loading" class="flex items-center justify-center py-12">
+                        <div class="text-center">
+                            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-4"></div>
+                            <p class="text-sm text-gray-600" x-text="portForwardingModal.loadingMessage">Loading...</p>
                         </div>
                     </div>
 
-                    <!-- Add New Port Forward -->
-                    <div class="border-t border-gray-200 pt-6">
-                        <h4 class="text-sm font-medium text-gray-900 mb-3">Add New Port Forward</h4>
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
-                                <input type="number" 
-                                       x-model="portForwardingModal.newPort.port"
-                                       placeholder="e.g., 3000"
-                                       min="1" max="65535"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                <p class="mt-1 text-xs text-gray-500">Port number to forward (1-65535)</p>
+                    <!-- Content (hidden during loading) -->
+                    <div x-show="!portForwardingModal.loading">
+                        <!-- Existing Port Forwards -->
+                        <div class="mb-6">
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Active Port Forwards</h4>
+                            <div x-show="portForwardingModal.ports.length === 0" class="text-sm text-gray-500 italic">
+                                No port forwards configured
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Subdomain</label>
-                                <input type="text" 
-                                       x-model="portForwardingModal.newPort.subdomain"
-                                       placeholder="e.g., api"
-                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
-                                <p class="mt-1 text-xs text-gray-500">
-                                    Subdomain for this port (will create: <span x-text="portForwardingModal.newPort.subdomain || 'subdomain'"></span>.<span x-text="portForwardingModal.domain"></span>)
-                                </p>
+                            <div x-show="portForwardingModal.ports.length > 0" class="space-y-2">
+                                <template x-for="port in portForwardingModal.ports" :key="port.id">
+                                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md">
+                                        <div class="flex-1">
+                                            <div class="flex items-center space-x-4">
+                                                <span class="text-sm font-medium text-gray-900">Port:</span>
+                                                <span class="text-sm text-gray-600" x-text="port.port"></span>
+                                            </div>
+                                            <div class="flex items-center space-x-4 mt-1">
+                                                <span class="text-sm font-medium text-gray-900">URL:</span>
+                                                <a :href="port.url" target="_blank" class="text-sm text-indigo-600 hover:text-indigo-800" x-text="port.url"></a>
+                                            </div>
+                                        </div>
+                                        <button @click="removePortForward(port.id)" 
+                                                class="text-red-600 hover:text-red-800 text-sm px-2 py-1 rounded hover:bg-red-50">
+                                            Remove
+                                        </button>
+                                    </div>
+                                </template>
                             </div>
                         </div>
-                        <div class="mt-6 flex justify-end space-x-3">
-                            <button @click="portForwardingModal.show = false" 
-                                    class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-                                Cancel
-                            </button>
-                            <button @click="addPortForward()" 
-                                    :disabled="!portForwardingModal.newPort.port || !portForwardingModal.newPort.subdomain"
-                                    class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                                Add Port Forward
-                            </button>
+
+                        <!-- Add New Port Forward -->
+                        <div class="border-t border-gray-200 pt-6">
+                            <h4 class="text-sm font-medium text-gray-900 mb-3">Add New Port Forward</h4>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                                    <input type="number" 
+                                           x-model="portForwardingModal.newPort.port"
+                                           placeholder="e.g., 3000"
+                                           min="1" max="65535"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                    <p class="mt-1 text-xs text-gray-500">Port number to forward (1-65535)</p>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Subdomain</label>
+                                    <input type="text" 
+                                           x-model="portForwardingModal.newPort.subdomain"
+                                           placeholder="e.g., api"
+                                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                                    <p class="mt-1 text-xs text-gray-500">
+                                        Subdomain for this port (will create: <span x-text="portForwardingModal.newPort.subdomain || 'subdomain'"></span>.<span x-text="portForwardingModal.domain"></span>)
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="mt-6 flex justify-end space-x-3">
+                                <button @click="portForwardingModal.show = false" 
+                                        class="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                                    Cancel
+                                </button>
+                                <button @click="addPortForward()" 
+                                        :disabled="!portForwardingModal.newPort.port || !portForwardingModal.newPort.subdomain"
+                                        class="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    Add Port Forward
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

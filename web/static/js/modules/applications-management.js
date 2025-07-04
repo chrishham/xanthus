@@ -19,7 +19,9 @@ export function applicationsManagement() {
             app: null,
             domain: '',
             ports: [],
-            newPort: { port: '', subdomain: '' }
+            newPort: { port: '', subdomain: '' },
+            loading: false,
+            loadingMessage: 'Loading port forwards...'
         },
 
         init() {
@@ -882,20 +884,23 @@ export function applicationsManagement() {
 
         // Port Forwarding Functions
         async showPortForwardingModal(app) {
+            console.log('Opening port forwarding modal for app:', app.name);
             this.portForwardingModal.app = app;
             this.portForwardingModal.domain = this.extractDomain(app.url);
             this.portForwardingModal.ports = [];
             this.portForwardingModal.newPort = { port: '', subdomain: '' };
+            this.portForwardingModal.loading = true;
+            this.portForwardingModal.loadingMessage = 'Loading port forwards...';
             this.portForwardingModal.show = true;
             
-            // Show loading state while fetching port forwards
-            this.setLoadingState('Loading Port Forwards', 'Retrieving existing port forwards...');
+            console.log('Loading state set:', this.portForwardingModal.loading);
             
             // Load existing port forwards
             await this.loadPortForwards(app.id);
             
             // Hide loading state after loading completes
-            this.loading = false;
+            this.portForwardingModal.loading = false;
+            console.log('Loading complete, state set to:', this.portForwardingModal.loading);
         },
 
         async loadPortForwards(appId) {
@@ -919,7 +924,8 @@ export function applicationsManagement() {
                 return;
             }
 
-            this.setLoadingState('Adding Port Forward', 'Creating service and ingress...');
+            this.portForwardingModal.loading = true;
+            this.portForwardingModal.loadingMessage = 'Creating port forward...';
             
             try {
                 const response = await fetch(`/applications/${appId}/port-forwards`, {
@@ -939,8 +945,8 @@ export function applicationsManagement() {
                     Swal.fire('Success!', `Port forward created: https://${subdomain}.${this.portForwardingModal.domain}`, 'success');
                     this.portForwardingModal.newPort = { port: '', subdomain: '' };
                     
-                    // Show loading state while refreshing port forwards list
-                    this.setLoadingState('Refreshing Port Forwards', 'Updating port forwards list...');
+                    // Refresh port forwards list
+                    this.portForwardingModal.loadingMessage = 'Refreshing port forwards...';
                     await this.loadPortForwards(appId);
                 } else {
                     Swal.fire('Error', data.error || 'Failed to create port forward', 'error');
@@ -949,7 +955,7 @@ export function applicationsManagement() {
                 console.error('Error adding port forward:', error);
                 Swal.fire('Error', 'Failed to create port forward', 'error');
             } finally {
-                this.loading = false;
+                this.portForwardingModal.loading = false;
             }
         },
 
@@ -966,7 +972,8 @@ export function applicationsManagement() {
 
             if (result.isConfirmed) {
                 const appId = this.portForwardingModal.app.id;
-                this.setLoadingState('Removing Port Forward', 'Deleting service and ingress...');
+                this.portForwardingModal.loading = true;
+                this.portForwardingModal.loadingMessage = 'Removing port forward...';
                 
                 try {
                     const response = await fetch(`/applications/${appId}/port-forwards/${portForwardId}`, {
@@ -978,8 +985,8 @@ export function applicationsManagement() {
                     if (response.ok) {
                         Swal.fire('Removed!', 'Port forward has been removed.', 'success');
                         
-                        // Show loading state while refreshing port forwards list
-                        this.setLoadingState('Refreshing Port Forwards', 'Updating port forwards list...');
+                        // Refresh port forwards list
+                        this.portForwardingModal.loadingMessage = 'Refreshing port forwards...';
                         await this.loadPortForwards(appId);
                     } else {
                         Swal.fire('Error', data.error || 'Failed to remove port forward', 'error');
@@ -988,7 +995,7 @@ export function applicationsManagement() {
                     console.error('Error removing port forward:', error);
                     Swal.fire('Error', 'Failed to remove port forward', 'error');
                 } finally {
-                    this.loading = false;
+                    this.portForwardingModal.loading = false;
                 }
             }
         },
