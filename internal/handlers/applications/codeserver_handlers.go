@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/chrishham/xanthus/internal/services"
-	"github.com/chrishham/xanthus/internal/utils"
 )
 
 // CodeServerHandlers provides code-server specific operations
@@ -40,28 +39,41 @@ func (cs *CodeServerHandlers) UpdatePassword(token, accountID, appID, newPasswor
 		return fmt.Errorf("failed to connect to VPS: %v", err)
 	}
 
-	// Update the Kubernetes secret with new password
-	releaseName := fmt.Sprintf("%s-%s", appData.Subdomain, appData.ID)
-	secretName := fmt.Sprintf("%s-code-server", releaseName)
-	encodedPassword := utils.Base64Encode(newPassword)
-	cmd := fmt.Sprintf("kubectl patch secret --namespace %s %s -p '{\"data\":{\"password\":\"%s\"}}'", appData.Namespace, secretName, encodedPassword)
+	// Generate release name (should match the deployment logic)
+	// Release name format: subdomain-apptype (e.g., asterias-code-server)
+	releaseName := fmt.Sprintf("%s-code-server", appData.Subdomain)
 
+	// Find the pod name for the code-server deployment
 	sshService := services.NewSSHService()
-	_, err = sshService.ExecuteCommand(conn, cmd)
+	podNameCmd := fmt.Sprintf("kubectl get pods -n %s -l app.kubernetes.io/instance=%s -o jsonpath='{.items[0].metadata.name}'", appData.Namespace, releaseName)
+	result, err := sshService.ExecuteCommand(conn, podNameCmd)
 	if err != nil {
-		return fmt.Errorf("failed to update Kubernetes secret: %v", err)
+		return fmt.Errorf("failed to get pod name: %v", err)
 	}
 
-	// Restart the code-server deployment to pick up the new password
-	deploymentName := fmt.Sprintf("%s-code-server", releaseName)
-	restartCmd := fmt.Sprintf("kubectl rollout restart deployment --namespace %s %s", appData.Namespace, deploymentName)
+	podName := strings.TrimSpace(result.Output)
+	if podName == "" {
+		return fmt.Errorf("no code-server pod found in namespace %s", appData.Namespace)
+	}
+
+	// Update the password in the code-server config file
+	configUpdateCmd := fmt.Sprintf(`kubectl exec -n %s %s -- sh -c "sed -i 's/^password:.*/password: %s/' /home/coder/.config/code-server/config.yaml"`, appData.Namespace, podName, newPassword)
+	_, err = sshService.ExecuteCommand(conn, configUpdateCmd)
+	if err != nil {
+		return fmt.Errorf("failed to update code-server config file: %v", err)
+	}
+
+	// Restart the code-server process to pick up the new password
+	restartCmd := fmt.Sprintf("kubectl exec -n %s %s -- pkill -f code-server", appData.Namespace, podName)
 	_, err = sshService.ExecuteCommand(conn, restartCmd)
 	if err != nil {
-		return fmt.Errorf("failed to restart deployment: %v", err)
+		// Log the error but don't fail - the supervisor will restart it
+		log.Printf("Warning: Failed to restart code-server process (supervisor will restart it): %v", err)
 	}
 
-	// Update stored password in KV
-	return cs.passwordHelper.StoreEncryptedPassword(token, accountID, appID, newPassword)
+	// Don't store code-server passwords in KV - they are retrieved on-demand from config file
+	log.Printf("Successfully updated password for code-server app %s (not storing in KV)", appID)
+	return nil
 }
 
 // RetrieveAndStorePassword retrieves the auto-generated password from Kubernetes secret
