@@ -16,11 +16,8 @@ import (
 )
 
 func main() {
-	// Find available port
-	port := utils.FindAvailablePort()
-	if port == "" {
-		log.Fatal("Could not find an available port")
-	}
+	// Set port to 8080
+	port := "8080"
 
 	fmt.Printf("🚀 Xanthus v2.0 (with shared ConfigMap support) is starting on http://localhost:%s\n", port)
 
