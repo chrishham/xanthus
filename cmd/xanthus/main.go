@@ -11,13 +11,12 @@ import (
 	"github.com/chrishham/xanthus/internal/handlers/vps"
 	"github.com/chrishham/xanthus/internal/router"
 	"github.com/chrishham/xanthus/internal/services"
-	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	// Set port to 8080
-	port := "8080"
+	// Set port to 8081
+	port := "8081"
 
 	fmt.Printf("🚀 Xanthus v2.0 (with shared ConfigMap support) is starting on http://localhost:%s\n", port)
 

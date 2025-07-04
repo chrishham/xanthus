@@ -147,6 +147,13 @@ func (s *SimpleApplicationService) CreateApplication(token, accountID string, ap
 		return nil, fmt.Errorf("invalid application data format")
 	}
 
+	// Check for existing ArgoCD installation on this VPS before creating the application
+	if predefinedApp.ID == "argocd" {
+		if err := s.checkExistingArgoCDInstallation(token, accountID, vpsID); err != nil {
+			return nil, err
+		}
+	}
+
 	// Generate application ID
 	appID := fmt.Sprintf("app-%d", time.Now().Unix())
 
@@ -417,4 +424,84 @@ func (s *SimpleApplicationService) GetApplicationRealTimeStatus(token, accountID
 	default:
 		return helmStatus.Info.Status, nil
 	}
+}
+
+// checkExistingArgoCDInstallation checks if there's already an ArgoCD installation on the VPS
+func (s *SimpleApplicationService) checkExistingArgoCDInstallation(token, accountID, vpsID string) error {
+	kvService := NewKVService()
+	
+	// Get all applications from KV store
+	applications, err := s.getAllApplications(token, accountID, kvService)
+	if err != nil {
+		return fmt.Errorf("failed to check existing applications: %v", err)
+	}
+
+	// Check if any existing application is ArgoCD on the same VPS
+	for _, app := range applications {
+		// Check if it's an ArgoCD application on the same VPS
+		if app.AppType == "argocd" && app.VPSID == vpsID && (app.Status == "Running" || app.Status == "Creating" || app.Status == "Deploying") {
+			return fmt.Errorf("ArgoCD is already installed on this VPS (application: %s, subdomain: %s.%s). Only one ArgoCD installation is allowed per VPS due to cluster-wide resources. Please use the existing ArgoCD instance or choose a different VPS", app.Name, app.Subdomain, app.Domain)
+		}
+	}
+
+	return nil
+}
+
+// getAllApplications retrieves all applications from KV store
+func (s *SimpleApplicationService) getAllApplications(token, accountID string, kvService *KVService) ([]models.Application, error) {
+	// Get the Xanthus namespace ID
+	namespaceID, err := kvService.GetXanthusNamespaceID(token, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get namespace ID: %w", err)
+	}
+
+	// List all keys with app: prefix
+	url := fmt.Sprintf("https://api.cloudflare.com/client/v4/accounts/%s/storage/kv/namespaces/%s/keys?prefix=app:",
+		accountID, namespaceID)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var keysResp struct {
+		Success bool `json:"success"`
+		Result  []struct {
+			Name string `json:"name"`
+		} `json:"result"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&keysResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !keysResp.Success {
+		return nil, fmt.Errorf("KV API failed")
+	}
+
+	applications := []models.Application{}
+
+	// Fetch each application, but skip password keys
+	for _, key := range keysResp.Result {
+		// Skip password keys (they end with ":password")
+		if strings.HasSuffix(key.Name, ":password") {
+			continue
+		}
+
+		var app models.Application
+		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
+			applications = append(applications, app)
+		}
+	}
+
+	return applications, nil
 }

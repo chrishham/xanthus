@@ -1,322 +1,348 @@
 #!/bin/bash
 
-# Development Environment Setup Script for Code-Server
-# This script installs additional development tools and packages
-# Run this script manually when you need extra development tools
+#================================================================================#
+#           IMPROVED DEVELOPMENT ENVIRONMENT SETUP SCRIPT                        #
+#                                                                                #
+# This script allows you to selectively install development tools, including     #
+# Go, Node.js, Rust, Dagger, and command-line tools for Gemini and Claude.       #
+#================================================================================#
 
 set -e
 
-echo "🚀 Starting development environment setup..."
-echo "This script will install additional development tools and packages."
-echo "You can run this at any time to enhance your development environment."
-echo ""
+# --- Configuration & Colors ---
+C_RESET='\033[0m'
+C_RED='\033[0;31m'
+C_GREEN='\033[0;32m'
+C_YELLOW='\033[0;33m'
+C_BLUE='\033[0;34m'
+C_CYAN='\033[0;36m'
+
+# --- Utility Functions ---
+
+# Print a formatted header
+print_header() {
+    echo -e "\n${C_BLUE}#=======================================================================${C_RESET}"
+    echo -e "${C_CYAN}# $1${C_RESET}"
+    echo -e "${C_BLUE}#=======================================================================${C_RESET}"
+}
+
+# Print a success message
+print_success() {
+    echo -e "${C_GREEN}✅ $1${C_RESET}"
+}
+
+# Print an info message
+print_info() {
+    echo -e "${C_YELLOW}🔧 $1${C_RESET}"
+}
+
+# Print an error message and exit
+print_error() {
+    echo -e "${C_RED}❌ ERROR: $1${C_RESET}" >&2
+    exit 1
+}
+
+# Check if a command exists
+command_exists() {
+    command -v "$1" &> /dev/null
+}
+
+# --- Core Functions ---
 
 # Function to check if running as root
 check_root() {
     if [ "$EUID" -eq 0 ]; then
-        echo "❌ This script should not be run as root!"
-        echo "Please run as the regular user (coder)"
-        exit 1
+        print_error "This script should not be run as root! Please run as a regular user."
     fi
 }
 
-# Function to install system packages (requires sudo)
-install_system_packages() {
-    echo "🔧 Installing additional system packages..."
-    
-    # Check if we need to install packages
-    if ! command -v build-essential &> /dev/null || ! command -v rg &> /dev/null; then
-        echo "Installing build-essential, ripgrep, and development tools..."
-        sudo apt-get update
-        sudo apt-get install -y build-essential ripgrep curl wget git vim nano \
-            htop tree jq unzip zip python3 python3-pip docker.io
-    else
-        echo "✅ System packages already installed"
-    fi
-}
-
-# Function to install Go
-install_go() {
-    if command -v go &> /dev/null; then
-        echo "✅ Go already installed: $(go version)"
-        return 0
-    fi
-    
-    echo "🐹 Installing Go..."
-    
+# Function to determine system architecture
+get_arch() {
     ARCH=$(uname -m)
     case "$ARCH" in
         x86_64) ARCH="amd64" ;;
         aarch64 | arm64) ARCH="arm64" ;;
-        *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
+        *) print_error "Unsupported architecture: $ARCH" ;;
     esac
-    
-    # Use a specific stable Go version
-    GO_VERSION="1.23.4"
-    TARFILE="go${GO_VERSION}.linux-${ARCH}.tar.gz"
-    DOWNLOAD_URL="https://go.dev/dl/${TARFILE}"
-    
-    echo "🔽 Downloading Go ${GO_VERSION}..."
-    cd /tmp
-    curl -LO "$DOWNLOAD_URL"
-    
-    if [ ! -f "${TARFILE}" ]; then
-        echo "❌ Failed to download Go tarball"
-        exit 1
+    echo "$ARCH"
+}
+
+# --- Installation Functions ---
+
+install_system_packages() {
+    print_header "Installing System Packages"
+    print_info "Updating package list and installing essential tools..."
+    sudo apt-get update
+    sudo apt-get install -y build-essential ripgrep curl wget git vim nano \
+        htop tree jq unzip zip python3 python3-pip fd-find bat docker.io
+    print_success "System packages installed."
+}
+
+install_go() {
+    if command_exists go; then
+        print_success "Go is already installed: $(go version)"
+        return
+    fi
+    print_header "Installing Go (Latest Stable)"
+    local ARCH
+    ARCH=$(get_arch)
+
+    print_info "Fetching the latest Go version..."
+    GO_VERSION=$(curl -s https://go.dev/dl/ | grep -oP 'go([0-9]+\.[0-9]+\.[0-9]+)\.linux-'"$ARCH"'\.tar\.gz' | head -n 1 | sed -E 's/go(.*)\.linux-.*\.tar\.gz/\1/')
+    if [ -z "$GO_VERSION" ]; then
+        print_error "Could not determine the latest Go version."
     fi
     
-    echo "📦 Extracting Go to /usr/local..."
+    local TARFILE="go${GO_VERSION}.linux-${ARCH}.tar.gz"
+    local DOWNLOAD_URL="https://go.dev/dl/${TARFILE}"
+
+    print_info "Downloading Go v${GO_VERSION} for ${ARCH}..."
+    cd /tmp
+    curl -LO "$DOWNLOAD_URL"
+
+    print_info "Extracting Go to /usr/local..."
     sudo rm -rf /usr/local/go
     sudo tar -C /usr/local -xzf "${TARFILE}"
     rm "${TARFILE}"
-    
-    # Add Go to PATH if not already there
+
     if ! grep -q "/usr/local/go/bin" ~/.bashrc; then
-        echo 'export PATH="$PATH:/usr/local/go/bin"' >> ~/.bashrc
-        echo 'export GOPATH="$HOME/go"' >> ~/.bashrc
-        echo 'export PATH="$PATH:$GOPATH/bin"' >> ~/.bashrc
+        print_info "Adding Go to your PATH in ~/.bashrc"
+        cat >> ~/.bashrc << 'EOF'
+
+# Go Environment Variables
+export PATH="$PATH:/usr/local/go/bin"
+export GOPATH="$HOME/go"
+export PATH="$PATH:$GOPATH/bin"
+EOF
     fi
-    
-    echo "✅ Go installation complete"
+    print_success "Go v${GO_VERSION} installed successfully."
 }
 
-# Function to install Node.js via Volta
 install_nodejs() {
-    if command -v node &> /dev/null; then
-        echo "✅ Node.js already installed: $(node --version)"
-        return 0
+    # Source Volta if it exists to make node command available
+    [ -s "$HOME/.volta/volta.sh" ] && source "$HOME/.volta/volta.sh"
+
+    if command_exists node; then
+        print_success "Node.js is already installed: $(node -v)"
+        return
     fi
-    
-    echo "🌐 Installing Volta (Node.js version manager)..."
-    
-    if [ ! -d "$HOME/.volta" ]; then
-        curl https://get.volta.sh | bash
-    fi
-    
-    # Setup Volta environment
+
+    print_header "Installing Node.js (via Volta)"
+    print_info "Installing Volta (Node.js version manager)..."
+    curl https://get.volta.sh | bash
+    # Add Volta to PATH for the current session
     export VOLTA_HOME="$HOME/.volta"
     export PATH="$VOLTA_HOME/bin:$PATH"
     
-    echo "📦 Installing Node.js..."
-    ~/.volta/bin/volta install node@20
-    
-    # Add Volta to PATH if not already there
+    print_info "Installing Node.js LTS (currently 20.x)..."
+    volta install node@20
+    print_success "Node.js installed."
+
+    # Ensure Volta is in bashrc
     if ! grep -q "VOLTA_HOME" ~/.bashrc; then
-        echo 'export VOLTA_HOME="$HOME/.volta"' >> ~/.bashrc
-        echo 'export PATH="$VOLTA_HOME/bin:$PATH"' >> ~/.bashrc
+        echo -e '\n# Volta Environment\nexport VOLTA_HOME="$HOME/.volta"\nexport PATH="$VOLTA_HOME/bin:$PATH"' >> ~/.bashrc
     fi
-    
-    echo "✅ Node.js installation complete"
 }
 
-# Function to install global npm packages
-install_npm_packages() {
-    echo "🔧 Installing global npm packages..."
-    
-    # Ensure we have npm
-    if ! command -v npm &> /dev/null; then
-        echo "❌ npm not found. Please install Node.js first."
-        return 1
-    fi
-    
-    # Install Claude Code and ccusage
-    npm install -g @anthropic-ai/claude-code ccusage
-    
-    echo "✅ Global npm packages installed"
-}
-
-# Function to install Python packages
-install_python_packages() {
-    echo "🐍 Installing Python packages..."
-    
-    # Install common Python development packages
-    pip3 install --user black flake8 mypy pytest requests numpy pandas matplotlib jupyter
-    
-    echo "✅ Python packages installed"
-}
-
-# Function to install Rust
 install_rust() {
-    if command -v rustc &> /dev/null; then
-        echo "✅ Rust already installed: $(rustc --version)"
-        return 0
+    if command_exists rustc; then
+        print_success "Rust is already installed: $(rustc --version)"
+        return
     fi
-    
-    echo "🦀 Installing Rust..."
+    print_header "Installing Rust"
+    print_info "Installing rustup..."
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+    # Add cargo to PATH for the current session
+    export PATH="$HOME/.cargo/bin:$PATH"
+
+    if ! grep -q 'source "$HOME/.cargo/env"' ~/.bashrc; then
+         echo 'source "$HOME/.cargo/env"' >> ~/.bashrc
+    fi
+    print_success "Rust installed successfully."
+}
+
+install_npm_ai_clis() {
+    print_header "Installing AI CLIs (Claude & Gemini)"
     
-    # Add Rust to PATH
-    if ! grep -q "cargo/bin" ~/.bashrc; then
-        echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+    # AI CLIs require Node.js, so install it if it's not present
+    if ! command_exists npm; then
+        print_info "Node.js/npm not found. Installing it first..."
+        install_nodejs
     fi
     
-    echo "✅ Rust installation complete"
+    print_info "Installing Claude Code and Gemini CLI via npm..."
+    npm install -g @anthropic-ai/claude-code
+    npm install -g @google/gemini-cli
+    
+    print_success "AI CLIs installed."
 }
 
-# Function to setup development directories
-setup_directories() {
-    echo "📁 Setting up development directories..."
+install_python_packages() {
+    print_header "Installing Python Development Tools"
     
-    mkdir -p ~/workspace ~/go/src ~/go/bin ~/go/pkg ~/.local/share/code-server/User
+    print_info "Installing pipx for managing Python applications..."
+    sudo apt-get update
+    sudo apt-get install -y pipx
     
-    echo "✅ Development directories created"
+    # Add pipx to the path and run it
+    pipx ensurepath
+    
+    # Tools to be installed with pipx
+    local python_tools=(
+        "black"
+        "flake8"
+        "mypy"
+        "pytest"
+        "jupyter"
+    )
+
+    print_info "Installing Python tools with pipx..."
+    for tool in "${python_tools[@]}"; do
+        pipx install "$tool"
+    done
+    
+    print_success "Python development tools installed via pipx."
+    print_info "Libraries like 'requests' or 'pandas' should be installed in a project's virtual environment."
 }
 
-# Function to setup useful aliases
-setup_aliases() {
-    echo "🔧 Setting up useful aliases..."
+install_lazygit() {
+    if command_exists lazygit; then
+        print_success "lazygit is already installed."
+        return
+    fi
+    print_header "Installing lazygit"
+    print_info "Fetching the latest lazygit version..."
+    LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
+    if [ -z "$LAZYGIT_VERSION" ]; then
+        print_error "Could not determine the latest lazygit version."
+    fi
     
-    # Check if aliases are already in bashrc
-    if ! grep -q "# Xanthus Development Aliases" ~/.bashrc; then
-        cat >> ~/.bashrc << 'EOF'
+    local ARCH_RAW
+    ARCH_RAW=$(uname -m)
+    local ARCH_LAZYGIT
+    case "$ARCH_RAW" in
+        x86_64) ARCH_LAZYGIT="x86_64" ;;
+        aarch64 | arm64) ARCH_LAZYGIT="arm64" ;;
+        *) print_error "Unsupported architecture for lazygit: $ARCH_RAW" ;;
+    esac
 
-# Xanthus Development Aliases
+    local TARFILE="lazygit_${LAZYGIT_VERSION}_Linux_${ARCH_LAZYGIT}.tar.gz"
+    print_info "Downloading lazygit v${LAZYGIT_VERSION}..."
+    curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/${TARFILE}"
+    
+    tar xf lazygit.tar.gz lazygit
+    sudo install lazygit /usr/local/bin
+    rm lazygit.tar.gz lazygit
+    print_success "lazygit installed successfully."
+}
+
+install_dagger() {
+    if command_exists dagger; then
+        print_success "Dagger is already installed: $(dagger version)"
+        return
+    fi
+    print_header "Installing Dagger"
+    print_info "Installing Dagger CI/CD Engine..."
+    mkdir -p "$HOME/.local/bin"
+    curl -fsSL https://dl.dagger.io/dagger/install.sh | BIN_DIR=$HOME/.local/bin sh
+
+    if ! grep -q '$HOME/.local/bin' ~/.bashrc; then
+        print_info "Adding $HOME/.local/bin to your PATH."
+        echo -e '\n# Add local binaries to path\nexport PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    fi
+    print_success "Dagger installed successfully."
+}
+
+setup_environment() {
+    print_header "Finalizing Environment Setup"
+    
+    print_info "Creating standard development directories..."
+    mkdir -p ~/workspace ~/go
+
+    print_info "Configuring useful aliases in ~/.bashrc..."
+    if ! grep -q "# Custom Development Aliases" ~/.bashrc; then
+      cat >> ~/.bashrc << 'EOF'
+
+# Custom Development Aliases
 alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
 alias ..='cd ..'
-alias ...='cd ../..'
-
-# Development shortcuts
-alias gst='git status'
-alias gco='git checkout'
-alias gc='git commit'
-alias gp='git push'
-alias gl='git log --oneline'
-
-# Docker shortcuts
-alias dps='docker ps'
-alias dimg='docker images'
-alias dlog='docker logs'
-
-# Python shortcuts
 alias py='python3'
 alias pip='pip3'
-
+alias gst='git status'
+alias gco='git checkout'
+alias dps='docker ps'
 EOF
     fi
-    
-    echo "✅ Aliases configured"
+    print_success "Environment setup is complete."
 }
 
-# Function to install additional tools
-install_additional_tools() {
-    echo "🛠️ Installing additional development tools..."
-    
-    # Install lazygit
-    if ! command -v lazygit &> /dev/null; then
-        echo "Installing lazygit..."
-        LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*')
-        curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
-        tar xf lazygit.tar.gz lazygit
-        sudo install lazygit /usr/local/bin
-        rm lazygit.tar.gz lazygit
-    fi
-    
-    # Install fd (find alternative)
-    if ! command -v fd &> /dev/null; then
-        echo "Installing fd..."
-        sudo apt-get install -y fd-find
-    fi
-    
-    # Install bat (cat alternative)
-    if ! command -v bat &> /dev/null; then
-        echo "Installing bat..."
-        sudo apt-get install -y bat
-    fi
-    
-    echo "✅ Additional tools installed"
-}
+# --- Main Execution ---
 
-# Function to show completion message
-show_completion() {
-    echo ""
-    echo "🎉 Development environment setup complete!"
-    echo ""
-    echo "Installed tools and packages:"
-    echo "  📦 System packages: build-essential, ripgrep, curl, wget, git, vim, nano, htop, tree, jq"
-    echo "  🐹 Go: $(go version 2>/dev/null || echo 'Not installed')"
-    echo "  🌐 Node.js: $(node --version 2>/dev/null || echo 'Not installed')"
-    echo "  🐍 Python: $(python3 --version 2>/dev/null || echo 'Not installed')"
-    echo "  🦀 Rust: $(rustc --version 2>/dev/null || echo 'Not installed')"
-    echo "  🛠️ Additional tools: lazygit, fd, bat"
-    echo ""
-    echo "To activate the new environment, run:"
-    echo "  source ~/.bashrc"
-    echo ""
-    echo "You can run this script again anytime to install additional tools or update existing ones."
-}
-
-# Main execution
 main() {
-    echo "🚀 Xanthus Code-Server Development Environment Setup"
-    echo "=================================================="
-    echo ""
-    
     check_root
     
-    echo "Select what you want to install:"
-    echo "1) Everything (recommended)"
-    echo "2) System packages only"
-    echo "3) Go only"
-    echo "4) Node.js only"
-    echo "5) Python packages only"
-    echo "6) Rust only"
-    echo "7) Additional tools only"
-    echo "8) Custom selection"
+    cat << "EOF"
+
+🚀 Development Environment Setup 🚀
+
+Select the tools you want to install. You can choose multiple options.
+Example: To install Go, Dagger, and AI Tools, enter: 2 5 7
+
+  [1] Base System & Dev Tools (Recommended First Run)
+  [2] Go (Latest)
+  [3] Node.js (via Volta)
+  [4] Rust
+  [5] AI CLIs (Claude & Gemini via npm)
+  [6] Python Dev Packages (flake8, pytest, etc.)
+  [7] Dagger (CI/CD Engine)
+  [8] lazygit (TUI for Git)
+  [9] Setup Aliases & Dirs
+  [10] ALL OF THE ABOVE
+
+EOF
+
+    read -p "Enter your choice(s): " -a choices
+    
+    if [ -z "${choices[*]}" ]; then
+        print_error "No selection made. Exiting."
+    fi
+
+    for choice in "${choices[@]}"; do
+        case $choice in
+            1) install_system_packages ;;
+            2) install_go ;;
+            3) install_nodejs ;;
+            4) install_rust ;;
+            5) install_npm_ai_clis ;;
+            6) install_python_packages ;;
+            7) install_dagger ;;
+            8) install_lazygit ;;
+            9) setup_environment ;;
+            10)
+                install_system_packages; install_go; install_nodejs; install_rust;
+                install_npm_ai_clis; install_python_packages; install_dagger;
+                install_lazygit; setup_environment;
+                break # No need to process other choices if 'all' is selected
+                ;;
+            *) echo -e "${C_YELLOW}⚠️ Ignoring invalid choice: $choice${C_RESET}" ;;
+        esac
+    done
+
+    # --- Completion Summary ---
+    print_header "Setup Summary"
+    echo -e "${C_GREEN}🎉 All selected tasks are complete!${C_RESET}\n"
+    echo "Verification:"
+    command_exists go && echo -e "  - Go:        ${C_GREEN}Installed ($(go version))${C_RESET}"
+    command_exists node && echo -e "  - Node.js:   ${C_GREEN}Installed ($(node -v))${C_RESET}"
+    command_exists rustc && echo -e "  - Rust:      ${C_GREEN}Installed ($(rustc --version))${C_RESET}"
+    command_exists dagger && echo -e "  - Dagger:    ${C_GREEN}Installed ($(dagger version))${C_RESET}"
+    command_exists lazygit && echo -e "  - lazygit:   ${C_GREEN}Installed${C_RESET}"
+    command_exists gemini && echo -e "  - Gemini CLI:  ${C_GREEN}Installed (npm package)${C_RESET}"
+    command_exists claude-code && echo -e "  - Claude Code: ${C_GREEN}Installed (npm package)${C_RESET}"
     echo ""
-    read -p "Enter your choice (1-8): " choice
-    
-    case $choice in
-        1)
-            install_system_packages
-            install_go
-            install_nodejs
-            install_npm_packages
-            install_python_packages
-            install_rust
-            setup_directories
-            setup_aliases
-            install_additional_tools
-            ;;
-        2)
-            install_system_packages
-            ;;
-        3)
-            install_go
-            ;;
-        4)
-            install_nodejs
-            install_npm_packages
-            ;;
-        5)
-            install_python_packages
-            ;;
-        6)
-            install_rust
-            ;;
-        7)
-            install_additional_tools
-            ;;
-        8)
-            echo "Custom selection mode:"
-            read -p "Install system packages? (y/n): " sys && [[ $sys == "y" ]] && install_system_packages
-            read -p "Install Go? (y/n): " go && [[ $go == "y" ]] && install_go
-            read -p "Install Node.js? (y/n): " node && [[ $node == "y" ]] && install_nodejs && install_npm_packages
-            read -p "Install Python packages? (y/n): " python && [[ $python == "y" ]] && install_python_packages
-            read -p "Install Rust? (y/n): " rust && [[ $rust == "y" ]] && install_rust
-            read -p "Install additional tools? (y/n): " tools && [[ $tools == "y" ]] && install_additional_tools
-            ;;
-        *)
-            echo "Invalid choice. Exiting."
-            exit 1
-            ;;
-    esac
-    
-    setup_directories
-    setup_aliases
-    show_completion
+    print_info "To apply all changes, please restart your terminal or run:"
+    echo -e "${C_CYAN}  source ~/.bashrc${C_RESET}"
 }
 
-# Run main function
 main "$@"

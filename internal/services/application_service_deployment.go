@@ -20,6 +20,13 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 	domain := appData["domain"].(string)
 	vpsID := appData["vps_id"].(string)
 
+	// Check for existing ArgoCD installation on this VPS
+	if predefinedApp.ID == "argocd" {
+		if err := s.checkExistingArgoCDInstallation(token, accountID, vpsID); err != nil {
+			return err
+		}
+	}
+
 	// Get VPS configuration for SSH details
 	var vpsConfig struct {
 		PublicIPv4 string `json:"public_ipv4"`
@@ -532,3 +539,4 @@ func (s *SimpleApplicationService) cleanupFailedDeployment(conn *SSHConnection, 
 
 	return nil
 }
+
