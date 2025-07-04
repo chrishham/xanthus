@@ -91,6 +91,11 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.POST("/validate-key", config.VPSConfigHandler.HandleVPSValidateKey)
 		vps.POST("/:id/configure", config.VPSConfigHandler.HandleVPSConfigure)
 		vps.POST("/:id/deploy", config.VPSConfigHandler.HandleVPSDeploy)
+
+		// Timezone routes
+		vps.GET("/timezones", config.VPSConfigHandler.HandleVPSListTimezones)
+		vps.GET("/:id/timezone", config.VPSConfigHandler.HandleVPSGetTimezone)
+		vps.POST("/:id/timezone", config.VPSConfigHandler.HandleVPSSetTimezone)
 	}
 
 	// Terminal management routes (legacy GoTTY)

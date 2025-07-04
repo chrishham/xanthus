@@ -282,6 +282,7 @@ type VPSConfig struct {
 	SSHPort       int     `json:"ssh_port"`
 	HourlyRate    float64 `json:"hourly_rate"`  // EUR per hour
 	MonthlyRate   float64 `json:"monthly_rate"` // EUR per month (including IPv4)
+	Timezone      string  `json:"timezone"`     // e.g., "Europe/Berlin", "UTC"
 }
 
 // StoreVPSConfig stores VPS configuration in KV

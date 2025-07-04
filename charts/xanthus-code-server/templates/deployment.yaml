@@ -27,6 +27,10 @@ spec:
         - name: SETUP_SCRIPT_AVAILABLE
           value: "true"
         {{- end }}
+        {{- if .Values.timezone }}
+        - name: TZ
+          value: "{{ .Values.timezone }}"
+        {{- end }}
         volumeMounts:
         # Mount entire home directory to persistent volume
         - name: home-data
@@ -64,6 +68,11 @@ spec:
           
           # Ensure correct ownership
           chown -R coder:coder /home/coder
+        env:
+        {{- if .Values.timezone }}
+        - name: TZ
+          value: "{{ .Values.timezone }}"
+        {{- end }}
         securityContext:
           runAsUser: 0
         volumeMounts:

@@ -528,7 +528,7 @@ func (s *SimpleApplicationService) cleanupArgoCDResources(sshService *SSHService
 	fmt.Printf("🧹 Cleaning up ArgoCD CRDs...\n")
 	crdCommands := []string{
 		"kubectl delete crd applications.argoproj.io --ignore-not-found=true",
-		"kubectl delete crd applicationsets.argoproj.io --ignore-not-found=true", 
+		"kubectl delete crd applicationsets.argoproj.io --ignore-not-found=true",
 		"kubectl delete crd appprojects.argoproj.io --ignore-not-found=true",
 	}
 

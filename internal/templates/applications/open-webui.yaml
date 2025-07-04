@@ -50,6 +50,8 @@ securityContext:
 
 # Environment variables
 env:
+  - name: TZ
+    value: "{{TIMEZONE}}"
   - name: WEBUI_NAME
     value: "{{SUBDOMAIN}} WebUI"
   - name: WEBUI_SECRET_KEY

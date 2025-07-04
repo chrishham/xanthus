@@ -26,6 +26,11 @@ server:
   extraArgs:
     - --insecure
   
+  # Environment variables including timezone
+  env:
+    - name: TZ
+      value: "{{TIMEZONE}}"
+  
   # Service configuration
   service:
     type: ClusterIP
@@ -43,6 +48,11 @@ server:
 
 # ArgoCD repository server configuration
 repoServer:
+  # Environment variables including timezone
+  env:
+    - name: TZ
+      value: "{{TIMEZONE}}"
+  
   resources:
     limits:
       cpu: 500m
@@ -53,6 +63,11 @@ repoServer:
 
 # ArgoCD application controller configuration
 controller:
+  # Environment variables including timezone
+  env:
+    - name: TZ
+      value: "{{TIMEZONE}}"
+  
   resources:
     limits:
       cpu: 1000m
@@ -86,6 +101,11 @@ dex:
 # Notifications controller
 notifications:
   enabled: true
+  # Environment variables including timezone
+  env:
+    - name: TZ
+      value: "{{TIMEZONE}}"
+  
   resources:
     limits:
       cpu: 100m
@@ -97,6 +117,11 @@ notifications:
 # ApplicationSet controller
 applicationSet:
   enabled: true
+  # Environment variables including timezone
+  env:
+    - name: TZ
+      value: "{{TIMEZONE}}"
+  
   resources:
     limits:
       cpu: 100m

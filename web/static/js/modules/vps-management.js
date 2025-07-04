@@ -1156,6 +1156,198 @@ export function vpsManagement() {
             });
         },
 
+        // Timezone management functions
+        async showTimezoneInfo(server) {
+            try {
+                const response = await fetch(`/vps/${server.id}/timezone`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    Swal.fire({
+                        title: '🕐 Timezone Information',
+                        html: `
+                            <div class="text-left text-sm">
+                                <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                                    <div class="flex items-center mb-3">
+                                        <svg class="h-5 w-5 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                                        </svg>
+                                        <strong class="text-blue-800">Server Timezone Settings</strong>
+                                    </div>
+                                    
+                                    <div class="space-y-3">
+                                        <div>
+                                            <strong class="text-gray-700">Current System Timezone:</strong>
+                                            <div class="mt-1 p-2 bg-gray-100 rounded border font-mono text-sm">
+                                                ${data.current_timezone}
+                                            </div>
+                                        </div>
+                                        
+                                        <div>
+                                            <strong class="text-gray-700">Configured Timezone:</strong>
+                                            <div class="mt-1 p-2 bg-gray-100 rounded border font-mono text-sm">
+                                                ${data.config_timezone}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-xs text-gray-500 mt-3">
+                                    <p>💡 <strong>Tip:</strong> Use the timezone manager to change the server's timezone. This will affect all applications and deployments on this server.</p>
+                                </div>
+                            </div>
+                        `,
+                        width: '600px',
+                        confirmButtonText: 'OK',
+                        confirmButtonColor: '#3b82f6',
+                        showCloseButton: true
+                    });
+                } else {
+                    throw new Error('Failed to fetch timezone information');
+                }
+            } catch (error) {
+                console.error('Error fetching timezone info:', error);
+                Swal.fire({
+                    title: 'Error',
+                    text: 'Failed to fetch timezone information',
+                    icon: 'error'
+                });
+            }
+        },
+
+        async showTimezoneManager(server) {
+            try {
+                // First, get current timezone
+                const timezoneResponse = await fetch(`/vps/${server.id}/timezone`);
+                const timezoneData = await timezoneResponse.json();
+                
+                // Then, get available timezones
+                const timezonesResponse = await fetch('/vps/timezones');
+                const timezonesData = await timezonesResponse.json();
+                
+                const timezones = timezonesData.timezones || [];
+                const currentTimezone = timezoneData.current_timezone || 'UTC';
+                
+                // Create timezone options
+                const timezoneOptions = timezones.map(tz => 
+                    `<option value="${tz}" ${tz === currentTimezone ? 'selected' : ''}>${tz}</option>`
+                ).join('');
+                
+                Swal.fire({
+                    title: '🕐 Timezone Manager',
+                    html: `
+                        <div class="text-left text-sm">
+                            <div class="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded-md">
+                                <div class="flex items-center mb-3">
+                                    <svg class="h-5 w-5 text-indigo-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                                    </svg>
+                                    <strong class="text-indigo-800">Change Server Timezone</strong>
+                                </div>
+                                
+                                <div class="space-y-3">
+                                    <div>
+                                        <strong class="text-gray-700">Current Timezone:</strong>
+                                        <div class="mt-1 p-2 bg-gray-100 rounded border font-mono text-sm">
+                                            ${currentTimezone}
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label for="timezone-select" class="block text-sm font-medium text-gray-700 mb-2">
+                                            Select New Timezone:
+                                        </label>
+                                        <select id="timezone-select" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                            ${timezoneOptions}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="text-xs text-gray-500 mt-3">
+                                <p>⚠️ <strong>Warning:</strong> Changing the timezone will affect all applications and deployments on this server. The change will take effect immediately.</p>
+                            </div>
+                        </div>
+                    `,
+                    width: '600px',
+                    showCancelButton: true,
+                    confirmButtonText: 'Change Timezone',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#4f46e5',
+                    cancelButtonColor: '#6b7280',
+                    showCloseButton: true,
+                    preConfirm: () => {
+                        const selectedTimezone = document.getElementById('timezone-select').value;
+                        if (!selectedTimezone) {
+                            Swal.showValidationMessage('Please select a timezone');
+                            return false;
+                        }
+                        return selectedTimezone;
+                    }
+                }).then(async (result) => {
+                    if (result.isConfirmed) {
+                        await this.changeTimezone(server, result.value);
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading timezone manager:', error);
+                Swal.fire({
+                    title: 'Error',
+                    text: 'Failed to load timezone manager',
+                    icon: 'error'
+                });
+            }
+        },
+
+        async changeTimezone(server, timezone) {
+            try {
+                this.setLoading(true, 'Changing Timezone', `Updating timezone to ${timezone} for ${server.name}...`);
+                
+                const formData = new FormData();
+                formData.append('timezone', timezone);
+                
+                const response = await fetch(`/vps/${server.id}/timezone`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Update the server's timezone in the local data
+                    const serverIndex = this.servers.findIndex(s => s.id === server.id);
+                    if (serverIndex !== -1) {
+                        this.servers[serverIndex].timezone = timezone;
+                    }
+                    
+                    Swal.fire({
+                        title: 'Success!',
+                        text: `Timezone changed to ${timezone} successfully`,
+                        icon: 'success',
+                        confirmButtonColor: '#10b981'
+                    });
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Failed to change timezone');
+                }
+            } catch (error) {
+                console.error('Error changing timezone:', error);
+                Swal.fire({
+                    title: 'Error',
+                    text: `Failed to change timezone: ${error.message}`,
+                    icon: 'error'
+                });
+            } finally {
+                this.setLoading(false);
+            }
+        },
+
         // Cleanup on component destroy
         destroy() {
             this.stopAutoRefresh();

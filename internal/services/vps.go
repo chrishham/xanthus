@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"log"
+	"strings"
 )
 
 // VPSService provides high-level business logic for VPS operations
@@ -116,6 +117,7 @@ func (vs *VPSService) CreateVPSWithConfig(
 		SSHPort:     22,
 		HourlyRate:  hourlyRate,
 		MonthlyRate: monthlyRate,
+		Timezone:    vs.getTimezoneForLocation(location),
 	}
 
 	// Store VPS configuration
@@ -199,4 +201,47 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 	}
 
 	return servers, nil
+}
+
+// getTimezoneForLocation maps Hetzner datacenter locations to appropriate timezones
+func (vs *VPSService) getTimezoneForLocation(location string) string {
+	locationTimezones := map[string]string{
+		"nbg1":     "Europe/Berlin",    // Nuremberg, Germany
+		"fsn1":     "Europe/Berlin",    // Falkenstein, Germany
+		"hel1":     "Europe/Helsinki",  // Helsinki, Finland
+		"ash":      "America/New_York", // Ashburn, USA
+		"hil":      "America/New_York", // Hillsboro, USA
+		"cax":      "America/New_York", // Central US
+		"default":  "Europe/Athens",    // Default for Greece-based deployments
+	}
+	
+	// Extract location prefix (e.g., "nbg1" from "nbg1-dc3")
+	for prefix, timezone := range locationTimezones {
+		if strings.HasPrefix(location, prefix) {
+			return timezone
+		}
+	}
+	
+	// Default fallback
+	return locationTimezones["default"]
+}
+
+// UpdateVPSTimezone updates the timezone for an existing VPS configuration
+func (vs *VPSService) UpdateVPSTimezone(token, accountID string, serverID int) error {
+	// Get existing VPS configuration
+	vpsConfig, err := vs.kv.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS config: %w", err)
+	}
+	
+	// Update timezone based on location
+	vpsConfig.Timezone = vs.getTimezoneForLocation(vpsConfig.Location)
+	
+	// Store updated configuration
+	if err := vs.kv.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
+		return fmt.Errorf("failed to update VPS config: %w", err)
+	}
+	
+	log.Printf("✅ Updated timezone for VPS %d to %s", serverID, vpsConfig.Timezone)
+	return nil
 }

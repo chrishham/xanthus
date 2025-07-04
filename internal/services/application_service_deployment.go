@@ -27,10 +27,11 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 		}
 	}
 
-	// Get VPS configuration for SSH details
+	// Get VPS configuration for SSH details and timezone
 	var vpsConfig struct {
 		PublicIPv4 string `json:"public_ipv4"`
 		SSHUser    string `json:"ssh_user"`
+		Timezone   string `json:"timezone"`
 	}
 	err := kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", vpsID), &vpsConfig)
 	if err != nil {
@@ -99,8 +100,17 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 		chartName = fmt.Sprintf("%s/%s", repoName, helmConfig.Chart)
 	}
 
+	// Handle missing timezone with VPS location-based fallback
+	timezone := vpsConfig.Timezone
+	if timezone == "" {
+		// Fallback to detecting timezone from SSH connection to VPS
+		if timezone = s.detectVPSTimezone(token, accountID, vpsID); timezone == "" {
+			timezone = "Europe/Berlin" // Ultimate fallback for nbg1 datacenter
+		}
+	}
+	
 	// Generate and upload values file
-	valuesContent, err := s.generateValuesFile(predefinedApp, subdomain, domain, releaseName)
+	valuesContent, err := s.generateValuesFile(predefinedApp, subdomain, domain, releaseName, timezone)
 	if err != nil {
 		return fmt.Errorf("failed to generate values file: %v", err)
 	}
@@ -154,6 +164,7 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 func (s *SimpleApplicationService) configureVPSSSL(token, accountID, domain string, vpsConfig struct {
 	PublicIPv4 string `json:"public_ipv4"`
 	SSHUser    string `json:"ssh_user"`
+	Timezone   string `json:"timezone"`
 }, csrConfig struct {
 	PrivateKey string `json:"private_key"`
 }) error {
@@ -344,6 +355,45 @@ func (s *SimpleApplicationService) retrieveArgoCDPassword(token, accountID, appI
 
 	fmt.Printf("Successfully retrieved ArgoCD admin password for application %s\n", appID)
 	return nil
+}
+
+// detectVPSTimezone detects the current timezone from the VPS via SSH
+func (s *SimpleApplicationService) detectVPSTimezone(token, accountID, vpsID string) string {
+	kvService := NewKVService()
+	sshService := NewSSHService()
+	
+	// Get VPS configuration for SSH details
+	var vpsConfig struct {
+		PublicIPv4 string `json:"public_ipv4"`
+		SSHUser    string `json:"ssh_user"`
+	}
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("vps:%s:config", vpsID), &vpsConfig)
+	if err != nil {
+		return ""
+	}
+
+	// Get SSH private key
+	var csrConfig struct {
+		PrivateKey string `json:"private_key"`
+	}
+	if err := kvService.GetValue(token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		return ""
+	}
+
+	// Create SSH connection
+	conn, err := sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey)
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+
+	// Get current timezone from VPS
+	result, err := sshService.ExecuteCommand(conn, "timedatectl show --property=Timezone --value")
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(result.Output)
 }
 
 // storeEncryptedPassword encrypts and stores the password in KV store

@@ -42,7 +42,7 @@ func (ac *ArgoCDHandlers) UpdatePassword(token, accountID, appID, newPassword st
 
 	// Update the ArgoCD admin password by directly patching the secret
 	sshService := services.NewSSHService()
-	
+
 	// Base64 encode the new password
 	encodeCmd := fmt.Sprintf("echo '%s' | base64 -w 0", newPassword)
 	encodeResult, err := sshService.ExecuteCommand(conn, encodeCmd)

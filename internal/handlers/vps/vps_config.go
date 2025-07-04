@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/chrishham/xanthus/internal/services"
@@ -239,4 +240,213 @@ func (h *VPSConfigHandler) HandleSetupHetzner(c *gin.Context) {
 	log.Println("✅ Hetzner API key stored successfully")
 	c.Header("HX-Redirect", "/setup/server")
 	c.Status(http.StatusOK)
+}
+
+// HandleVPSGetTimezone retrieves the current timezone for a VPS
+func (h *VPSConfigHandler) HandleVPSGetTimezone(c *gin.Context) {
+	serverIDStr := c.Param("id")
+	vpsConfig, valid := h.getVPSConfig(c, serverIDStr)
+	if !valid {
+		return
+	}
+
+	token, accountID, _ := h.validateTokenAndAccount(c)
+
+	// Get SSH private key
+	privateKey, valid := h.getSSHPrivateKey(c, token, accountID)
+	if !valid {
+		return
+	}
+
+	// Connect to VPS and get timezone
+	conn, err := h.sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, privateKey)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("SSH connection failed: %v", err))
+		return
+	}
+	defer conn.Close()
+
+	// Get current timezone from VPS
+	result, err := h.sshService.ExecuteCommand(conn, "timedatectl show --property=Timezone --value")
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to get timezone: %v", err))
+		return
+	}
+
+	currentTimezone := strings.TrimSpace(result.Output)
+
+	// Also return the timezone from config if available
+	configTimezone := vpsConfig.Timezone
+	if configTimezone == "" {
+		configTimezone = currentTimezone
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"current_timezone": currentTimezone,
+		"config_timezone":  configTimezone,
+		"success":          true,
+	})
+}
+
+// HandleVPSSetTimezone sets the timezone for a VPS
+func (h *VPSConfigHandler) HandleVPSSetTimezone(c *gin.Context) {
+	serverIDStr := c.Param("id")
+	vpsConfig, valid := h.getVPSConfig(c, serverIDStr)
+	if !valid {
+		return
+	}
+
+	token, accountID, _ := h.validateTokenAndAccount(c)
+
+	timezone := c.PostForm("timezone")
+	if timezone == "" {
+		utils.JSONBadRequest(c, "Timezone is required")
+		return
+	}
+
+	// Validate timezone format
+	if !h.isValidTimezone(timezone) {
+		utils.JSONBadRequest(c, "Invalid timezone format")
+		return
+	}
+
+	// Get SSH private key
+	privateKey, valid := h.getSSHPrivateKey(c, token, accountID)
+	if !valid {
+		return
+	}
+
+	// Parse server ID for logging
+	serverID, _ := utils.ParseServerID(serverIDStr)
+
+	// Connect to VPS and set timezone
+	conn, err := h.sshService.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, privateKey)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("SSH connection failed: %v", err))
+		return
+	}
+	defer conn.Close()
+
+	// Set timezone on VPS
+	cmd := fmt.Sprintf("timedatectl set-timezone %s", timezone)
+	if _, err := h.sshService.ExecuteCommand(conn, cmd); err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to set timezone: %v", err))
+		return
+	}
+
+	// Verify the change
+	result, err := h.sshService.ExecuteCommand(conn, "timedatectl show --property=Timezone --value")
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to verify timezone: %v", err))
+		return
+	}
+
+	actualTimezone := strings.TrimSpace(result.Output)
+	if actualTimezone != timezone {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Timezone verification failed: expected %s, got %s", timezone, actualTimezone))
+		return
+	}
+
+	// Update VPS config with new timezone
+	vpsConfig.Timezone = timezone
+	if err := h.kvService.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
+		log.Printf("Warning: Failed to store timezone in VPS config: %v", err)
+	}
+
+	log.Printf("✅ Successfully set timezone %s for VPS %d", timezone, serverID)
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"message":  fmt.Sprintf("Successfully set timezone to %s", timezone),
+		"timezone": actualTimezone,
+	})
+}
+
+// HandleVPSListTimezones returns a list of available timezones
+func (h *VPSConfigHandler) HandleVPSListTimezones(c *gin.Context) {
+	timezones := []string{
+		"UTC",
+		"US/Eastern",
+		"US/Central",
+		"US/Mountain",
+		"US/Pacific",
+		"Europe/London",
+		"Europe/Paris",
+		"Europe/Berlin",
+		"Europe/Rome",
+		"Europe/Madrid",
+		"Europe/Athens",
+		"Europe/Amsterdam",
+		"Europe/Brussels",
+		"Europe/Vienna",
+		"Europe/Prague",
+		"Europe/Warsaw",
+		"Europe/Budapest",
+		"Europe/Helsinki",
+		"Europe/Stockholm",
+		"Europe/Oslo",
+		"Europe/Copenhagen",
+		"Europe/Zurich",
+		"Asia/Tokyo",
+		"Asia/Shanghai",
+		"Asia/Hong_Kong",
+		"Asia/Singapore",
+		"Asia/Mumbai",
+		"Asia/Dubai",
+		"Asia/Seoul",
+		"Asia/Bangkok",
+		"Asia/Jakarta",
+		"Australia/Sydney",
+		"Australia/Melbourne",
+		"Australia/Perth",
+		"America/New_York",
+		"America/Chicago",
+		"America/Denver",
+		"America/Los_Angeles",
+		"America/Toronto",
+		"America/Vancouver",
+		"America/Mexico_City",
+		"America/Sao_Paulo",
+		"America/Buenos_Aires",
+		"Africa/Cairo",
+		"Africa/Johannesburg",
+		"Africa/Lagos",
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"timezones": timezones,
+		"success":   true,
+	})
+}
+
+// isValidTimezone validates if a timezone string is valid
+func (h *VPSConfigHandler) isValidTimezone(timezone string) bool {
+	// Basic validation - could be enhanced with more comprehensive checks
+	if timezone == "" {
+		return false
+	}
+
+	// Check for common timezone patterns
+	validPatterns := []string{
+		"UTC",
+		"GMT",
+		"US/",
+		"Europe/",
+		"Asia/",
+		"Australia/",
+		"America/",
+		"Africa/",
+		"Pacific/",
+		"Indian/",
+		"Atlantic/",
+		"Arctic/",
+		"Antarctica/",
+	}
+
+	for _, pattern := range validPatterns {
+		if timezone == pattern || strings.HasPrefix(timezone, pattern) {
+			return true
+		}
+	}
+
+	return false
 }

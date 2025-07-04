@@ -126,6 +126,9 @@ serviceAccount:
 # Replica count
 replicaCount: 1
 
+# Timezone configuration (inherits from VPS if set)
+timezone: "{{TIMEZONE}}"
+
 # Extra environment variables
 extraVars: []
 
