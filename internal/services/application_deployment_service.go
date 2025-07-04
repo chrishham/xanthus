@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/chrishham/xanthus/internal/models"
 	"github.com/chrishham/xanthus/internal/utils"
@@ -608,17 +609,49 @@ func (ads *ApplicationDeploymentService) retrieveCodeServerPassword(token, accou
 	}
 	defer conn.Close()
 
-	// Retrieve password from Kubernetes secret
-	// The secret name is the same as the release name for code-server
-	secretName := releaseName
-	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
-	result, err := sshService.ExecuteCommand(conn, cmd)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve password from secret '%s' in namespace '%s': %v", secretName, namespace, err)
+	// Retrieve password from Kubernetes secret with retry logic
+	// Try custom chart secret name first (release-name + "-xanthus-code-server")
+	customSecretName := fmt.Sprintf("%s-xanthus-code-server", releaseName)
+	officialSecretName := releaseName
+	
+	var password string
+	var retrievalErr error
+	
+	// Retry up to 30 times with 2-second intervals (1 minute total)
+	for attempt := 1; attempt <= 30; attempt++ {
+		fmt.Printf("Password retrieval attempt %d/30 for app %s\n", attempt, appID)
+		
+		// Try custom chart secret first
+		cmd := fmt.Sprintf("set -o pipefail; kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, customSecretName)
+		result, err := sshService.ExecuteCommand(conn, cmd)
+		if err == nil && strings.TrimSpace(result.Output) != "" && !strings.Contains(result.Output, "Error from server") {
+			password = strings.TrimSpace(result.Output)
+			fmt.Printf("Successfully retrieved password from custom secret %s on attempt %d\n", customSecretName, attempt)
+			break
+		}
+		
+		// Try official chart secret as fallback
+		cmd = fmt.Sprintf("set -o pipefail; kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, officialSecretName)
+		result, err = sshService.ExecuteCommand(conn, cmd)
+		if err == nil && strings.TrimSpace(result.Output) != "" && !strings.Contains(result.Output, "Error from server") {
+			password = strings.TrimSpace(result.Output)
+			fmt.Printf("Successfully retrieved password from official secret %s on attempt %d\n", officialSecretName, attempt)
+			break
+		}
+		
+		if attempt == 30 {
+			retrievalErr = fmt.Errorf("failed to retrieve password from secrets '%s' or '%s' in namespace '%s' after 30 attempts", customSecretName, officialSecretName, namespace)
+		} else {
+			fmt.Printf("Password not ready yet, waiting 2 seconds before retry %d...\n", attempt+1)
+			time.Sleep(2 * time.Second)
+		}
+	}
+	
+	if retrievalErr != nil {
+		return retrievalErr
 	}
 
 	// Store password in KV store
-	password := strings.TrimSpace(result.Output)
 	return ads.storeEncryptedPassword(token, accountID, appID, password)
 }
 

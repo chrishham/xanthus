@@ -385,17 +385,17 @@ func (p *PasswordHelper) retrieveCodeServerPasswordFromVPS(conn *services.SSHCon
 	
 	// Try the custom chart secret name first (release-name + "-xanthus-code-server")
 	customSecretName := fmt.Sprintf("%s-xanthus-code-server", releaseName)
-	cmd := fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, customSecretName)
+	cmd := fmt.Sprintf("set -o pipefail; kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, customSecretName)
 
 	fmt.Printf("DEBUG: Trying custom chart secret: %s\n", customSecretName)
 	result, err := sshService.ExecuteCommand(conn, cmd)
-	if err == nil && strings.TrimSpace(result.Output) != "" {
-		// Success with custom chart secret
+	if err == nil && strings.TrimSpace(result.Output) != "" && !strings.Contains(result.Output, "Error from server") {
+		// Success with custom chart secret - make sure it's not an error message
 		return strings.TrimSpace(result.Output), nil
 	}
 	
 	// Fall back to original secret name for official chart
-	cmd = fmt.Sprintf("kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' | base64 --decode", namespace, secretName)
+	cmd = fmt.Sprintf("set -o pipefail; kubectl get secret --namespace %s %s -o jsonpath='{.data.password}' 2>/dev/null | base64 --decode", namespace, secretName)
 	fmt.Printf("DEBUG: Trying official chart secret: %s\n", secretName)
 	result, err = sshService.ExecuteCommand(conn, cmd)
 	if err != nil {
@@ -405,8 +405,8 @@ func (p *PasswordHelper) retrieveCodeServerPasswordFromVPS(conn *services.SSHCon
 	}
 
 	password := strings.TrimSpace(result.Output)
-	if password == "" {
-		return "", fmt.Errorf("retrieved empty password from code-server secret")
+	if password == "" || strings.Contains(password, "Error from server") {
+		return "", fmt.Errorf("retrieved empty password or error from code-server secret")
 	}
 
 	return password, nil
@@ -426,8 +426,8 @@ func (p *PasswordHelper) retrieveArgoCDPasswordFromVPS(conn *services.SSHConnect
 	}
 
 	password := strings.TrimSpace(result.Output)
-	if password == "" {
-		return "", fmt.Errorf("retrieved empty password from ArgoCD secret")
+	if password == "" || strings.Contains(password, "Error from server") {
+		return "", fmt.Errorf("retrieved empty password or error from ArgoCD secret")
 	}
 
 	return password, nil
