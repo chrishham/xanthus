@@ -539,4 +539,3 @@ func (s *SimpleApplicationService) cleanupFailedDeployment(conn *SSHConnection, 
 
 	return nil
 }
-

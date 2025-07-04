@@ -507,7 +507,7 @@ func (ads *ApplicationDeploymentService) generateValuesFromTemplate(predefinedAp
 			placeholders[key] = value
 		}
 	}
-	
+
 	// Ensure VERSION is not overridden (final safeguard)
 	placeholders["VERSION"] = version
 

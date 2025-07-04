@@ -429,7 +429,7 @@ func (s *SimpleApplicationService) GetApplicationRealTimeStatus(token, accountID
 // checkExistingArgoCDInstallation checks if there's already an ArgoCD installation on the VPS
 func (s *SimpleApplicationService) checkExistingArgoCDInstallation(token, accountID, vpsID string) error {
 	kvService := NewKVService()
-	
+
 	// Get all applications from KV store
 	applications, err := s.getAllApplications(token, accountID, kvService)
 	if err != nil {
