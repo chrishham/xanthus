@@ -70,3 +70,5 @@ buy domain, point nameservers to cloudfare, wait for the domain to be active, cr
    291 internal/utils/hetzner.go
 
    GetPredefinedApplications
+
+    what is the current persistence of argocd settings right now? i dont on every helm upgrade/pod restart to loose the settings. 

@@ -1,0 +1,176 @@
+# Open WebUI Helm Values Template
+# This template supports placeholder substitution for dynamic deployment
+
+# Image configuration
+image:
+  repository: ghcr.io/open-webui/open-webui
+  tag: "{{VERSION}}"
+  pullPolicy: Always
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Ingress configuration with Traefik
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  host: "{{SUBDOMAIN}}.{{DOMAIN}}"
+  tls: true
+  existingSecret: "{{DOMAIN}}-tls"
+
+# Persistence configuration
+persistence:
+  enabled: true
+  size: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClass: ""
+
+# Resource configuration
+resources:
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+
+# Security context
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Environment variables
+env:
+  - name: WEBUI_NAME
+    value: "{{SUBDOMAIN}} WebUI"
+  - name: WEBUI_SECRET_KEY
+    value: "{{RELEASE_NAME}}-secret-key"
+  - name: DEFAULT_USER_ROLE
+    value: "user"
+  - name: ENABLE_SIGNUP
+    value: "true"
+
+# OpenAI API configuration (can be overridden)
+openai:
+  api_base_url: ""
+  api_key: ""
+
+# Ollama configuration (disabled by default)
+ollama:
+  enabled: false
+
+# PostgreSQL configuration (disabled by default - uses SQLite)
+postgresql:
+  enabled: false
+
+# Redis configuration (disabled by default)
+redis:
+  enabled: false
+
+# Replica count
+replicaCount: 1
+
+# Pod annotations
+podAnnotations: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Autoscaling (disabled by default)
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Startup probe
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+  successThreshold: 1
+
+# Liveness probe
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# Readiness probe
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+  successThreshold: 1
+
+# Extra environment variables
+extraEnvVars: []
+
+# Extra volumes
+extraVolumes: []
+
+# Extra volume mounts
+extraVolumeMounts: []
+
+# Init containers
+initContainers: []
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Full name override
+fullnameOverride: ""
+
+# Name override
+nameOverride: ""
+
+# Priority class name
+priorityClassName: ""
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: ""
+
+# Network policy
+networkPolicy:
+  enabled: false
