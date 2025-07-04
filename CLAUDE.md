@@ -294,6 +294,8 @@ You can login to the app with the CLOUDFARE_API_TOKEN found at .env
 
 Always use instructions at @logic/curl-commands.md to interact with the app, check changes and iterate.
 
+For deploying a new code-server application in Xanthus always consult the @logic/code-server-deployment-flow.md
+
 ## Important!!!
 
 All *.go files shouldn't exceed the 500 lines limit. If you encounter such a case please tell me and suggest a refactor plan.
