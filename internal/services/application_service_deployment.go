@@ -342,8 +342,8 @@ func (s *SimpleApplicationService) retrieveArgoCDPassword(token, accountID, appI
 		return fmt.Errorf("retrieved empty password from ArgoCD secret")
 	}
 
-	// Store password in KV store
-	return s.storeEncryptedPassword(token, accountID, appID, password)
+	fmt.Printf("Successfully retrieved ArgoCD admin password for application %s\n", appID)
+	return nil
 }
 
 // storeEncryptedPassword encrypts and stores the password in KV store

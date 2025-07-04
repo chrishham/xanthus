@@ -40,40 +40,31 @@ func (ac *ArgoCDHandlers) UpdatePassword(token, accountID, appID, newPassword st
 		return fmt.Errorf("failed to connect to VPS: %v", err)
 	}
 
-	// Update the ArgoCD admin password using Helm values
-	// Generate bcrypt hash of the new password using htpasswd
+	// Update the ArgoCD admin password by directly patching the secret
 	sshService := services.NewSSHService()
-	hashCmd := fmt.Sprintf("htpasswd -nbBC 10 \"\" %s | tr -d ':\\n' | sed 's/$2y/$2a/'", newPassword)
-	hashResult, err := sshService.ExecuteCommand(conn, hashCmd)
+	
+	// Base64 encode the new password
+	encodeCmd := fmt.Sprintf("echo '%s' | base64 -w 0", newPassword)
+	encodeResult, err := sshService.ExecuteCommand(conn, encodeCmd)
 	if err != nil {
-		return fmt.Errorf("failed to generate password hash: %v", err)
+		return fmt.Errorf("failed to encode password: %v", err)
 	}
-	hashedPassword := strings.TrimSpace(hashResult.Output)
+	encodedPassword := strings.TrimSpace(encodeResult.Output)
 
-	// Get the Helm release name from the application namespace
-	releaseName := fmt.Sprintf("%s-app-%s", appData.Subdomain, strings.Split(appData.ID, "-")[1])
-
-	// Update ArgoCD using Helm values
-	upgradeCmd := fmt.Sprintf("helm upgrade %s oci://ghcr.io/argoproj/argo-helm/argo-cd --version 8.1.2 --namespace %s --set configs.secret.argocdServerAdminPassword=%s --reuse-values",
-		releaseName, appData.Namespace, hashedPassword)
-	_, err = sshService.ExecuteCommand(conn, upgradeCmd)
+	// Update the ArgoCD initial admin secret directly
+	patchCmd := fmt.Sprintf("kubectl patch secret argocd-initial-admin-secret -n %s -p '{\"data\":{\"password\":\"%s\"}}'", appData.Namespace, encodedPassword)
+	_, err = sshService.ExecuteCommand(conn, patchCmd)
 	if err != nil {
-		return fmt.Errorf("failed to update ArgoCD with new password: %v", err)
+		return fmt.Errorf("failed to update ArgoCD admin secret: %v", err)
 	}
 
-	// Update stored password in KV
-	return ac.passwordHelper.StoreEncryptedPassword(token, accountID, appID, newPassword)
+	log.Printf("Successfully updated ArgoCD admin password for application %s", appID)
+	return nil
 }
 
 // GetPassword retrieves the current password for an ArgoCD application directly from the VPS
 func (ac *ArgoCDHandlers) GetPassword(token, accountID, appID string, app interface{}) (string, error) {
-	// First try to get the stored password from KV
-	password, err := ac.passwordHelper.GetDecryptedPassword(token, accountID, appID)
-	if err == nil {
-		return password, nil
-	}
-
-	log.Printf("ArgoCD password not found in KV, fetching from VPS for app %s", appID)
+	log.Printf("Fetching current ArgoCD password from VPS for app %s", appID)
 
 	// Get VPS connection
 	appData := app.(struct {
@@ -95,15 +86,9 @@ func (ac *ArgoCDHandlers) GetPassword(token, accountID, appID string, app interf
 		return "", fmt.Errorf("failed to retrieve password from secret '%s' in namespace '%s': %v", secretName, appData.Namespace, err)
 	}
 
-	password = strings.TrimSpace(result.Output)
+	password := strings.TrimSpace(result.Output)
 	if password == "" {
 		return "", fmt.Errorf("no password found in ArgoCD secret '%s'", secretName)
-	}
-
-	// Store the retrieved password in KV for future use
-	err = ac.passwordHelper.StoreEncryptedPassword(token, accountID, appID, password)
-	if err != nil {
-		log.Printf("Warning: Failed to store ArgoCD password in KV: %v", err)
 	}
 
 	return password, nil
@@ -176,17 +161,10 @@ func (ac *ArgoCDHandlers) RetrieveAndStorePassword(token, accountID, appID, rele
 		}
 	}
 
-	// Store password using helper
-	err = ac.passwordHelper.StoreEncryptedPassword(token, accountID, appID, password)
-	if err != nil {
-		log.Printf("Warning: Failed to store ArgoCD password in KV: %v", err)
-		return nil // Don't fail the deployment for this
-	}
-
 	if foundSecret != "" {
-		log.Printf("Successfully stored ArgoCD admin password from secret: %s", foundSecret)
+		log.Printf("Successfully retrieved ArgoCD admin password from secret: %s", foundSecret)
 	} else {
-		log.Printf("Successfully stored generated ArgoCD admin password")
+		log.Printf("Successfully set up ArgoCD admin password")
 	}
 
 	return nil

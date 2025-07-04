@@ -197,6 +197,7 @@ func (h *Handler) HandleApplicationsCreate(c *gin.Context) {
 		if err == nil {
 			response["initial_password"] = password
 			response["password_info"] = "Save this admin password - you'll need it to access your ArgoCD instance (username: admin)"
+			response["username"] = "admin"
 		}
 	}
 
@@ -394,19 +395,39 @@ func (h *Handler) HandleApplicationPasswordGet(c *gin.Context) {
 		return
 	}
 
-	// Get current password using helper
-	passwordHelper := NewPasswordHelper()
-	password, err := passwordHelper.GetDecryptedPassword(token, accountID, appID)
+	var password string
+
+	// Use application-specific password retrieval
+	if app.AppType == string(TypeArgoCD) {
+		argoCDHandler := NewArgoCDHandlers()
+		password, err = argoCDHandler.GetPassword(token, accountID, appID, struct {
+			VPSID     string
+			Namespace string
+		}{app.VPSID, app.Namespace})
+	} else {
+		// For other applications, use the generic password helper
+		passwordHelper := NewPasswordHelper()
+		password, err = passwordHelper.GetDecryptedPassword(token, accountID, appID)
+	}
+
 	if err != nil {
 		log.Printf("Error retrieving %s password: %v", app.AppType, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve password"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"success":  true,
 		"password": password,
-	})
+	}
+
+	// For ArgoCD applications, include username information
+	if app.AppType == string(TypeArgoCD) {
+		response["username"] = "admin"
+		response["login_info"] = "Username: admin (default ArgoCD admin user)"
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // HandleApplicationDelete deletes applications and cleans up resources
