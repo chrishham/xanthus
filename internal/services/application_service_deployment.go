@@ -22,7 +22,7 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 
 	// Check for existing ArgoCD installation on this VPS
 	if predefinedApp.ID == "argocd" {
-		if err := s.checkExistingArgoCDInstallation(token, accountID, vpsID); err != nil {
+		if err := s.checkExistingArgoCDInstallation(token, accountID, vpsID, appID); err != nil {
 			return err
 		}
 	}

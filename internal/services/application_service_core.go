@@ -147,15 +147,15 @@ func (s *SimpleApplicationService) CreateApplication(token, accountID string, ap
 		return nil, fmt.Errorf("invalid application data format")
 	}
 
+	// Generate application ID first
+	appID := fmt.Sprintf("app-%d", time.Now().Unix())
+
 	// Check for existing ArgoCD installation on this VPS before creating the application
 	if predefinedApp.ID == "argocd" {
-		if err := s.checkExistingArgoCDInstallation(token, accountID, vpsID); err != nil {
+		if err := s.checkExistingArgoCDInstallation(token, accountID, vpsID, appID); err != nil {
 			return nil, err
 		}
 	}
-
-	// Generate application ID
-	appID := fmt.Sprintf("app-%d", time.Now().Unix())
 
 	// Create namespace based on application type
 	namespace := predefinedApp.ID
@@ -304,6 +304,14 @@ func (s *SimpleApplicationService) deleteApplicationDeployment(token, accountID 
 		return fmt.Errorf("failed to uninstall Helm release: %v, output: %s", err, result.Output)
 	}
 
+	// ArgoCD-specific cleanup: remove cluster-wide resources
+	if app.AppType == "argocd" {
+		if err := s.cleanupArgoCDResources(sshService, conn, app.Namespace); err != nil {
+			fmt.Printf("Warning: Failed to clean up ArgoCD cluster resources: %v\n", err)
+			// Continue with deletion even if cluster cleanup fails
+		}
+	}
+
 	fmt.Printf("Successfully uninstalled Helm release %s from namespace %s\n", releaseName, app.Namespace)
 	return nil
 }
@@ -427,7 +435,7 @@ func (s *SimpleApplicationService) GetApplicationRealTimeStatus(token, accountID
 }
 
 // checkExistingArgoCDInstallation checks if there's already an ArgoCD installation on the VPS
-func (s *SimpleApplicationService) checkExistingArgoCDInstallation(token, accountID, vpsID string) error {
+func (s *SimpleApplicationService) checkExistingArgoCDInstallation(token, accountID, vpsID, excludeAppID string) error {
 	kvService := NewKVService()
 
 	// Get all applications from KV store
@@ -438,7 +446,11 @@ func (s *SimpleApplicationService) checkExistingArgoCDInstallation(token, accoun
 
 	// Check if any existing application is ArgoCD on the same VPS
 	for _, app := range applications {
-		// Check if it's an ArgoCD application on the same VPS
+		// Skip the current application being created
+		if app.ID == excludeAppID {
+			continue
+		}
+		// Check if it's an ArgoCD application on the same VPS (ignore failed/not deployed)
 		if app.AppType == "argocd" && app.VPSID == vpsID && (app.Status == "Running" || app.Status == "Creating" || app.Status == "Deploying") {
 			return fmt.Errorf("ArgoCD is already installed on this VPS (application: %s, subdomain: %s.%s). Only one ArgoCD installation is allowed per VPS due to cluster-wide resources. Please use the existing ArgoCD instance or choose a different VPS", app.Name, app.Subdomain, app.Domain)
 		}
@@ -504,4 +516,100 @@ func (s *SimpleApplicationService) getAllApplications(token, accountID string, k
 	}
 
 	return applications, nil
+}
+
+// cleanupArgoCDResources removes ArgoCD cluster-wide resources to prevent deployment conflicts
+func (s *SimpleApplicationService) cleanupArgoCDResources(sshService *SSHService, conn *SSHConnection, namespace string) error {
+	fmt.Printf("🧹 Starting ArgoCD cluster-wide resource cleanup...\n")
+
+	var cleanupErrors []string
+
+	// 1. Delete ArgoCD Custom Resource Definitions (CRDs)
+	fmt.Printf("🧹 Cleaning up ArgoCD CRDs...\n")
+	crdCommands := []string{
+		"kubectl delete crd applications.argoproj.io --ignore-not-found=true",
+		"kubectl delete crd applicationsets.argoproj.io --ignore-not-found=true", 
+		"kubectl delete crd appprojects.argoproj.io --ignore-not-found=true",
+	}
+
+	for _, cmd := range crdCommands {
+		_, err := sshService.ExecuteCommand(conn, cmd)
+		if err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete CRD: %v", err))
+		}
+	}
+
+	// 2. Delete ArgoCD ClusterRoles and ClusterRoleBindings
+	fmt.Printf("🧹 Cleaning up ArgoCD cluster roles...\n")
+	clusterRoleCommands := []string{
+		"kubectl delete clusterrole argocd-application-controller --ignore-not-found=true",
+		"kubectl delete clusterrole argocd-server --ignore-not-found=true",
+		"kubectl delete clusterrolebinding argocd-application-controller --ignore-not-found=true",
+		"kubectl delete clusterrolebinding argocd-server --ignore-not-found=true",
+	}
+
+	for _, cmd := range clusterRoleCommands {
+		_, err := sshService.ExecuteCommand(conn, cmd)
+		if err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete cluster role: %v", err))
+		}
+	}
+
+	// 3. Delete any remaining ArgoCD-related secrets in the namespace
+	fmt.Printf("🧹 Cleaning up ArgoCD secrets in namespace %s...\n", namespace)
+	secretCommands := []string{
+		fmt.Sprintf("kubectl delete secret argocd-initial-admin-secret -n %s --ignore-not-found=true", namespace),
+		fmt.Sprintf("kubectl delete secret argocd-redis -n %s --ignore-not-found=true", namespace),
+		fmt.Sprintf("kubectl delete secret argocd-secret -n %s --ignore-not-found=true", namespace),
+	}
+
+	for _, cmd := range secretCommands {
+		_, err := sshService.ExecuteCommand(conn, cmd)
+		if err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete secret: %v", err))
+		}
+	}
+
+	// 4. Delete ArgoCD ConfigMaps
+	fmt.Printf("🧹 Cleaning up ArgoCD configmaps in namespace %s...\n", namespace)
+	configMapCommands := []string{
+		fmt.Sprintf("kubectl delete configmap argocd-cm -n %s --ignore-not-found=true", namespace),
+		fmt.Sprintf("kubectl delete configmap argocd-cmd-params-cm -n %s --ignore-not-found=true", namespace),
+		fmt.Sprintf("kubectl delete configmap argocd-rbac-cm -n %s --ignore-not-found=true", namespace),
+	}
+
+	for _, cmd := range configMapCommands {
+		_, err := sshService.ExecuteCommand(conn, cmd)
+		if err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete configmap: %v", err))
+		}
+	}
+
+	// 5. Force delete any remaining ArgoCD pods
+	fmt.Printf("🧹 Force deleting remaining ArgoCD pods in namespace %s...\n", namespace)
+	_, err := sshService.ExecuteCommand(conn, fmt.Sprintf("kubectl delete pods -l app.kubernetes.io/part-of=argocd -n %s --ignore-not-found=true --force --grace-period=0", namespace))
+	if err != nil {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete ArgoCD pods: %v", err))
+	}
+
+	// 6. Clean up any ArgoCD-related ValidatingAdmissionWebhooks and MutatingAdmissionWebhooks
+	fmt.Printf("🧹 Cleaning up ArgoCD admission webhooks...\n")
+	webhookCommands := []string{
+		"kubectl delete validatingadmissionwebhook argocd-notifications-webhook --ignore-not-found=true",
+		"kubectl delete mutatingadmissionwebhook argocd-notifications-webhook --ignore-not-found=true",
+	}
+
+	for _, cmd := range webhookCommands {
+		_, err := sshService.ExecuteCommand(conn, cmd)
+		if err != nil {
+			cleanupErrors = append(cleanupErrors, fmt.Sprintf("failed to delete webhook: %v", err))
+		}
+	}
+
+	if len(cleanupErrors) > 0 {
+		return fmt.Errorf("ArgoCD cleanup completed with errors: %s", strings.Join(cleanupErrors, "; "))
+	}
+
+	fmt.Printf("✅ Successfully cleaned up all ArgoCD cluster-wide resources\n")
+	return nil
 }
