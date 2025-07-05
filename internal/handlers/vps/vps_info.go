@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/chrishham/xanthus/internal/models"
 	"github.com/chrishham/xanthus/internal/services"
 	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/gin-gonic/gin"
@@ -283,5 +284,54 @@ func (h *VPSInfoHandler) HandleVPSTerminal(c *gin.Context) {
 		"session_id": session.ID,
 		"url":        fmt.Sprintf("/terminal/%s", session.ID),
 		"port":       session.Port,
+	})
+}
+
+// HandleVPSApplications fetches all applications deployed on a specific VPS
+func (h *VPSInfoHandler) HandleVPSApplications(c *gin.Context) {
+	serverIDStr := c.Param("id")
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	// Parse server ID
+	serverID, err := utils.ParseServerID(serverIDStr)
+	if err != nil {
+		utils.JSONBadRequest(c, "Invalid server ID")
+		return
+	}
+
+	// Validate VPS access
+	_, valid = h.getVPSConfig(c, serverIDStr)
+	if !valid {
+		return
+	}
+
+	// Use application service to get applications for this VPS
+	appService := services.NewSimpleApplicationService()
+
+	// Get all applications for this account
+	allApplications, err := appService.ListApplications(token, accountID)
+	if err != nil {
+		log.Printf("Error listing applications for VPS %d: %v", serverID, err)
+		utils.JSONInternalServerError(c, "Failed to fetch applications")
+		return
+	}
+
+	// Filter applications that belong to this VPS
+	var vpsApplications []models.Application
+	vpsIDStr := fmt.Sprintf("%d", serverID)
+
+	for _, app := range allApplications {
+		if app.VPSID == vpsIDStr {
+			vpsApplications = append(vpsApplications, app)
+		}
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"server_id":    serverID,
+		"applications": vpsApplications,
+		"count":        len(vpsApplications),
 	})
 }

@@ -10,6 +10,12 @@ export function vpsManagement() {
         refreshInterval: 10000, // 10 seconds - faster for better UX
         intervalId: null,
         adaptivePolling: true,
+        
+        // Applications modal state
+        showApplicationsModal: false,
+        loadingApplications: false,
+        selectedServer: null,
+        vpsApplications: [],
 
         init() {
             // Show loading modal during initial data fetch
@@ -1410,6 +1416,40 @@ export function vpsManagement() {
             } finally {
                 this.loading = false;
             }
+        },
+
+        // Applications modal functions
+        async showApplications(server) {
+            this.selectedServer = server;
+            this.showApplicationsModal = true;
+            this.loadingApplications = true;
+            this.vpsApplications = [];
+            
+            try {
+                const response = await fetch(`/vps/${server.id}/applications`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    this.vpsApplications = data.applications || [];
+                } else {
+                    console.error('Failed to fetch applications:', data.error);
+                    Swal.fire('Error', data.error || 'Failed to fetch applications', 'error');
+                    this.closeApplicationsModal();
+                }
+            } catch (error) {
+                console.error('Error fetching applications:', error);
+                Swal.fire('Error', 'Failed to fetch applications', 'error');
+                this.closeApplicationsModal();
+            } finally {
+                this.loadingApplications = false;
+            }
+        },
+
+        closeApplicationsModal() {
+            this.showApplicationsModal = false;
+            this.selectedServer = null;
+            this.vpsApplications = [];
+            this.loadingApplications = false;
         },
 
         // Cleanup on component destroy

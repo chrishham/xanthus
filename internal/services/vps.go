@@ -169,6 +169,13 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 		return nil, fmt.Errorf("failed to get VPS configs from KV: %w", err)
 	}
 
+	// Get application counts for each VPS
+	appCounts, err := vs.getApplicationCountsPerVPS(token, accountID)
+	if err != nil {
+		log.Printf("Warning: Could not get application counts: %v", err)
+		appCounts = make(map[string]int)
+	}
+
 	// Convert VPS configs to HetznerServer format for compatibility
 	servers := make([]HetznerServer, 0, len(vpsConfigsMap))
 	for _, vpsConfig := range vpsConfigsMap {
@@ -178,6 +185,10 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 			log.Printf("Warning: Could not calculate costs for VPS %d: %v", vpsConfig.ServerID, err)
 			accumulatedCost = 0
 		}
+
+		// Get application count for this VPS
+		vpsIDStr := fmt.Sprintf("%d", vpsConfig.ServerID)
+		applicationCount := appCounts[vpsIDStr]
 
 		// Create HetznerServer from VPS config for UI compatibility
 		server := HetznerServer{
@@ -200,11 +211,12 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 				},
 			},
 			Labels: map[string]string{
-				"managed_by":       "xanthus",
-				"accumulated_cost": fmt.Sprintf("%.2f", accumulatedCost),
-				"monthly_cost":     fmt.Sprintf("%.2f", vpsConfig.MonthlyRate),
-				"hourly_cost":      fmt.Sprintf("%.4f", vpsConfig.HourlyRate),
-				"provider":         vpsConfig.Provider,
+				"managed_by":        "xanthus",
+				"accumulated_cost":  fmt.Sprintf("%.2f", accumulatedCost),
+				"monthly_cost":      fmt.Sprintf("%.2f", vpsConfig.MonthlyRate),
+				"hourly_cost":       fmt.Sprintf("%.4f", vpsConfig.HourlyRate),
+				"provider":          vpsConfig.Provider,
+				"application_count": fmt.Sprintf("%d", applicationCount),
 			},
 		}
 
@@ -300,4 +312,26 @@ func (vs *VPSService) deleteAssociatedApplications(token, accountID, vpsID strin
 	}
 
 	return nil
+}
+
+// getApplicationCountsPerVPS counts applications for each VPS
+func (vs *VPSService) getApplicationCountsPerVPS(token, accountID string) (map[string]int, error) {
+	// Use the application service to get all applications
+	appService := NewSimpleApplicationService()
+
+	// Get all applications for this account
+	applications, err := appService.ListApplications(token, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list applications: %w", err)
+	}
+
+	// Count applications per VPS
+	counts := make(map[string]int)
+	for _, app := range applications {
+		if app.VPSID != "" {
+			counts[app.VPSID]++
+		}
+	}
+
+	return counts, nil
 }

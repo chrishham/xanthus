@@ -32,6 +32,91 @@
                 </div>
             </div>
         </div>
+
+        <!-- Applications Modal -->
+        <div x-show="showApplicationsModal" x-transition.opacity class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl max-w-4xl mx-4 max-h-[80vh] overflow-hidden">
+                <!-- Modal Header -->
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-medium text-gray-900">
+                            Applications on <span x-text="selectedServer?.name || 'VPS'"></span>
+                        </h3>
+                        <button @click="closeApplicationsModal()" class="text-gray-400 hover:text-gray-600 focus:outline-none">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Modal Content -->
+                <div class="p-6 overflow-y-auto max-h-96">
+                    <!-- Loading State -->
+                    <div x-show="loadingApplications" class="text-center py-8">
+                        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+                        <p class="text-gray-600">Loading applications...</p>
+                    </div>
+
+                    <!-- Applications List -->
+                    <div x-show="!loadingApplications && vpsApplications.length > 0" class="space-y-4">
+                        <template x-for="app in vpsApplications" :key="app.id">
+                            <div class="bg-gray-50 rounded-lg p-4 border hover:bg-gray-100 transition-colors">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-3">
+                                            <h4 class="font-medium text-gray-900" x-text="app.name || app.id"></h4>
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                                                  :class="{
+                                                      'bg-green-100 text-green-800': app.status === 'deployed' || app.status === 'Running',
+                                                      'bg-blue-100 text-blue-800': app.status === 'Deploying' || app.status === 'Creating',
+                                                      'bg-yellow-100 text-yellow-800': app.status === 'pending',
+                                                      'bg-red-100 text-red-800': app.status === 'failed' || app.status === 'Failed',
+                                                      'bg-gray-100 text-gray-800': !['deployed', 'Running', 'Deploying', 'Creating', 'pending', 'failed', 'Failed'].includes(app.status)
+                                                  }"
+                                                  x-text="app.status">
+                                            </span>
+                                        </div>
+                                        <p class="text-sm text-gray-600 mt-1" x-text="app.description || 'No description'"></p>
+                                        <div class="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                            <span x-text="'Type: ' + (app.app_type || 'Unknown')"></span>
+                                            <span x-show="app.subdomain && app.domain" x-text="'Domain: ' + app.subdomain + '.' + app.domain"></span>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <a x-show="app.url" 
+                                           :href="app.url" 
+                                           target="_blank"
+                                           class="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                            🔗 Open
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div x-show="!loadingApplications && vpsApplications.length === 0" class="text-center py-8">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <h3 class="mt-2 text-lg font-medium text-gray-900">No applications found</h3>
+                        <p class="mt-1 text-gray-500">This VPS doesn't have any applications deployed yet.</p>
+                    </div>
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                    <div class="flex justify-end">
+                        <button @click="closeApplicationsModal()" 
+                                class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
         <!-- Header -->
         <div class="mb-8">
             <h2 class="text-3xl font-bold text-gray-900 mb-2">VPS Management</h2>
@@ -162,6 +247,24 @@
                             </div>
                             
                             
+                            <!-- Applications -->
+                            <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="flex items-center justify-between">
+                                <span class="text-sm text-gray-500">Applications:</span>
+                                <div class="flex items-center">
+                                    <span class="text-sm font-medium text-blue-600" 
+                                          x-text="server.labels?.application_count || '0'"
+                                          :class="{'cursor-pointer hover:text-blue-800': server.labels?.application_count && parseInt(server.labels.application_count) > 0}"
+                                          @click="server.labels?.application_count && parseInt(server.labels.application_count) > 0 ? showApplications(server) : null">
+                                    </span>
+                                    <span x-show="server.labels?.application_count && parseInt(server.labels.application_count) > 0" 
+                                          class="ml-1 text-xs text-gray-400 cursor-pointer hover:text-gray-600"
+                                          @click="showApplications(server)"
+                                          title="View applications">
+                                        👁️
+                                    </span>
+                                </div>
+                            </div>
+
                             <!-- Cost Information -->
                             <div x-show="server.labels && server.labels.monthly_cost" class="flex items-center justify-between">
                                 <div class="flex items-center">
