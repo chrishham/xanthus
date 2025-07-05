@@ -74,7 +74,7 @@ func main() {
 func setupTemplates(r *gin.Engine) {
 	// Generate cache busting timestamp
 	cacheBuster := strconv.FormatInt(time.Now().Unix(), 10)
-	
+
 	funcMap := template.FuncMap{
 		"toJSON": func(v interface{}) template.JS {
 			b, _ := json.Marshal(v)

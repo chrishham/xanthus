@@ -108,7 +108,7 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 			timezone = "Europe/Berlin" // Ultimate fallback for nbg1 datacenter
 		}
 	}
-	
+
 	// Generate and upload values file
 	valuesContent, err := s.generateValuesFile(predefinedApp, subdomain, domain, releaseName, timezone)
 	if err != nil {
@@ -361,7 +361,7 @@ func (s *SimpleApplicationService) retrieveArgoCDPassword(token, accountID, appI
 func (s *SimpleApplicationService) detectVPSTimezone(token, accountID, vpsID string) string {
 	kvService := NewKVService()
 	sshService := NewSSHService()
-	
+
 	// Get VPS configuration for SSH details
 	var vpsConfig struct {
 		PublicIPv4 string `json:"public_ipv4"`
