@@ -52,10 +52,22 @@
 
         <div class="mt-8">
             <h2 class="text-xl font-semibold text-gray-900 mb-4">Status</h2>
-            <div class="bg-gray-50 p-4 rounded-lg">
+            <div class="bg-gray-50 p-4 rounded-lg space-y-3">
                 <div class="flex items-center">
                     <div class="w-3 h-3 bg-green-500 rounded-full mr-3"></div>
                     <span class="text-gray-700">Connected to Cloudflare API</span>
+                </div>
+                <div class="flex items-center">
+                    {{if eq .HetznerStatus "Connected"}}
+                        <div class="w-3 h-3 bg-green-500 rounded-full mr-3"></div>
+                        <span class="text-gray-700">Connected to Hetzner API</span>
+                    {{else if eq .HetznerStatus "Invalid key"}}
+                        <div class="w-3 h-3 bg-red-500 rounded-full mr-3"></div>
+                        <span class="text-gray-700">Hetzner API key invalid</span>
+                    {{else}}
+                        <div class="w-3 h-3 bg-gray-400 rounded-full mr-3"></div>
+                        <span class="text-gray-700">Hetzner API not configured</span>
+                    {{end}}
                 </div>
             </div>
         </div>

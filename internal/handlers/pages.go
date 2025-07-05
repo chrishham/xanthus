@@ -19,8 +19,27 @@ func NewPagesHandler() *PagesHandler {
 
 // HandleMainPage renders the main application page
 func (h *PagesHandler) HandleMainPage(c *gin.Context) {
+	// Check Hetzner API status
+	hetznerStatus := "Not configured"
+	token := c.GetString("cf_token")
+	
+	if token != "" {
+		// Get account ID to check for existing Hetzner key
+		if exists, accountID, err := utils.CheckKVNamespaceExists(token); err == nil && exists {
+			if hetznerKey, err := utils.GetHetznerAPIKey(token, accountID); err == nil && hetznerKey != "" {
+				// Test the API key
+				if utils.ValidateHetznerAPIKey(hetznerKey) {
+					hetznerStatus = "Connected"
+				} else {
+					hetznerStatus = "Invalid key"
+				}
+			}
+		}
+	}
+	
 	c.HTML(http.StatusOK, "main.html", gin.H{
 		"ActivePage": "main",
+		"HetznerStatus": hetznerStatus,
 	})
 }
 
