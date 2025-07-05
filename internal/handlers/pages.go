@@ -22,7 +22,7 @@ func (h *PagesHandler) HandleMainPage(c *gin.Context) {
 	// Check Hetzner API status
 	hetznerStatus := "Not configured"
 	token := c.GetString("cf_token")
-	
+
 	if token != "" {
 		// Get account ID to check for existing Hetzner key
 		if exists, accountID, err := utils.CheckKVNamespaceExists(token); err == nil && exists {
@@ -36,9 +36,9 @@ func (h *PagesHandler) HandleMainPage(c *gin.Context) {
 			}
 		}
 	}
-	
+
 	c.HTML(http.StatusOK, "main.html", gin.H{
-		"ActivePage": "main",
+		"ActivePage":    "main",
 		"HetznerStatus": hetznerStatus,
 	})
 }

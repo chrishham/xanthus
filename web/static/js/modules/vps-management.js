@@ -12,6 +12,12 @@ export function vpsManagement() {
         adaptivePolling: true,
 
         init() {
+            // Show loading modal during initial data fetch
+            this.setLoadingState('Loading VPS Information', 'Fetching server status and details...');
+            
+            // Fetch initial VPS status and information
+            this.fetchInitialVPSData();
+            
             // Start automatic refresh
             this.startAutoRefresh();
             
@@ -25,6 +31,32 @@ export function vpsManagement() {
                     this.refreshServersQuietly();
                 }
             });
+        },
+
+        async fetchInitialVPSData() {
+            try {
+                // Fetch fresh VPS data from server
+                const response = await fetch('/vps/list', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    this.servers = data.servers || [];
+                } else {
+                    console.error('Failed to fetch initial VPS data');
+                    // Keep using the initial servers data from the template
+                }
+            } catch (error) {
+                console.error('Error fetching initial VPS data:', error);
+                // Keep using the initial servers data from the template
+            } finally {
+                // Always hide loading modal after initial fetch
+                this.loading = false;
+            }
         },
 
         startAutoRefresh() {
