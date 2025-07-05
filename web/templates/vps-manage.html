@@ -216,22 +216,12 @@
 
                     <!-- Actions -->
                     <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-lg">
-                        <!-- SSH Connection Info (for Xanthus-managed servers) -->
-                        <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="mb-3 p-2 bg-blue-50 rounded-md">
-                            <div class="text-xs font-medium text-blue-900 mb-1">SSH Connection:</div>
-                            <div class="text-xs text-blue-800 font-mono mb-2">
-                                ssh -i xanthus-key.pem root@<span x-text="server.public_net.ipv4.ip"></span>
-                            </div>
-                            <div class="flex items-center space-x-2">
-                                <button @click="downloadSSHKey()" 
-                                        class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                                    📥 Download SSH Key
-                                </button>
-                                <button @click="showSSHInstructions()" 
-                                        class="text-xs px-2 py-1 border border-blue-300 text-blue-700 rounded hover:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-500">
-                                    ℹ️ SSH Setup
-                                </button>
-                            </div>
+                        <!-- SSH Setup (for Xanthus-managed servers) -->
+                        <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="mb-3">
+                            <button @click="showSSHInstructions(server.public_net.ipv4.ip)" 
+                                    class="w-full text-xs px-2 py-1 border border-blue-300 text-blue-700 bg-blue-50 rounded hover:bg-blue-100 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                🔑 SSH Setup & Instructions
+                            </button>
                         </div>
 
                         <!-- Advanced Actions (for Xanthus-managed servers) -->
@@ -240,10 +230,6 @@
                                 <button @click="checkVPSStatus(server.id)" 
                                         class="flex-1 text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none focus:ring-1 focus:ring-green-500">
                                     🔍 Health Check
-                                </button>
-                                <button @click="showVPSLogs(server.id)" 
-                                        class="flex-1 text-xs px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-500">
-                                    📝 View Logs
                                 </button>
                             </div>
                             <div class="flex space-x-2 mb-2">

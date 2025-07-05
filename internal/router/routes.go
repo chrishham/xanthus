@@ -77,6 +77,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.GET("/:id/status", config.VPSInfoHandler.HandleVPSStatus)
 		vps.GET("/:id/info", config.VPSInfoHandler.HandleVPSInfo)
 		vps.GET("/:id/logs", config.VPSInfoHandler.HandleVPSLogs)
+		vps.GET("/:id/k3s-logs", config.VPSInfoHandler.HandleK3sLogs)
 		vps.POST("/:id/terminal", config.VPSInfoHandler.HandleVPSTerminal)
 
 		// Lifecycle routes

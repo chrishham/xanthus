@@ -127,6 +127,49 @@ func (h *VPSInfoHandler) HandleVPSLogs(c *gin.Context) {
 	})
 }
 
+// HandleK3sLogs fetches K3s service logs via SSH connection
+func (h *VPSInfoHandler) HandleK3sLogs(c *gin.Context) {
+	serverIDStr := c.Param("id")
+	vpsConfig, valid := h.getVPSConfig(c, serverIDStr)
+	if !valid {
+		return
+	}
+
+	token, accountID, _ := h.validateTokenAndAccount(c)
+
+	// Get number of lines (default 100)
+	lines := 100
+	if linesStr := c.Query("lines"); linesStr != "" {
+		if parsedLines, err := fmt.Sscanf(linesStr, "%d", &lines); err == nil && parsedLines > 0 {
+			if lines > 1000 {
+				lines = 1000 // Limit to prevent overwhelming response
+			}
+		}
+	}
+
+	// Get SSH private key
+	privateKey, valid := h.getSSHPrivateKey(c, token, accountID)
+	if !valid {
+		return
+	}
+
+	// Parse server ID for response
+	serverID, _ := utils.ParseServerID(serverIDStr)
+
+	// Connect to VPS and get K3s logs
+	logs, err := h.sshService.GetVPSK3sLogs(vpsConfig.PublicIPv4, vpsConfig.SSHUser, privateKey, lines)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to fetch K3s logs: %v", err))
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"logs":      logs,
+		"server_id": serverID,
+		"lines":     lines,
+	})
+}
+
 // HandleVPSInfo retrieves VPS information including ArgoCD credentials
 func (h *VPSInfoHandler) HandleVPSInfo(c *gin.Context) {
 	serverIDStr := c.Param("id")

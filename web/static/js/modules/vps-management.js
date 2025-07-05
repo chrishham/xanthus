@@ -413,6 +413,47 @@ export function vpsManagement() {
             }
         },
 
+        async downloadSSHKeyFile() {
+            try {
+                // Create a temporary download link
+                const downloadUrl = '/vps/ssh-key?download=true';
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = 'xanthus-key.pem';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Update the button to show success
+                const btn = document.getElementById('download-ssh-btn');
+                if (btn) {
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = '✅ Downloaded!';
+                    btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                    btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    }, 2000);
+                }
+            } catch (error) {
+                console.error('Error downloading SSH key:', error);
+                const btn = document.getElementById('download-ssh-btn');
+                if (btn) {
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = '❌ Failed';
+                    btn.classList.add('bg-red-600', 'hover:bg-red-700');
+                    btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                    }, 2000);
+                }
+            }
+        },
+
         async downloadSSHKey() {
             try {
                 // Create a temporary download link
@@ -445,16 +486,29 @@ export function vpsManagement() {
             }
         },
 
-        async showSSHInstructions() {
+        async showSSHInstructions(serverIP) {
             try {
                 const response = await fetch('/vps/ssh-key');
                 const data = await response.json();
                 
                 if (response.ok) {
                     Swal.fire({
-                        title: 'SSH Setup Instructions',
+                        title: 'SSH Setup & Instructions',
                         html: `
                             <div class="text-left text-sm">
+                                <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                    <h4 class="font-semibold mb-2 flex items-center">
+                                        <span class="mr-2">🖥️</span>
+                                        Quick Connect
+                                    </h4>
+                                    <div class="text-xs text-blue-800 font-mono mb-2 p-2 bg-white rounded border">
+                                        ssh -i xanthus-key.pem root@${serverIP}
+                                    </div>
+                                    <button id="download-ssh-btn" class="w-full px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs">
+                                        📥 Download SSH Key File
+                                    </button>
+                                </div>
+                                
                                 <div class="mb-4">
                                     <h4 class="font-semibold mb-2">🔑 SSH Private Key:</h4>
                                     <textarea readonly class="w-full h-32 p-2 text-xs font-mono bg-gray-100 border rounded" onclick="this.select()">${data.private_key}</textarea>
@@ -464,16 +518,35 @@ export function vpsManagement() {
                                 <div class="mb-4">
                                     <h4 class="font-semibold mb-2">📋 Setup Steps:</h4>
                                     <ol class="list-decimal list-inside space-y-1 text-xs">
-                                        <li>Save the key above to: <code>~/.ssh/xanthus-key.pem</code></li>
-                                        <li>Set permissions: <code>chmod 600 ~/.ssh/xanthus-key.pem</code></li>
-                                        <li>Connect: <code>ssh -i ~/.ssh/xanthus-key.pem root@&lt;server-ip&gt;</code></li>
+                                        <li><strong>Option 1 (Download):</strong> Click "Download SSH Key File" above, then move to <code>~/.ssh/xanthus-key.pem</code></li>
+                                        <li><strong>Option 2 (Manual):</strong> Copy the key above and save to <code>~/.ssh/xanthus-key.pem</code></li>
+                                        <li>Set correct permissions: <code>chmod 600 ~/.ssh/xanthus-key.pem</code></li>
+                                        <li>Connect to server: <code>ssh -i ~/.ssh/xanthus-key.pem root@${serverIP}</code></li>
                                     </ol>
+                                </div>
+                                
+                                <div class="p-3 bg-green-50 border border-green-200 rounded-md text-xs">
+                                    <div class="flex items-start">
+                                        <svg class="h-4 w-4 text-green-400 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                        </svg>
+                                        <div>
+                                            <strong class="text-green-800">Pro Tip:</strong><br>
+                                            <span class="text-green-700">This key works for all your Xanthus-managed VPS instances. Save it once and use it everywhere!</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         `,
-                        width: 600,
+                        width: 700,
                         showCloseButton: true,
-                        confirmButtonText: 'Close'
+                        confirmButtonText: 'Close',
+                        didOpen: () => {
+                            // Add event listener for download button
+                            document.getElementById('download-ssh-btn').addEventListener('click', () => {
+                                this.downloadSSHKeyFile();
+                            });
+                        }
                     });
                 } else {
                     Swal.fire('Error', data.error || 'Failed to get SSH key', 'error');
@@ -564,7 +637,7 @@ export function vpsManagement() {
                                     </div>
                                 </div>
                                 
-                                <div>
+                                <div class="mb-4">
                                     <h4 class="font-semibold mb-3 flex items-center">
                                         <span class="mr-2">🔧</span>
                                         Services Status
@@ -580,12 +653,24 @@ export function vpsManagement() {
                                         </div>
                                     </div>
                                 </div>
+                                
+                                <div class="mb-4">
+                                    <button id="view-logs-btn" class="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
+                                        📝 View K3s Logs
+                                    </button>
+                                </div>
                             </div>
                         `,
                         icon: statusColor,
                         width: 600,
                         confirmButtonText: 'Close',
                         didOpen: () => {
+                            // Add event listener for View Logs button
+                            document.getElementById('view-logs-btn').addEventListener('click', () => {
+                                Swal.close();
+                                this.showK3sLogs(serverId);
+                            });
+                            
                             // Auto-refresh for non-ready states
                             if (showAutoRefresh) {
                                 const refreshInterval = setInterval(async () => {
@@ -644,15 +729,48 @@ export function vpsManagement() {
             }
         },
 
+        async showK3sLogs(serverId) {
+            this.setLoadingState('Loading K3s Logs', 'Retrieving K3s service logs...');
+            try {
+                const response = await fetch(`/vps/${serverId}/k3s-logs?lines=100`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    Swal.fire({
+                        title: 'K3s Service Logs',
+                        html: `
+                            <div class="text-left">
+                                <div class="mb-2 text-sm text-gray-600">
+                                    Server: ${serverId} | Lines: ${data.lines}
+                                </div>
+                                <textarea readonly class="w-full h-96 p-2 text-xs font-mono bg-gray-100 border rounded" onclick="this.select()">${data.logs}</textarea>
+                                <p class="text-xs text-gray-600 mt-1">Click to select all logs</p>
+                            </div>
+                        `,
+                        width: 800,
+                        showCloseButton: true,
+                        confirmButtonText: 'Close'
+                    });
+                } else {
+                    Swal.fire('Error', data.error || 'Failed to get K3s logs', 'error');
+                }
+            } catch (error) {
+                console.error('Error getting K3s logs:', error);
+                Swal.fire('Error', 'Failed to get K3s logs', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
         async showVPSLogs(serverId) {
-            this.setLoadingState('Loading Logs', 'Retrieving K3s service logs...');
+            this.setLoadingState('Loading Logs', 'Retrieving VPS system logs...');
             try {
                 const response = await fetch(`/vps/${serverId}/logs?lines=100`);
                 const data = await response.json();
                 
                 if (response.ok) {
                     Swal.fire({
-                        title: 'K3s Service Logs',
+                        title: 'VPS System Logs',
                         html: `
                             <div class="text-left">
                                 <div class="mb-2 text-sm text-gray-600">

@@ -248,6 +248,16 @@ func (ss *SSHService) GetK3sLogs(conn *SSHConnection, lines int) (string, error)
 	return result.Output, nil
 }
 
+// GetVPSK3sLogs fetches K3s service logs via SSH (high-level wrapper)
+func (ss *SSHService) GetVPSK3sLogs(host, user, privateKeyPEM string, lines int) (string, error) {
+	conn, err := ss.GetOrCreateConnection(host, user, privateKeyPEM, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to VPS: %w", err)
+	}
+
+	return ss.GetK3sLogs(conn, lines)
+}
+
 // GetVPSLogs fetches VPS system logs via SSH
 func (ss *SSHService) GetVPSLogs(host, user, privateKeyPEM string, lines int) (string, error) {
 	conn, err := ss.GetOrCreateConnection(host, user, privateKeyPEM, 0)
