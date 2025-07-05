@@ -1141,7 +1141,7 @@ export function vpsManagement() {
                 const timezonesData = await timezonesResponse.json();
                 
                 const timezones = timezonesData.timezones || [];
-                const currentTimezone = timezoneData.current_timezone || 'UTC';
+                const currentTimezone = timezoneData.config_timezone || timezoneData.current_timezone || 'UTC';
                 
                 // Create timezone options
                 const timezoneOptions = timezones.map(tz => 
