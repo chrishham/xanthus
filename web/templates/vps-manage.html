@@ -153,15 +153,15 @@
                             
                             <!-- Timezone -->
                             <div x-show="server.labels && server.labels.managed_by === 'xanthus'" class="flex items-center justify-between">
-                                <div class="flex items-center">
-                                    <span class="text-sm text-gray-500">Timezone:</span>
-                                    <button @click="showTimezoneInfo(server)" class="ml-1 text-gray-400 hover:text-gray-600 focus:outline-none" title="Timezone Information">
+                                <div class="flex items-center cursor-pointer" @click="showTimezoneManager(server)" title="Change Timezone">
+                                    <span class="text-sm text-gray-500 hover:text-gray-700">Timezone:</span>
+                                    <button class="ml-1 text-gray-400 hover:text-gray-600 focus:outline-none" title="Change Timezone">
                                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                             <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"></path>
                                         </svg>
                                     </button>
                                 </div>
-                                <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800 cursor-pointer" @click="showTimezoneInfo(server)">
+                                <span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800 cursor-pointer hover:bg-gray-200" @click="showTimezoneManager(server)" title="Change Timezone">
                                     <span x-text="server.labels?.configured_timezone || 'UTC'"></span>
                                 </span>
                             </div>
@@ -249,12 +249,6 @@
                                 <button @click="showVPSLogs(server.id)" 
                                         class="flex-1 text-xs px-2 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 focus:outline-none focus:ring-1 focus:ring-purple-500">
                                     📝 View Logs
-                                </button>
-                            </div>
-                            <div class="flex space-x-2 mb-2">
-                                <button @click="showTimezoneManager(server)" 
-                                        class="flex-1 text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
-                                    🕐 Timezone
                                 </button>
                             </div>
                             <div class="flex space-x-2 mb-2">
