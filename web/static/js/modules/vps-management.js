@@ -487,11 +487,16 @@ export function vpsManagement() {
         },
 
         async showSSHInstructions(serverIP) {
+            // Show loading modal immediately
+            this.setLoadingState('Loading SSH Instructions', 'Fetching SSH key and connection details...');
+            
             try {
                 const response = await fetch('/vps/ssh-key');
                 const data = await response.json();
                 
                 if (response.ok) {
+                    // Hide loading modal before showing SSH instructions
+                    this.loading = false;
                     Swal.fire({
                         title: 'SSH Setup & Instructions',
                         html: `
@@ -549,10 +554,12 @@ export function vpsManagement() {
                         }
                     });
                 } else {
+                    this.loading = false;
                     Swal.fire('Error', data.error || 'Failed to get SSH key', 'error');
                 }
             } catch (error) {
                 console.error('Error getting SSH instructions:', error);
+                this.loading = false;
                 Swal.fire('Error', 'Failed to get SSH instructions', 'error');
             }
         },
