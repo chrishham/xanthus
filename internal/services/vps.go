@@ -106,11 +106,9 @@ func (vs *VPSService) CreateVPSWithConfig(
 	vpsConfig := &VPSConfig{
 		ServerID:    server.ID,
 		Name:        server.Name,
-		Domain:      domain,
 		ServerType:  serverType,
 		Location:    location,
 		PublicIPv4:  server.PublicNet.IPv4.IP,
-		Status:      server.Status,
 		CreatedAt:   server.Created,
 		SSHKeyName:  sshKeyName,
 		SSHUser:     "root",
@@ -179,7 +177,7 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 		server := HetznerServer{
 			ID:      vpsConfig.ServerID,
 			Name:    vpsConfig.Name,
-			Status:  vpsConfig.Status,
+			Status:  "unknown", // Status will be fetched from live Hetzner API
 			Created: vpsConfig.CreatedAt,
 			ServerType: HetznerServerTypeInfo{
 				Name: vpsConfig.ServerType,

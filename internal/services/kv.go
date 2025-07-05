@@ -268,21 +268,18 @@ func (kvs *KVService) DeleteDomainSSLConfig(token, accountID, domain string) err
 
 // VPSConfig represents VPS configuration stored in KV
 type VPSConfig struct {
-	ServerID      int     `json:"server_id"`
-	Name          string  `json:"name"`
-	Domain        string  `json:"domain"` // Associated domain for DNS/SSL
-	ServerType    string  `json:"server_type"`
-	Location      string  `json:"location"`
-	PublicIPv4    string  `json:"public_ipv4"`
-	Status        string  `json:"status"`
-	CreatedAt     string  `json:"created_at"`
-	SSLConfigured bool    `json:"ssl_configured"`
-	SSHKeyName    string  `json:"ssh_key_name"`
-	SSHUser       string  `json:"ssh_user"`
-	SSHPort       int     `json:"ssh_port"`
-	HourlyRate    float64 `json:"hourly_rate"`  // EUR per hour
-	MonthlyRate   float64 `json:"monthly_rate"` // EUR per month (including IPv4)
-	Timezone      string  `json:"timezone"`     // e.g., "Europe/Berlin", "UTC"
+	ServerID    int     `json:"server_id"`
+	Name        string  `json:"name"`
+	ServerType  string  `json:"server_type"`
+	Location    string  `json:"location"`
+	PublicIPv4  string  `json:"public_ipv4"`
+	CreatedAt   string  `json:"created_at"`
+	SSHKeyName  string  `json:"ssh_key_name"`
+	SSHUser     string  `json:"ssh_user"`
+	SSHPort     int     `json:"ssh_port"`
+	HourlyRate  float64 `json:"hourly_rate"`  // EUR per hour
+	MonthlyRate float64 `json:"monthly_rate"` // EUR per month (including IPv4)
+	Timezone    string  `json:"timezone"`     // e.g., "Europe/Berlin", "UTC"
 }
 
 // StoreVPSConfig stores VPS configuration in KV
@@ -374,17 +371,9 @@ func (kvs *KVService) UpdateVPSConfig(token, accountID string, serverID int, upd
 	// Apply updates
 	for field, value := range updates {
 		switch field {
-		case "status":
-			if status, ok := value.(string); ok {
-				config.Status = status
-			}
 		case "public_ipv4":
 			if ip, ok := value.(string); ok {
 				config.PublicIPv4 = ip
-			}
-		case "ssl_configured":
-			if ssl, ok := value.(bool); ok {
-				config.SSLConfigured = ssl
 			}
 		case "ssh_key_name":
 			if key, ok := value.(string); ok {

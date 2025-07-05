@@ -466,9 +466,7 @@ export function vpsManagement() {
                     const setupStatusColors = {
                         'READY': '✅',
                         'VERIFYING': '🔍',
-                        'INSTALLING_ARGOCD_CLI': '📦',
-                        'WAITING_ARGOCD': '⏳',
-                        'INSTALLING_ARGOCD': '📦', 
+ 
                         'INSTALLING_HELM': '📦',
                         'WAITING_K3S': '⏳',
                         'INSTALLING_K3S': '📦',
@@ -983,131 +981,6 @@ export function vpsManagement() {
             });
         },
 
-        // Show ArgoCD credentials information
-        async showArgoCDInfo(server) {
-            Swal.fire({
-                title: 'Loading ArgoCD Credentials...',
-                html: 'Fetching ArgoCD access information...',
-                allowOutsideClick: false,
-                allowEscapeKey: false,
-                showConfirmButton: false,
-                willOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-
-            try {
-                const response = await fetch(`/vps/${server.id}/argocd-credentials`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    const credentials = data.credentials || {};
-                    
-                    const argoCDURL = credentials.url;
-                    const username = credentials.username || 'admin';
-                    const password = credentials.password;
-                    
-                    if (argoCDURL && password) {
-                        Swal.fire({
-                            title: '🚀 ArgoCD Access',
-                            html: `
-                                <div class="text-left text-sm">
-                                    <div class="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-md">
-                                        <div class="flex items-center mb-3">
-                                            <svg class="h-5 w-5 text-purple-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd" />
-                                            </svg>
-                                            <strong class="text-purple-800">ArgoCD GitOps Platform</strong>
-                                        </div>
-                                        
-                                        <div class="space-y-3">
-                                            <div>
-                                                <strong class="text-gray-700">URL:</strong>
-                                                <div class="mt-1">
-                                                    <a href="${argoCDURL}" target="_blank" class="text-blue-600 hover:text-blue-800 underline break-all">
-                                                        ${argoCDURL}
-                                                    </a>
-                                                </div>
-                                            </div>
-                                            
-                                            <div>
-                                                <strong class="text-gray-700">Username:</strong>
-                                                <div class="mt-1 p-2 bg-gray-100 rounded border font-mono text-sm">
-                                                    ${username}
-                                                </div>
-                                            </div>
-                                            
-                                            <div>
-                                                <strong class="text-gray-700">Password:</strong>
-                                                <div class="mt-1 p-2 bg-gray-100 rounded border font-mono text-sm break-all">
-                                                    ${password}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                                        <div class="flex items-start">
-                                            <svg class="h-4 w-4 text-blue-400 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
-                                            </svg>
-                                            <div>
-                                                <strong class="text-blue-800">About ArgoCD:</strong><br>
-                                                <span class="text-blue-700">ArgoCD is a GitOps continuous delivery tool for Kubernetes. Use it to deploy and manage applications on your K3s cluster.</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            `,
-                            icon: null,
-                            confirmButtonText: 'Open ArgoCD',
-                            showCancelButton: true,
-                            cancelButtonText: 'Close',
-                            confirmButtonColor: '#7c3aed',
-                            width: 600
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                window.open(argoCDURL, '_blank');
-                            }
-                        });
-                    } else {
-                        Swal.fire({
-                            title: 'ArgoCD: View Credentials',
-                            html: `
-                                <div class="text-left text-sm">
-                                    <h3 class="font-semibold text-gray-800 mb-3">ArgoCD Not Ready</h3>
-                                    <p class="text-gray-700 mb-3">ArgoCD credentials are not yet available. This could mean:</p>
-                                    <ul class="list-disc list-inside text-gray-600 space-y-1 mb-4">
-                                        <li>The server is still initializing</li>
-                                        <li>ArgoCD installation is in progress</li>
-                                        <li>No domain was configured for this VPS</li>
-                                    </ul>
-                                    <p class="text-gray-700">Please wait a few minutes and try again.</p>
-                                </div>
-                            `,
-                            icon: 'info',
-                            confirmButtonText: 'OK',
-                            confirmButtonColor: '#6b7280'
-                        });
-                    }
-                } else {
-                    throw new Error('Failed to fetch VPS info');
-                }
-            } catch (error) {
-                console.error('Error fetching ArgoCD info:', error);
-                Swal.fire({
-                    title: 'Error',
-                    text: 'Failed to fetch ArgoCD credentials. Please try again.',
-                    icon: 'error',
-                    confirmButtonText: 'OK'
-                });
-            }
-        },
 
         // Show hourly rate information popup
         showHourlyRateInfo() {
@@ -1332,7 +1205,10 @@ export function vpsManagement() {
                     // Update the server's timezone in the local data
                     const serverIndex = this.servers.findIndex(s => s.id === server.id);
                     if (serverIndex !== -1) {
-                        this.servers[serverIndex].timezone = timezone;
+                        if (!this.servers[serverIndex].labels) {
+                            this.servers[serverIndex].labels = {};
+                        }
+                        this.servers[serverIndex].labels.configured_timezone = timezone;
                     }
                     
                     Swal.fire({
