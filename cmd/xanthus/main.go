@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"strconv"
+	"time"
 
 	"github.com/chrishham/xanthus/internal/handlers"
 	"github.com/chrishham/xanthus/internal/handlers/applications"
@@ -27,7 +29,7 @@ func main() {
 	// Configure security
 	r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
 
-	// Setup templates
+	// Setup templates with cache busting
 	setupTemplates(r)
 
 	// Setup static files
@@ -70,6 +72,9 @@ func main() {
 
 // setupTemplates configures HTML templates with helper functions
 func setupTemplates(r *gin.Engine) {
+	// Generate cache busting timestamp
+	cacheBuster := strconv.FormatInt(time.Now().Unix(), 10)
+	
 	funcMap := template.FuncMap{
 		"toJSON": func(v interface{}) template.JS {
 			b, _ := json.Marshal(v)
@@ -94,6 +99,9 @@ func setupTemplates(r *gin.Engine) {
 				return defaultValue
 			}
 			return value
+		},
+		"cacheBuster": func() string {
+			return cacheBuster
 		},
 	}
 

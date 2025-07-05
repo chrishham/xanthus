@@ -8,8 +8,8 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
-    <link rel="stylesheet" href="/static/css/output.css">
-    <link rel="stylesheet" href="/static/css/xterm.css">
+    <link rel="stylesheet" href="/static/css/output.css?v={{cacheBuster}}">
+    <link rel="stylesheet" href="/static/css/xterm.css?v={{cacheBuster}}">
     <style>
         body {
             margin: 0;
@@ -158,13 +158,13 @@
     </div>
 
     <!-- Terminal dependencies -->
-    <script src="/static/js/vendor/xterm.js"></script>
-    <script src="/static/js/vendor/addon-fit.js"></script>
-    <script src="/static/js/vendor/addon-web-links.js"></script>
+    <script src="/static/js/vendor/xterm.js?v={{cacheBuster}}"></script>
+    <script src="/static/js/vendor/addon-fit.js?v={{cacheBuster}}"></script>
+    <script src="/static/js/vendor/addon-web-links.js?v={{cacheBuster}}"></script>
     
     <!-- Terminal module and Alpine.js setup -->
     <script type="module">
-        import { webSocketTerminal } from '/static/js/modules/terminal.js';
+        import { webSocketTerminal } from '/static/js/modules/terminal.js?v={{cacheBuster}}';
         
         // Define terminal page component
         window.terminalPage = () => ({
@@ -267,7 +267,7 @@
         // Load Alpine.js after component is defined
         if (!window.Alpine) {
             const script = document.createElement('script');
-            script.src = '/static/js/vendor/alpine.min.js';
+            script.src = '/static/js/vendor/alpine.min.js?v={{cacheBuster}}';
             script.defer = true;
             document.head.appendChild(script);
         }
