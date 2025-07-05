@@ -76,8 +76,9 @@ controller:
       cpu: 500m
       memory: 1Gi
 
-# Redis configuration with persistence
+# Redis configuration - single instance with persistence
 redis:
+  enabled: true
   resources:
     limits:
       cpu: 200m
@@ -86,13 +87,9 @@ redis:
       cpu: 100m
       memory: 128Mi
 
-# Redis HA configuration for persistence
+# Redis HA configuration - disabled for single-node clusters
 redis-ha:
-  enabled: true
-  persistentVolume:
-    enabled: true
-    size: 2Gi
-    accessMode: ReadWriteOnce
+  enabled: false
 
 # Dex configuration (disable external auth by default)
 dex:

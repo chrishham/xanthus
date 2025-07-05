@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 )
 
@@ -325,11 +326,47 @@ func (vs *VPSService) getApplicationCountsPerVPS(token, accountID string) (map[s
 		return nil, fmt.Errorf("failed to list applications: %w", err)
 	}
 
+	// Get all VPS configurations to create a mapping between VPS names and IDs
+	vpsConfigsMap, err := vs.kv.ListVPSConfigs(token, accountID)
+	if err != nil {
+		log.Printf("Warning: Could not get VPS configs for application counting: %v", err)
+		vpsConfigsMap = make(map[int]*VPSConfig)
+	}
+
+	// Create mapping from VPS name to VPS ID
+	vpsNameToID := make(map[string]string)
+	for _, vpsConfig := range vpsConfigsMap {
+		vpsNameToID[vpsConfig.Name] = fmt.Sprintf("%d", vpsConfig.ServerID)
+	}
+
 	// Count applications per VPS
 	counts := make(map[string]int)
 	for _, app := range applications {
+		var targetVPSID string
+		
+		// First try to use VPSID directly (for numeric IDs)
 		if app.VPSID != "" {
-			counts[app.VPSID]++
+			// Check if VPSID is numeric (convert to int and back to string)
+			if vpsIDInt, err := strconv.Atoi(app.VPSID); err == nil {
+				targetVPSID = fmt.Sprintf("%d", vpsIDInt)
+			} else {
+				// VPSID is not numeric, try to map it as a VPS name
+				if vpsID, exists := vpsNameToID[app.VPSID]; exists {
+					targetVPSID = vpsID
+				}
+			}
+		}
+		
+		// If no VPSID or couldn't resolve it, try VPS name
+		if targetVPSID == "" && app.VPSName != "" {
+			if vpsID, exists := vpsNameToID[app.VPSName]; exists {
+				targetVPSID = vpsID
+			}
+		}
+		
+		// Count the application for the resolved VPS ID
+		if targetVPSID != "" {
+			counts[targetVPSID]++
 		}
 	}
 
