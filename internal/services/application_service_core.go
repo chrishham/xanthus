@@ -87,8 +87,9 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 		}
 	}
 
-	// Parallel fetch of applications using goroutines
+	// Parallel fetch of applications using goroutines with deterministic ordering
 	applications := make([]models.Application, 0, len(appKeys))
+	appMap := make(map[string]models.Application)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
@@ -114,12 +115,12 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 				// Update timestamp for cached status
 				app.UpdatedAt = time.Now().Format(time.RFC3339)
 
-				// Thread-safe append
+				// Thread-safe map insertion to maintain order
 				mu.Lock()
-				applications = append(applications, app)
+				appMap[keyName] = app
 				mu.Unlock()
 				
-				fmt.Printf("Added application to list: %s\n", app.ID)
+				fmt.Printf("Added application to map: %s\n", app.ID)
 			} else {
 				fmt.Printf("Error retrieving application %s: %v\n", keyName, err)
 			}
@@ -128,6 +129,13 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 
 	// Wait for all goroutines to complete
 	wg.Wait()
+
+	// Rebuild applications slice in the original key order
+	for _, keyName := range appKeys {
+		if app, exists := appMap[keyName]; exists {
+			applications = append(applications, app)
+		}
+	}
 
 	return applications, nil
 }
