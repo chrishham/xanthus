@@ -172,11 +172,9 @@ func (s *SimpleApplicationService) configureVPSSSL(token, accountID, domain stri
 	sshService := NewSSHService()
 	cfService := NewCloudflareService()
 
-	// Check if SSL is already configured for this domain on this VPS
-	sslConfigKey := fmt.Sprintf("vps:%s:ssl:%s", vpsConfig.PublicIPv4, domain)
-	var existingSSLConfig map[string]interface{}
-	if err := kvService.GetValue(token, accountID, sslConfigKey, &existingSSLConfig); err == nil {
-		fmt.Printf("SSL already configured for domain %s on VPS %s\n", domain, vpsConfig.PublicIPv4)
+	// Check if SSL is already configured for this domain (domain-level check)
+	if _, err := kvService.GetDomainSSLConfig(token, accountID, domain); err == nil {
+		fmt.Printf("SSL already configured for domain %s\n", domain)
 		return nil
 	}
 
@@ -220,15 +218,7 @@ func (s *SimpleApplicationService) configureVPSSSL(token, accountID, domain stri
 		return fmt.Errorf("failed to configure K3s with SSL: %v", err)
 	}
 
-	// Mark SSL as configured for this VPS/domain combination
-	sslStatus := map[string]interface{}{
-		"configured_at": fmt.Sprintf("%d", time.Now().Unix()),
-		"domain":        domain,
-		"vps_ip":        vpsConfig.PublicIPv4,
-	}
-	if err := kvService.PutValue(token, accountID, sslConfigKey, sslStatus); err != nil {
-		fmt.Printf("Warning: Failed to store SSL configuration status: %v\n", err)
-	}
+	// SSL configuration completed (no VPS-specific tracking needed)
 
 	fmt.Printf("Successfully configured SSL certificates for domain %s on VPS %s\n", domain, vpsConfig.PublicIPv4)
 	return nil
