@@ -1053,7 +1053,12 @@ export function vpsManagement() {
         },
 
         // Show cost information popup
-        showCostInfo() {
+        showCostInfo(server) {
+            // Get cost data from the server object
+            const monthlyRate = server?.labels?.monthly_cost || 'N/A';
+            const accumulatedCost = server?.labels?.accumulated_cost || 'N/A';
+            const hourlyRate = server?.labels?.hourly_cost || 'N/A';
+            
             Swal.fire({
                 title: '💰 Monthly Cost',
                 html: `
@@ -1067,14 +1072,31 @@ export function vpsManagement() {
                             </ul>
                         </div>
                         
-                        <div class="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div class="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                <div class="text-center">
+                                    <div class="text-lg font-bold text-blue-800">€${accumulatedCost}</div>
+                                    <div class="text-xs text-blue-600">Accumulated Cost</div>
+                                    <div class="text-xs text-gray-500 mt-1">Total charges since creation</div>
+                                </div>
+                            </div>
+                            <div class="p-3 bg-orange-50 border border-orange-200 rounded-md">
+                                <div class="text-center">
+                                    <div class="text-lg font-bold text-orange-800">€${hourlyRate}/hr</div>
+                                    <div class="text-xs text-orange-600">Hourly Rate</div>
+                                    <div class="text-xs text-gray-500 mt-1">Rate per hour of usage</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="p-3 bg-green-50 border border-green-200 rounded-md">
                             <div class="flex items-start">
-                                <svg class="h-4 w-4 text-blue-400 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <svg class="h-4 w-4 text-green-400 mt-0.5 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
                                 </svg>
                                 <div>
-                                    <strong class="text-blue-800">Note:</strong><br>
-                                    <span class="text-blue-700">This is the standard monthly rate. If you delete the VPS before the month ends, you'll be charged the hourly rate instead.</span>
+                                    <strong class="text-green-800">Billing Info:</strong><br>
+                                    <span class="text-green-700">Hetzner charges hourly until you reach the monthly cap (€${monthlyRate}), then switches to monthly billing. If you delete the VPS early, you'll pay the accumulated cost instead.</span>
                                 </div>
                             </div>
                         </div>
@@ -1083,7 +1105,7 @@ export function vpsManagement() {
                 icon: 'info',
                 confirmButtonText: 'Got it!',
                 confirmButtonColor: '#2563eb',
-                width: 500
+                width: 600
             });
         },
 
