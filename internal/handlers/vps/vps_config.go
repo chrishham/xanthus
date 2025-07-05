@@ -299,20 +299,16 @@ func (h *VPSConfigHandler) HandleVPSSetTimezone(c *gin.Context) {
 	token, accountID, _ := h.validateTokenAndAccount(c)
 
 	timezone := c.PostForm("timezone")
-	log.Printf("Received timezone change request: '%s'", timezone)
 	if timezone == "" {
-		log.Printf("Timezone validation failed: empty timezone parameter")
 		utils.JSONBadRequest(c, "Timezone is required")
 		return
 	}
 
 	// Validate timezone format
 	if !h.isValidTimezone(timezone) {
-		log.Printf("Timezone validation failed for: '%s'", timezone)
 		utils.JSONBadRequest(c, "Invalid timezone format")
 		return
 	}
-	log.Printf("Timezone validation passed for: '%s'", timezone)
 
 	// Get SSH private key
 	privateKey, valid := h.getSSHPrivateKey(c, token, accountID)
@@ -369,10 +365,10 @@ func (h *VPSConfigHandler) HandleVPSSetTimezone(c *gin.Context) {
 func (h *VPSConfigHandler) HandleVPSListTimezones(c *gin.Context) {
 	timezones := []string{
 		"UTC",
-		"US/Eastern",
-		"US/Central",
-		"US/Mountain",
-		"US/Pacific",
+		"America/New_York",    // US Eastern
+		"America/Chicago",     // US Central
+		"America/Denver",      // US Mountain
+		"America/Los_Angeles", // US Pacific
 		"Europe/London",
 		"Europe/Paris",
 		"Europe/Berlin",
@@ -426,15 +422,13 @@ func (h *VPSConfigHandler) HandleVPSListTimezones(c *gin.Context) {
 func (h *VPSConfigHandler) isValidTimezone(timezone string) bool {
 	// Basic validation - could be enhanced with more comprehensive checks
 	if timezone == "" {
-		log.Printf("Timezone validation failed: empty timezone")
 		return false
 	}
 
-	// Check for common timezone patterns
+	// Check for common timezone patterns (IANA timezone database format)
 	validPatterns := []string{
 		"UTC",
 		"GMT",
-		"US/",
 		"Europe/",
 		"Asia/",
 		"Australia/",
@@ -449,11 +443,9 @@ func (h *VPSConfigHandler) isValidTimezone(timezone string) bool {
 
 	for _, pattern := range validPatterns {
 		if timezone == pattern || strings.HasPrefix(timezone, pattern) {
-			log.Printf("Timezone validation passed: '%s' matches pattern '%s'", timezone, pattern)
 			return true
 		}
 	}
 
-	log.Printf("Timezone validation failed: '%s' doesn't match any valid patterns", timezone)
 	return false
 }
