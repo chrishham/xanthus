@@ -69,9 +69,15 @@ func (h *DNSHandler) HandleDNSConfigPage(c *gin.Context) {
 
 	// Check which domains are managed by Xanthus (exist in KV)
 	kvService := services.NewKVService()
-	for i := range domains {
-		if _, err := kvService.GetDomainSSLConfig(token, accountID, domains[i].Name); err == nil {
-			domains[i].Managed = true
+	managedDomains, err := kvService.ListDomainSSLConfigs(token, accountID)
+	if err != nil {
+		log.Printf("Error fetching managed domains: %v", err)
+		// Continue without marking domains as managed
+	} else {
+		for i := range domains {
+			if _, exists := managedDomains[domains[i].Name]; exists {
+				domains[i].Managed = true
+			}
 		}
 	}
 
@@ -106,9 +112,15 @@ func (h *DNSHandler) HandleDNSList(c *gin.Context) {
 
 	// Check which domains are managed by Xanthus (exist in KV)
 	kvService := services.NewKVService()
-	for i := range domains {
-		if _, err := kvService.GetDomainSSLConfig(token, accountID, domains[i].Name); err == nil {
-			domains[i].Managed = true
+	managedDomains, err := kvService.ListDomainSSLConfigs(token, accountID)
+	if err != nil {
+		log.Printf("Error fetching managed domains: %v", err)
+		// Continue without marking domains as managed
+	} else {
+		for i := range domains {
+			if _, exists := managedDomains[domains[i].Name]; exists {
+				domains[i].Managed = true
+			}
 		}
 	}
 
