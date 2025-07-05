@@ -67,8 +67,15 @@ func (vs *VPSService) ValidateVPSAccess(token, accountID string, serverID int) (
 	return vs.kv.GetVPSConfig(token, accountID, serverID)
 }
 
-// EnhanceServersWithCosts adds cost information to a list of Hetzner servers
+// EnhanceServersWithCosts adds cost information and application counts to a list of Hetzner servers
 func (vs *VPSService) EnhanceServersWithCosts(token, accountID string, servers []HetznerServer) error {
+	// Get application counts for all VPS instances
+	appCounts, err := vs.getApplicationCountsPerVPS(token, accountID)
+	if err != nil {
+		log.Printf("Warning: Could not get application counts: %v", err)
+		appCounts = make(map[string]int)
+	}
+
 	for i := range servers {
 		// Get VPS configuration if it exists
 		if vpsConfig, err := vs.kv.GetVPSConfig(token, accountID, servers[i].ID); err == nil {
@@ -85,6 +92,12 @@ func (vs *VPSService) EnhanceServersWithCosts(token, accountID string, servers [
 				servers[i].Labels["hourly_cost"] = fmt.Sprintf("%.4f", vpsConfig.HourlyRate)
 				servers[i].Labels["configured_timezone"] = vpsConfig.Timezone
 				servers[i].Labels["provider"] = vpsConfig.Provider
+				servers[i].Labels["managed_by"] = "xanthus"
+
+				// Add application count
+				vpsIDStr := fmt.Sprintf("%d", servers[i].ID)
+				applicationCount := appCounts[vpsIDStr]
+				servers[i].Labels["application_count"] = fmt.Sprintf("%d", applicationCount)
 			}
 		}
 	}
@@ -343,7 +356,7 @@ func (vs *VPSService) getApplicationCountsPerVPS(token, accountID string) (map[s
 	counts := make(map[string]int)
 	for _, app := range applications {
 		var targetVPSID string
-		
+
 		// First try to use VPSID directly (for numeric IDs)
 		if app.VPSID != "" {
 			// Check if VPSID is numeric (convert to int and back to string)
@@ -356,14 +369,14 @@ func (vs *VPSService) getApplicationCountsPerVPS(token, accountID string) (map[s
 				}
 			}
 		}
-		
+
 		// If no VPSID or couldn't resolve it, try VPS name
 		if targetVPSID == "" && app.VPSName != "" {
 			if vpsID, exists := vpsNameToID[app.VPSName]; exists {
 				targetVPSID = vpsID
 			}
 		}
-		
+
 		// Count the application for the resolved VPS ID
 		if targetVPSID != "" {
 			counts[targetVPSID]++
