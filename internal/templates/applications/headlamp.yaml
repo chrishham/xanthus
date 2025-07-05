@@ -12,7 +12,7 @@ image:
 service:
   type: ClusterIP
   port: 80
-  targetPort: 4654
+  targetPort: 4466
 
 # Ingress configuration with Traefik
 ingress:
@@ -42,16 +42,16 @@ resources:
 
 # Security context
 securityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
 
 # Pod security context
 podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
-  runAsGroup: 1000
-  fsGroup: 1000
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
+  fsGroup: 0
 
 # Service account
 serviceAccount:
@@ -155,8 +155,8 @@ rbac:
 
 # Configuration for Headlamp
 config:
-  # Base URL for the application
-  baseURL: "https://{{SUBDOMAIN}}.{{DOMAIN}}"
+  # Base URL for the application (must start with / or be empty)
+  baseURL: ""
   
   # Plugin configuration
   pluginsDir: "/headlamp/plugins"
@@ -170,9 +170,9 @@ config:
 # Environment variables
 env:
   - name: HEADLAMP_BASE_URL
-    value: "https://{{SUBDOMAIN}}.{{DOMAIN}}"
+    value: ""
   - name: TZ
-    value: "{{TIMEZONE}}"
+    value: "Europe/Athens"
 
 # Persistence for plugins (optional)
 persistence:
@@ -213,7 +213,7 @@ nameOverride: ""
 livenessProbe:
   httpGet:
     path: /
-    port: 4654
+    port: 4466
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
@@ -223,7 +223,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /
-    port: 4654
+    port: 4466
   initialDelaySeconds: 5
   periodSeconds: 5
   timeoutSeconds: 3
