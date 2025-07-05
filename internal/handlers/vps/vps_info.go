@@ -235,7 +235,7 @@ func (h *VPSInfoHandler) HandleVPSSSHKey(c *gin.Context) {
 	download := c.Query("download")
 	if download == "true" {
 		c.Header("Content-Type", "application/octet-stream")
-		c.Header("Content-Disposition", "attachment; filename=xanthus-ssh-key.pem")
+		c.Header("Content-Disposition", "attachment; filename=xanthus-key.pem")
 		c.String(http.StatusOK, csrConfig.PrivateKey)
 		return
 	}
