@@ -26,7 +26,7 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 	kvService := NewKVService()
 
 	// Get the Xanthus namespace ID (with caching)
-	cacheKey := accountID + ":" + token[:10] // Use first 10 chars of token as cache key
+	cacheKey := "legacy_ns:" + accountID // Use accountID for user isolation
 	namespaceID, exists := kvService.namespaceIDCache[cacheKey]
 	
 	if !exists {
@@ -737,7 +737,7 @@ func (s *SimpleApplicationService) checkExistingArgoCDInstallation(token, accoun
 // getAllApplications retrieves all applications from KV store
 func (s *SimpleApplicationService) getAllApplications(token, accountID string, kvService *KVService) ([]models.Application, error) {
 	// Get the Xanthus namespace ID (with caching)
-	cacheKey := accountID + ":" + token[:10] // Use first 10 chars of token as cache key
+	cacheKey := "legacy_ns:" + accountID // Use accountID for user isolation
 	namespaceID, exists := kvService.namespaceIDCache[cacheKey]
 	
 	if !exists {

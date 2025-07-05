@@ -13,7 +13,7 @@ import (
 
 // VerifyCloudflareToken verifies the validity of a Cloudflare API token
 func VerifyCloudflareToken(token string) bool {
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	req, err := http.NewRequest("GET", "https://api.cloudflare.com/client/v4/user/tokens/verify", nil)
 	if err != nil {
@@ -42,7 +42,7 @@ func VerifyCloudflareToken(token string) bool {
 
 // CheckKVNamespaceExists checks if the "Xanthus" KV namespace exists
 func CheckKVNamespaceExists(token string) (bool, string, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	// Get account memberships to find account ID
 	req, err := http.NewRequest("GET", "https://api.cloudflare.com/client/v4/memberships", nil)
@@ -123,7 +123,7 @@ func CheckKVNamespaceExists(token string) (bool, string, error) {
 
 // CreateKVNamespace creates the "Xanthus" KV namespace
 func CreateKVNamespace(token, accountID string) error {
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	payload := map[string]string{
 		"title": "Xanthus",
@@ -284,7 +284,7 @@ func GetKVValue(client *http.Client, token, accountID, key string, result interf
 
 // FetchCloudflareDomains fetches all domain zones from Cloudflare
 func FetchCloudflareDomains(token string) ([]models.CloudflareDomain, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 8 * time.Second}
 
 	req, err := http.NewRequest("GET", "https://api.cloudflare.com/client/v4/zones", nil)
 	if err != nil {

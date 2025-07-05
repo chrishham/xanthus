@@ -14,13 +14,15 @@ type KVService struct {
 	client *http.Client
 	// Cache for namespace ID to avoid repeated API calls
 	namespaceIDCache map[string]string
+	cacheService     *CacheService
 }
 
 // NewKVService creates a new KV service instance
 func NewKVService() *KVService {
 	return &KVService{
-		client: &http.Client{Timeout: 30 * time.Second},
+		client: &http.Client{Timeout: 10 * time.Second}, // Reduced timeout
 		namespaceIDCache: make(map[string]string),
+		cacheService:     NewCacheService(),
 	}
 }
 
@@ -74,17 +76,21 @@ func (kvs *KVService) GetXanthusNamespaceID(token, accountID string) (string, er
 
 // PutValue stores a value in Cloudflare KV
 func (kvs *KVService) PutValue(token, accountID, key string, value interface{}) error {
-	// Get the Xanthus namespace ID (with caching)
-	cacheKey := accountID + ":" + token[:10] // Use first 10 chars of token as cache key
-	namespaceID, exists := kvs.namespaceIDCache[cacheKey]
+	// Try to get cached namespace ID first - use accountID for isolation
+	cacheKey := "namespace_id:" + accountID
+	namespaceID := ""
 	
-	if !exists {
+	if cached, exists := kvs.cacheService.Get(cacheKey); exists {
+		namespaceID = cached.(string)
+	} else {
+		// Fallback to API call
 		var err error
 		namespaceID, err = kvs.GetXanthusNamespaceID(token, accountID)
 		if err != nil {
 			return fmt.Errorf("failed to get namespace ID: %w", err)
 		}
-		kvs.namespaceIDCache[cacheKey] = namespaceID
+		// Cache for 10 minutes
+		kvs.cacheService.Set(cacheKey, namespaceID, 10*time.Minute)
 	}
 
 	// Marshal value to JSON
@@ -125,17 +131,21 @@ func (kvs *KVService) PutValue(token, accountID, key string, value interface{}) 
 
 // GetValue retrieves a value from Cloudflare KV
 func (kvs *KVService) GetValue(token, accountID, key string, result interface{}) error {
-	// Get the Xanthus namespace ID (with caching)
-	cacheKey := accountID + ":" + token[:10] // Use first 10 chars of token as cache key
-	namespaceID, exists := kvs.namespaceIDCache[cacheKey]
+	// Try to get cached namespace ID first - use accountID for isolation
+	cacheKey := "namespace_id:" + accountID
+	namespaceID := ""
 	
-	if !exists {
+	if cached, exists := kvs.cacheService.Get(cacheKey); exists {
+		namespaceID = cached.(string)
+	} else {
+		// Fallback to API call
 		var err error
 		namespaceID, err = kvs.GetXanthusNamespaceID(token, accountID)
 		if err != nil {
 			return fmt.Errorf("failed to get namespace ID: %w", err)
 		}
-		kvs.namespaceIDCache[cacheKey] = namespaceID
+		// Cache for 10 minutes
+		kvs.cacheService.Set(cacheKey, namespaceID, 10*time.Minute)
 	}
 
 	// Create request
@@ -173,7 +183,7 @@ func (kvs *KVService) GetValue(token, accountID, key string, result interface{})
 // DeleteValue deletes a value from Cloudflare KV
 func (kvs *KVService) DeleteValue(token, accountID, key string) error {
 	// Get the Xanthus namespace ID (with caching)
-	cacheKey := accountID + ":" + token[:10]
+	cacheKey := "legacy_ns:" + accountID
 	namespaceID, exists := kvs.namespaceIDCache[cacheKey]
 	
 	if !exists {
@@ -228,7 +238,7 @@ func (kvs *KVService) GetDomainSSLConfig(token, accountID, domain string) (*Doma
 // ListDomainSSLConfigs retrieves all domain SSL configurations
 func (kvs *KVService) ListDomainSSLConfigs(token, accountID string) (map[string]*DomainSSLConfig, error) {
 	// Get the Xanthus namespace ID (with caching)
-	cacheKey := accountID + ":" + token[:10] // Use first 10 chars of token as cache key
+	cacheKey := "legacy_ns:" + accountID // Use first 10 chars of token as cache key
 	namespaceID, exists := kvs.namespaceIDCache[cacheKey]
 	
 	if !exists {
@@ -365,7 +375,7 @@ func (kvs *KVService) GetVPSConfig(token, accountID string, serverID int) (*VPSC
 // ListVPSConfigs retrieves all VPS configurations
 func (kvs *KVService) ListVPSConfigs(token, accountID string) (map[int]*VPSConfig, error) {
 	// Get the Xanthus namespace ID (with caching)
-	cacheKey := accountID + ":" + token[:10] // Use first 10 chars of token as cache key
+	cacheKey := "legacy_ns:" + accountID // Use first 10 chars of token as cache key
 	namespaceID, exists := kvs.namespaceIDCache[cacheKey]
 	
 	if !exists {

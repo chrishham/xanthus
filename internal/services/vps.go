@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // VPSService provides high-level business logic for VPS operations
@@ -13,6 +14,7 @@ type VPSService struct {
 	kv      *KVService
 	ssh     *SSHService
 	cf      *CloudflareService
+	cache   *CacheService
 }
 
 // NewVPSService creates a new VPS service instance
@@ -22,6 +24,7 @@ func NewVPSService() *VPSService {
 		kv:      NewKVService(),
 		ssh:     NewSSHService(),
 		cf:      NewCloudflareService(),
+		cache:   NewCacheService(),
 	}
 }
 
@@ -177,6 +180,12 @@ func (vs *VPSService) DeleteVPSAndCleanup(token, accountID, hetznerKey string, s
 
 // GetServersFromKV retrieves server list from KV store instead of Hetzner API
 func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer, error) {
+	// Check cache first - use accountID for proper user isolation
+	cacheKey := "vps_servers:" + accountID
+	if cached, exists := vs.cache.Get(cacheKey); exists {
+		return cached.([]HetznerServer), nil
+	}
+
 	// Get all VPS configurations from KV
 	vpsConfigsMap, err := vs.kv.ListVPSConfigs(token, accountID)
 	if err != nil {
@@ -239,6 +248,9 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 
 		servers = append(servers, server)
 	}
+
+	// Cache the result for 60 seconds
+	vs.cache.Set(cacheKey, servers, 60*time.Second)
 
 	return servers, nil
 }

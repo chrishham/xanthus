@@ -105,9 +105,11 @@ func setupTemplates(r *gin.Engine) {
 		},
 	}
 
-	// Load main templates and partials
+	// Pre-compile templates once at startup for better performance
+	log.Println("📋 Pre-compiling HTML templates...")
 	tmpl := template.New("").Funcs(funcMap)
 	tmpl = template.Must(tmpl.ParseGlob("web/templates/*.html"))
 	tmpl = template.Must(tmpl.ParseGlob("web/templates/partials/*/*.html"))
 	r.SetHTMLTemplate(tmpl)
+	log.Println("✅ Templates pre-compiled successfully")
 }
