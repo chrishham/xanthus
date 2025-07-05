@@ -460,7 +460,7 @@ export function vpsManagement() {
                 const downloadUrl = '/vps/ssh-key?download=true';
                 const link = document.createElement('a');
                 link.href = downloadUrl;
-                link.download = 'xanthus-ssh-key.pem';
+                link.download = 'xanthus-key.pem';
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -469,11 +469,11 @@ export function vpsManagement() {
                     title: 'SSH Key Downloaded!',
                     html: `
                         <div class="text-left text-sm">
-                            <p class="mb-2">Your SSH private key has been downloaded as <code>xanthus-ssh-key.pem</code></p>
+                            <p class="mb-2">Your SSH private key has been downloaded as <code>xanthus-key.pem</code></p>
                             <p class="mb-2"><strong>Next steps:</strong></p>
                             <ol class="list-decimal list-inside space-y-1 text-xs">
-                                <li>Set correct permissions: <code>chmod 600 xanthus-ssh-key.pem</code></li>
-                                <li>Connect to your VPS: <code>ssh -i xanthus-ssh-key.pem root@&lt;server-ip&gt;</code></li>
+                                <li>Set correct permissions: <code>chmod 600 xanthus-key.pem</code></li>
+                                <li>Connect to your VPS: <code>ssh -i xanthus-key.pem root@&lt;server-ip&gt;</code></li>
                             </ol>
                         </div>
                     `,
