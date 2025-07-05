@@ -129,12 +129,18 @@ func (vs *VPSService) CreateVPSWithConfig(
 	return server, vpsConfig, nil
 }
 
-// DeleteVPSAndCleanup deletes a VPS and cleans up its configuration
+// DeleteVPSAndCleanup deletes a VPS and cleans up its configuration and all associated applications
 func (vs *VPSService) DeleteVPSAndCleanup(token, accountID, hetznerKey string, serverID int) (*VPSConfig, error) {
 	// Get VPS configuration before deletion (for logging)
 	vpsConfig, err := vs.kv.GetVPSConfig(token, accountID, serverID)
 	if err != nil {
 		log.Printf("Warning: Could not get VPS config for server %d: %v", serverID, err)
+	}
+
+	// Delete all applications associated with this VPS
+	if err := vs.deleteAssociatedApplications(token, accountID, fmt.Sprintf("%d", serverID)); err != nil {
+		log.Printf("Warning: Failed to delete associated applications for VPS %d: %v", serverID, err)
+		// Continue with VPS deletion even if application cleanup fails
 	}
 
 	// Delete server from Hetzner
@@ -206,22 +212,22 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 // getTimezoneForLocation maps Hetzner datacenter locations to appropriate timezones
 func (vs *VPSService) getTimezoneForLocation(location string) string {
 	locationTimezones := map[string]string{
-		"nbg1":     "Europe/Berlin",    // Nuremberg, Germany
-		"fsn1":     "Europe/Berlin",    // Falkenstein, Germany
-		"hel1":     "Europe/Helsinki",  // Helsinki, Finland
-		"ash":      "America/New_York", // Ashburn, USA
-		"hil":      "America/New_York", // Hillsboro, USA
-		"cax":      "America/New_York", // Central US
-		"default":  "Europe/Athens",    // Default for Greece-based deployments
+		"nbg1":    "Europe/Berlin",    // Nuremberg, Germany
+		"fsn1":    "Europe/Berlin",    // Falkenstein, Germany
+		"hel1":    "Europe/Helsinki",  // Helsinki, Finland
+		"ash":     "America/New_York", // Ashburn, USA
+		"hil":     "America/New_York", // Hillsboro, USA
+		"cax":     "America/New_York", // Central US
+		"default": "Europe/Athens",    // Default for Greece-based deployments
 	}
-	
+
 	// Extract location prefix (e.g., "nbg1" from "nbg1-dc3")
 	for prefix, timezone := range locationTimezones {
 		if strings.HasPrefix(location, prefix) {
 			return timezone
 		}
 	}
-	
+
 	// Default fallback
 	return locationTimezones["default"]
 }
@@ -233,15 +239,60 @@ func (vs *VPSService) UpdateVPSTimezone(token, accountID string, serverID int) e
 	if err != nil {
 		return fmt.Errorf("failed to get VPS config: %w", err)
 	}
-	
+
 	// Update timezone based on location
 	vpsConfig.Timezone = vs.getTimezoneForLocation(vpsConfig.Location)
-	
+
 	// Store updated configuration
 	if err := vs.kv.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
 		return fmt.Errorf("failed to update VPS config: %w", err)
 	}
-	
+
 	log.Printf("✅ Updated timezone for VPS %d to %s", serverID, vpsConfig.Timezone)
+	return nil
+}
+
+// deleteAssociatedApplications deletes all applications associated with a VPS
+func (vs *VPSService) deleteAssociatedApplications(token, accountID, vpsID string) error {
+	// Use the application service to get all applications
+	appService := NewSimpleApplicationService()
+
+	// Get all applications for this account
+	applications, err := appService.ListApplications(token, accountID)
+	if err != nil {
+		return fmt.Errorf("failed to list applications: %w", err)
+	}
+
+	// Filter applications that belong to this VPS
+	var appsToDelete []string
+	for _, app := range applications {
+		if app.VPSID == vpsID {
+			appsToDelete = append(appsToDelete, app.ID)
+			log.Printf("Found application %s (%s) on VPS %s - will be deleted", app.Name, app.ID, vpsID)
+		}
+	}
+
+	// Delete each application (VPS deletion mode - DNS and KV only)
+	var deletionErrors []string
+	for _, appID := range appsToDelete {
+		log.Printf("Deleting application %s from VPS %s (DNS and KV only)", appID, vpsID)
+		if err := appService.DeleteApplicationForVPSDeletion(token, accountID, appID); err != nil {
+			deletionErrors = append(deletionErrors, fmt.Sprintf("failed to delete application %s: %v", appID, err))
+			log.Printf("Error deleting application %s: %v", appID, err)
+		} else {
+			log.Printf("Successfully deleted application %s (DNS and KV cleanup)", appID)
+		}
+	}
+
+	if len(deletionErrors) > 0 {
+		return fmt.Errorf("some applications failed to delete: %s", strings.Join(deletionErrors, "; "))
+	}
+
+	if len(appsToDelete) > 0 {
+		log.Printf("Successfully deleted %d applications from VPS %s", len(appsToDelete), vpsID)
+	} else {
+		log.Printf("No applications found on VPS %s to delete", vpsID)
+	}
+
 	return nil
 }

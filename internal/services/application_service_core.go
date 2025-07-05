@@ -249,6 +249,14 @@ func (s *SimpleApplicationService) DeleteApplication(token, accountID, appID str
 		// Continue with cleanup even if DNS deletion fails
 	}
 
+	// Delete port forward DNS records and Kubernetes resources for code-server apps
+	if app.AppType == "code-server" {
+		if err := s.deleteApplicationPortForwards(token, accountID, app); err != nil {
+			fmt.Printf("Warning: Failed to delete port forwards for %s: %v\n", appID, err)
+			// Continue with cleanup even if port forward deletion fails
+		}
+	}
+
 	// Delete the main application key from KV
 	kvKey := fmt.Sprintf("app:%s", appID)
 	if err := kvService.DeleteValue(token, accountID, kvKey); err != nil {
@@ -359,6 +367,246 @@ func (s *SimpleApplicationService) deleteApplicationDNS(token string, app *model
 		fmt.Printf("Warning: No DNS A record found for %s\n", recordName)
 	} else {
 		fmt.Printf("Successfully deleted %d DNS record(s) for %s\n", recordsDeleted, recordName)
+	}
+
+	return nil
+}
+
+// deleteApplicationPortForwards removes all port forwards associated with an application
+func (s *SimpleApplicationService) deleteApplicationPortForwards(token, accountID string, app *models.Application) error {
+	kvService := NewKVService()
+
+	// Get all port forwards for this application
+	var portForwards []struct {
+		ID          string `json:"id"`
+		Subdomain   string `json:"subdomain"`
+		Domain      string `json:"domain"`
+		ServiceName string `json:"service_name"`
+		IngressName string `json:"ingress_name"`
+	}
+
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s:port-forwards", app.ID), &portForwards)
+	if err != nil {
+		// No port forwards found - this is not an error
+		fmt.Printf("No port forwards found for application %s\n", app.ID)
+		return nil
+	}
+
+	if len(portForwards) == 0 {
+		fmt.Printf("No port forwards to clean up for application %s\n", app.ID)
+		return nil
+	}
+
+	fmt.Printf("Found %d port forwards to clean up for application %s\n", len(portForwards), app.ID)
+
+	// Get VPS SSH connection to clean up Kubernetes resources
+	sshService := NewSSHService()
+	serverID, _ := strconv.Atoi(app.VPSID)
+	vpsService := NewVPSService()
+	vpsConfig, err := vpsService.ValidateVPSAccess(token, accountID, serverID)
+	if err != nil {
+		fmt.Printf("Warning: Could not connect to VPS for port forward cleanup: %v\n", err)
+		// Continue with DNS cleanup even if we can't clean up Kubernetes resources
+	} else {
+		// Get SSH private key
+		client := &http.Client{Timeout: 10 * time.Second}
+		var csrConfig struct {
+			PrivateKey string `json:"private_key"`
+		}
+		if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err == nil {
+			// Establish SSH connection
+			if conn, err := sshService.GetOrCreateConnection(vpsConfig.PublicIPv4, vpsConfig.SSHUser, csrConfig.PrivateKey, serverID); err == nil {
+				// Clean up Kubernetes resources for each port forward
+				for _, pf := range portForwards {
+					// Delete Kubernetes ingress
+					ingressCmd := fmt.Sprintf("kubectl delete ingress --namespace %s %s --ignore-not-found=true", app.Namespace, pf.IngressName)
+					if _, err := sshService.ExecuteCommand(conn, ingressCmd); err != nil {
+						fmt.Printf("Warning: Failed to delete ingress %s: %v\n", pf.IngressName, err)
+					} else {
+						fmt.Printf("Deleted ingress %s from namespace %s\n", pf.IngressName, app.Namespace)
+					}
+
+					// Delete Kubernetes service
+					serviceCmd := fmt.Sprintf("kubectl delete service --namespace %s %s --ignore-not-found=true", app.Namespace, pf.ServiceName)
+					if _, err := sshService.ExecuteCommand(conn, serviceCmd); err != nil {
+						fmt.Printf("Warning: Failed to delete service %s: %v\n", pf.ServiceName, err)
+					} else {
+						fmt.Printf("Deleted service %s from namespace %s\n", pf.ServiceName, app.Namespace)
+					}
+				}
+			}
+		}
+	}
+
+	// Clean up DNS records for each port forward
+	cfService := NewCloudflareService()
+	for _, pf := range portForwards {
+		// Get zone ID for the domain
+		zoneID, err := cfService.GetZoneID(token, pf.Domain)
+		if err != nil {
+			fmt.Printf("Warning: Failed to get zone ID for domain %s during port forward cleanup: %v\n", pf.Domain, err)
+			continue
+		}
+
+		// Get existing DNS records
+		records, err := cfService.GetDNSRecords(token, zoneID)
+		if err != nil {
+			fmt.Printf("Warning: Failed to get DNS records for domain %s during port forward cleanup: %v\n", pf.Domain, err)
+			continue
+		}
+
+		// Find and delete the A record for this port forward
+		recordName := fmt.Sprintf("%s.%s", pf.Subdomain, pf.Domain)
+		recordsDeleted := 0
+		for _, record := range records {
+			// Normalize record name (remove trailing dot if present)
+			normalizedRecordName := strings.TrimSuffix(record.Name, ".")
+
+			// Check if this is the A record for our port forward
+			if record.Type == "A" && (normalizedRecordName == recordName || record.Name == recordName) {
+				fmt.Printf("Deleting port forward DNS A record: %s -> %s (ID: %s)\n", record.Name, record.Content, record.ID)
+				if err := cfService.DeleteDNSRecord(token, zoneID, record.ID); err != nil {
+					fmt.Printf("Warning: Failed to delete port forward DNS record %s: %v\n", record.Name, err)
+				} else {
+					recordsDeleted++
+				}
+			}
+		}
+
+		if recordsDeleted == 0 {
+			fmt.Printf("Warning: No DNS A record found for port forward %s\n", recordName)
+		} else {
+			fmt.Printf("Successfully deleted %d DNS record(s) for port forward %s\n", recordsDeleted, recordName)
+		}
+	}
+
+	// Delete the port forwards from KV store
+	if err := kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s:port-forwards", app.ID)); err != nil {
+		fmt.Printf("Warning: Failed to delete port forwards from KV store: %v\n", err)
+	} else {
+		fmt.Printf("Successfully deleted port forwards configuration from KV store for application %s\n", app.ID)
+	}
+
+	return nil
+}
+
+// DeleteApplicationForVPSDeletion deletes application resources without VPS/Helm cleanup
+// This is used when the entire VPS is being deleted - only cleans up external resources
+func (s *SimpleApplicationService) DeleteApplicationForVPSDeletion(token, accountID, appID string) error {
+	kvService := NewKVService()
+
+	// First, get the application details before deletion
+	app, err := s.GetApplication(token, accountID, appID)
+	if err != nil {
+		return fmt.Errorf("failed to get application details: %w", err)
+	}
+
+	// Skip Helm deployment deletion - VPS will be destroyed anyway
+	fmt.Printf("Skipping Helm deployment cleanup for %s (VPS deletion)\n", appID)
+
+	// Delete DNS A record from Cloudflare
+	if err := s.deleteApplicationDNS(token, app); err != nil {
+		fmt.Printf("Warning: Failed to delete DNS record for %s: %v\n", appID, err)
+		// Continue with cleanup even if DNS deletion fails
+	}
+
+	// Delete port forward DNS records (skip Kubernetes cleanup)
+	if app.AppType == "code-server" {
+		if err := s.deleteApplicationPortForwardsForVPSDeletion(token, accountID, app); err != nil {
+			fmt.Printf("Warning: Failed to delete port forward DNS for %s: %v\n", appID, err)
+			// Continue with cleanup even if port forward DNS deletion fails
+		}
+	}
+
+	// Delete the main application key from KV
+	kvKey := fmt.Sprintf("app:%s", appID)
+	if err := kvService.DeleteValue(token, accountID, kvKey); err != nil {
+		return fmt.Errorf("failed to delete application from KV: %w", err)
+	}
+
+	// Also delete the password key if it exists
+	passwordKey := fmt.Sprintf("app:%s:password", appID)
+	kvService.DeleteValue(token, accountID, passwordKey) // Ignore error - password key might not exist
+
+	fmt.Printf("Successfully deleted application %s (VPS deletion mode - DNS and KV only)\n", appID)
+	return nil
+}
+
+// deleteApplicationPortForwardsForVPSDeletion removes port forward DNS records only (no Kubernetes cleanup)
+func (s *SimpleApplicationService) deleteApplicationPortForwardsForVPSDeletion(token, accountID string, app *models.Application) error {
+	kvService := NewKVService()
+
+	// Get all port forwards for this application
+	var portForwards []struct {
+		ID        string `json:"id"`
+		Subdomain string `json:"subdomain"`
+		Domain    string `json:"domain"`
+	}
+
+	err := kvService.GetValue(token, accountID, fmt.Sprintf("app:%s:port-forwards", app.ID), &portForwards)
+	if err != nil {
+		// No port forwards found - this is not an error
+		fmt.Printf("No port forwards found for application %s\n", app.ID)
+		return nil
+	}
+
+	if len(portForwards) == 0 {
+		fmt.Printf("No port forwards to clean up for application %s\n", app.ID)
+		return nil
+	}
+
+	fmt.Printf("Found %d port forwards to clean up for application %s (DNS only)\n", len(portForwards), app.ID)
+
+	// Skip Kubernetes cleanup - VPS will be destroyed anyway
+	fmt.Printf("Skipping Kubernetes port forward cleanup for %s (VPS deletion)\n", app.ID)
+
+	// Clean up DNS records for each port forward
+	cfService := NewCloudflareService()
+	for _, pf := range portForwards {
+		// Get zone ID for the domain
+		zoneID, err := cfService.GetZoneID(token, pf.Domain)
+		if err != nil {
+			fmt.Printf("Warning: Failed to get zone ID for domain %s during port forward cleanup: %v\n", pf.Domain, err)
+			continue
+		}
+
+		// Get existing DNS records
+		records, err := cfService.GetDNSRecords(token, zoneID)
+		if err != nil {
+			fmt.Printf("Warning: Failed to get DNS records for domain %s during port forward cleanup: %v\n", pf.Domain, err)
+			continue
+		}
+
+		// Find and delete the A record for this port forward
+		recordName := fmt.Sprintf("%s.%s", pf.Subdomain, pf.Domain)
+		recordsDeleted := 0
+		for _, record := range records {
+			// Normalize record name (remove trailing dot if present)
+			normalizedRecordName := strings.TrimSuffix(record.Name, ".")
+
+			// Check if this is the A record for our port forward
+			if record.Type == "A" && (normalizedRecordName == recordName || record.Name == recordName) {
+				fmt.Printf("Deleting port forward DNS A record: %s -> %s (ID: %s)\n", record.Name, record.Content, record.ID)
+				if err := cfService.DeleteDNSRecord(token, zoneID, record.ID); err != nil {
+					fmt.Printf("Warning: Failed to delete port forward DNS record %s: %v\n", record.Name, err)
+				} else {
+					recordsDeleted++
+				}
+			}
+		}
+
+		if recordsDeleted == 0 {
+			fmt.Printf("Warning: No DNS A record found for port forward %s\n", recordName)
+		} else {
+			fmt.Printf("Successfully deleted %d DNS record(s) for port forward %s\n", recordsDeleted, recordName)
+		}
+	}
+
+	// Delete the port forwards from KV store
+	if err := kvService.DeleteValue(token, accountID, fmt.Sprintf("app:%s:port-forwards", app.ID)); err != nil {
+		fmt.Printf("Warning: Failed to delete port forwards from KV store: %v\n", err)
+	} else {
+		fmt.Printf("Successfully deleted port forwards configuration from KV store for application %s\n", app.ID)
 	}
 
 	return nil
