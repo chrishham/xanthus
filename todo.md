@@ -72,3 +72,7 @@ buy domain, point nameservers to cloudfare, wait for the domain to be active, cr
    GetPredefinedApplications
 
     what is the current persistence of argocd settings right now? i dont on every helm upgrade/pod restart to loose the settings. 
+
+ps aux | grep -E "(8081|cmd/xanthus|go run)" | grep -v grep
+
+command not found: netstat lsof

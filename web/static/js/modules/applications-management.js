@@ -1,4 +1,5 @@
 // Applications Management Module - Alpine.js component
+// Version: 2025-07-05-token-support
 export function applicationsManagement() {
     return {
         applications: window.initialApplications || [],
@@ -767,6 +768,88 @@ export function applicationsManagement() {
             } catch (error) {
                 console.error('Error retrieving current password:', error);
                 Swal.fire('Error', 'Failed to retrieve current password', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async showTokenModal(app) {
+            console.log('showTokenModal called for app:', app);
+            this.setLoadingState('Retrieving Token', `Getting authentication token for "${app.name}"...`);
+            try {
+                const response = await fetch(`/applications/${app.id}/token`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.token) {
+                    Swal.fire({
+                        title: 'Authentication Token',
+                        html: `
+                            <div class="text-left">
+                                <p class="mb-4">Authentication token for <strong>${app.name}</strong>:</p>
+                                
+                                <div class="mb-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                                    <h4 class="font-medium text-purple-900 mb-2">🔐 Kubernetes Authentication Token</h4>
+                                    <div class="flex items-center space-x-2">
+                                        <textarea rows="4" class="flex-1 px-3 py-2 border border-purple-300 rounded font-mono text-xs bg-white resize-none" 
+                                                  readonly onclick="this.select()">${data.token}</textarea>
+                                        <button onclick="navigator.clipboard.writeText('${data.token}').then(() => {
+                                            const btn = this;
+                                            const originalText = btn.innerHTML;
+                                            btn.innerHTML = '✓';
+                                            btn.style.color = 'green';
+                                            setTimeout(() => {
+                                                btn.innerHTML = originalText;
+                                                btn.style.color = '';
+                                            }, 2000);
+                                        })" 
+                                                class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm">
+                                            📋
+                                        </button>
+                                    </div>
+                                    <p class="text-xs text-purple-700 mt-2">Click to select all, or use the copy button</p>
+                                </div>
+                                
+                                <div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                    <h4 class="font-medium text-yellow-800 mb-2">ℹ️ How to use this token:</h4>
+                                    <ol class="text-sm text-yellow-700 space-y-1">
+                                        <li>1. Copy the authentication token above</li>
+                                        <li>2. Visit your Headlamp dashboard</li>
+                                        <li>3. Paste the token in the authentication field</li>
+                                        <li>4. Click "Authenticate" to access your Kubernetes cluster</li>
+                                    </ol>
+                                </div>
+                                
+                                <div class="flex justify-center">
+                                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                        <a href="${app.url}" target="_blank" 
+                                           class="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium">
+                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                                            </svg>
+                                            Open Headlamp
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        `,
+                        icon: 'info',
+                        confirmButtonColor: '#7c3aed',
+                        confirmButtonText: 'Got it!',
+                        width: 700,
+                        allowOutsideClick: true
+                    });
+                } else {
+                    Swal.fire('Error', data.error || 'Failed to retrieve authentication token', 'error');
+                }
+            } catch (error) {
+                console.error('Error retrieving token:', error);
+                Swal.fire('Error', 'Failed to retrieve authentication token', 'error');
             } finally {
                 this.loading = false;
             }

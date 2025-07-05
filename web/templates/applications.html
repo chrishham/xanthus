@@ -315,6 +315,13 @@
                                     🔗 Port Forwarding
                                 </button>
                                 
+                                <!-- Get Authentication Token (Headlamp only) -->
+                                <button x-show="app.app_type === 'headlamp'" 
+                                        @click="showTokenModal(app)" 
+                                        class="flex-1 text-xs px-3 py-2 border border-purple-300 text-purple-700 bg-purple-50 rounded-md hover:bg-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                                    🔐 Get Auth Token
+                                </button>
+                                
                                 <!-- Change Version -->
                                 <button @click="showUpgradeModal(app)" 
                                         class="flex-1 text-xs px-3 py-2 border border-blue-300 text-blue-700 bg-blue-50 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500">

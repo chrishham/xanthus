@@ -576,3 +576,54 @@ func (h *Handler) HandlePortForwardsDelete(c *gin.Context) {
 		"message": "Port forward removed successfully",
 	})
 }
+
+// HandleApplicationToken retrieves authentication token for headlamp applications
+func (h *Handler) HandleApplicationToken(c *gin.Context) {
+	token := c.GetString("cf_token")
+	accountID := c.GetString("account_id")
+
+	appID := c.Param("id")
+
+	// Get application details using helper
+	appHelper := NewApplicationHelper()
+	app, err := appHelper.GetApplicationByID(token, accountID, appID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Application not found"})
+		return
+	}
+
+	// Only support token retrieval for headlamp applications
+	if app.AppType != "headlamp" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Token retrieval is only supported for headlamp applications"})
+		return
+	}
+
+	// Get VPS configuration using helper
+	vpsHelper := NewVPSConnectionHelper()
+	conn, err := vpsHelper.GetVPSConnection(token, accountID, app.VPSID)
+	if err != nil {
+		log.Printf("Error connecting to VPS: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to VPS"})
+		return
+	}
+	defer conn.Close()
+
+	// Generate service account token for headlamp
+	sshService := services.NewSSHService()
+	createTokenCmd := fmt.Sprintf("kubectl create token headlamp-headlamp -n headlamp --duration=8760h")
+	result, err := sshService.ExecuteCommand(conn, createTokenCmd)
+	if err != nil {
+		log.Printf("Error creating token: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate authentication token"})
+		return
+	}
+
+	// Clean up token (remove any newlines)
+	authToken := strings.TrimSpace(result.Output)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"token":   authToken,
+		"message": "Authentication token retrieved successfully",
+	})
+}
