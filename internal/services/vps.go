@@ -83,6 +83,7 @@ func (vs *VPSService) EnhanceServersWithCosts(token, accountID string, servers [
 				servers[i].Labels["monthly_cost"] = fmt.Sprintf("%.2f", vpsConfig.MonthlyRate)
 				servers[i].Labels["hourly_cost"] = fmt.Sprintf("%.4f", vpsConfig.HourlyRate)
 				servers[i].Labels["configured_timezone"] = vpsConfig.Timezone
+				servers[i].Labels["provider"] = vpsConfig.Provider
 			}
 		}
 	}
@@ -120,6 +121,7 @@ func (vs *VPSService) CreateVPSWithConfig(
 		HourlyRate:  hourlyRate,
 		MonthlyRate: monthlyRate,
 		Timezone:    timezone,
+		Provider:    "Hetzner",
 	}
 
 	// Store VPS configuration
@@ -202,6 +204,7 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 				"accumulated_cost": fmt.Sprintf("%.2f", accumulatedCost),
 				"monthly_cost":     fmt.Sprintf("%.2f", vpsConfig.MonthlyRate),
 				"hourly_cost":      fmt.Sprintf("%.4f", vpsConfig.HourlyRate),
+				"provider":         vpsConfig.Provider,
 			},
 		}
 

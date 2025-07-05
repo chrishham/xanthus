@@ -121,7 +121,7 @@
                             <!-- Server Type -->
                             <div class="flex items-center justify-between">
                                 <span class="text-sm text-gray-500">Server Type:</span>
-                                <span class="text-sm font-medium text-gray-900" x-text="server.server_type.name"></span>
+                                <span class="text-sm font-medium text-gray-900" x-text="(server.labels && server.labels.provider) ? server.labels.provider + ' (' + server.server_type.name + ')' : server.server_type.name"></span>
                             </div>
                             
                             <!-- Location -->

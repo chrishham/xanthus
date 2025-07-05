@@ -280,6 +280,7 @@ type VPSConfig struct {
 	HourlyRate  float64 `json:"hourly_rate"`  // EUR per hour
 	MonthlyRate float64 `json:"monthly_rate"` // EUR per month (including IPv4)
 	Timezone    string  `json:"timezone"`     // e.g., "Europe/Berlin", "UTC"
+	Provider    string  `json:"provider"`     // VPS provider (e.g., "Hetzner", "AWS", "DigitalOcean")
 }
 
 // StoreVPSConfig stores VPS configuration in KV
