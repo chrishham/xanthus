@@ -97,8 +97,11 @@ func (vs *VPSService) CreateVPSWithConfig(
 	domainCert, domainKey string,
 	hourlyRate, monthlyRate float64,
 ) (*HetznerServer, *VPSConfig, error) {
+	// Calculate timezone for the location
+	timezone := vs.getTimezoneForLocation(location)
+
 	// Create server using Hetzner service
-	server, err := vs.hetzner.CreateServer(hetznerKey, name, serverType, location, sshKeyName, domain, domainCert, domainKey)
+	server, err := vs.hetzner.CreateServer(hetznerKey, name, serverType, location, sshKeyName, domain, domainCert, domainKey, timezone)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create server: %w", err)
 	}
@@ -116,7 +119,7 @@ func (vs *VPSService) CreateVPSWithConfig(
 		SSHPort:     22,
 		HourlyRate:  hourlyRate,
 		MonthlyRate: monthlyRate,
-		Timezone:    vs.getTimezoneForLocation(location),
+		Timezone:    timezone,
 	}
 
 	// Store VPS configuration

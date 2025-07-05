@@ -48,6 +48,15 @@ write_files:
       update_status "INSTALLING"
       log "Starting Xanthus K3s setup..."
       
+      # Set timezone if provided
+      if [ -n "${TIMEZONE}" ]; then
+          log "Setting timezone to ${TIMEZONE}..."
+          timedatectl set-timezone "${TIMEZONE}"
+          log "Timezone set to $(timedatectl show --property=Timezone --value)"
+      else
+          log "No timezone specified, keeping default (UTC)"
+      fi
+      
       # Ensure SSH service is enabled and running
       systemctl enable ssh
       systemctl start ssh

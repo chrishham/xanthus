@@ -288,7 +288,7 @@ func (hs *HetznerService) GetServer(apiKey string, serverID int) (*HetznerServer
 }
 
 // CreateServer creates a new VPS instance using cloud-init script
-func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKeyName string, domain, domainCert, domainKey string) (*HetznerServer, error) {
+func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKeyName string, domain, domainCert, domainKey, timezone string) (*HetznerServer, error) {
 	// Use SSH key name directly - Hetzner accepts both names and IDs
 	var sshKeys []string
 	if sshKeyName != "" {
@@ -322,6 +322,13 @@ func (hs *HetznerService) CreateServer(apiKey, name, serverType, location, sshKe
 		userData = strings.ReplaceAll(userData, "${DOMAIN}", "")
 		userData = strings.ReplaceAll(userData, "${DOMAIN_CERT}", "")
 		userData = strings.ReplaceAll(userData, "${DOMAIN_KEY}", "")
+	}
+
+	// Replace timezone variable
+	if timezone != "" {
+		userData = strings.ReplaceAll(userData, "${TIMEZONE}", timezone)
+	} else {
+		userData = strings.ReplaceAll(userData, "${TIMEZONE}", "")
 	}
 
 	createReq := HetznerCreateServerRequest{
