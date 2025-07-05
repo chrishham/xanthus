@@ -184,11 +184,14 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 	}
 
 	// Get application counts for each VPS
-	appCounts, err := vs.getApplicationCountsPerVPS(token, accountID)
-	if err != nil {
-		log.Printf("Warning: Could not get application counts: %v", err)
-		appCounts = make(map[string]int)
-	}
+	// DISABLED: Application counting causes 8+ second delays
+	// TODO: Move to background job or async endpoint
+	// appCounts, err := vs.getApplicationCountsPerVPS(token, accountID)
+	// if err != nil {
+	// 	log.Printf("Warning: Could not get application counts: %v", err)
+	// 	appCounts = make(map[string]int)
+	// }
+	appCounts := make(map[string]int) // Empty map for now
 
 	// Convert VPS configs to HetznerServer format for compatibility
 	servers := make([]HetznerServer, 0, len(vpsConfigsMap))

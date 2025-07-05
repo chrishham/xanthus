@@ -24,10 +24,17 @@ func NewSimpleApplicationService() *SimpleApplicationService {
 func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]models.Application, error) {
 	kvService := NewKVService()
 
-	// Get the Xanthus namespace ID
-	namespaceID, err := kvService.GetXanthusNamespaceID(token, accountID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get namespace ID: %w", err)
+	// Get the Xanthus namespace ID (with caching)
+	cacheKey := accountID + ":" + token[:10] // Use first 10 chars of token as cache key
+	namespaceID, exists := kvService.namespaceIDCache[cacheKey]
+	
+	if !exists {
+		var err error
+		namespaceID, err = kvService.GetXanthusNamespaceID(token, accountID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get namespace ID: %w", err)
+		}
+		kvService.namespaceIDCache[cacheKey] = namespaceID
 	}
 
 	// List all keys with app: prefix
@@ -85,12 +92,14 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 			fmt.Printf("Successfully retrieved application: %s (ID: %s, Name: %s, VPSName: %s, AppType: %s, Status: %s, URL: %s)\n",
 				key.Name, app.ID, app.Name, app.VPSName, app.AppType, app.Status, app.URL)
 			// Update application status with real-time Helm status
-			if realTimeStatus, statusErr := s.GetApplicationRealTimeStatus(token, accountID, &app); statusErr == nil {
-				app.Status = realTimeStatus
-				fmt.Printf("Updated status for %s: %s\n", app.ID, realTimeStatus)
-			} else {
-				fmt.Printf("Could not get real-time status for %s: %v\n", app.ID, statusErr)
-			}
+			// DISABLED: Real-time status checks cause 10+ second delays
+			// TODO: Move to background job or async endpoint
+			// if realTimeStatus, statusErr := s.GetApplicationRealTimeStatus(token, accountID, &app); statusErr == nil {
+			// 	app.Status = realTimeStatus
+			// 	fmt.Printf("Updated status for %s: %s\n", app.ID, realTimeStatus)
+			// } else {
+			// 	fmt.Printf("Could not get real-time status for %s: %v\n", app.ID, statusErr)
+			// }
 			// If we can't get real-time status, keep the cached status
 			app.UpdatedAt = time.Now().Format(time.RFC3339)
 
@@ -709,10 +718,17 @@ func (s *SimpleApplicationService) checkExistingArgoCDInstallation(token, accoun
 
 // getAllApplications retrieves all applications from KV store
 func (s *SimpleApplicationService) getAllApplications(token, accountID string, kvService *KVService) ([]models.Application, error) {
-	// Get the Xanthus namespace ID
-	namespaceID, err := kvService.GetXanthusNamespaceID(token, accountID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get namespace ID: %w", err)
+	// Get the Xanthus namespace ID (with caching)
+	cacheKey := accountID + ":" + token[:10] // Use first 10 chars of token as cache key
+	namespaceID, exists := kvService.namespaceIDCache[cacheKey]
+	
+	if !exists {
+		var err error
+		namespaceID, err = kvService.GetXanthusNamespaceID(token, accountID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get namespace ID: %w", err)
+		}
+		kvService.namespaceIDCache[cacheKey] = namespaceID
 	}
 
 	// List all keys with app: prefix
