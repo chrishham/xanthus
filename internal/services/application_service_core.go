@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chrishham/xanthus/internal/models"
@@ -76,40 +77,57 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 		fmt.Printf("Key %d: %s\n", i, key.Name)
 	}
 
-	applications := []models.Application{}
-
-	// Fetch each application, but skip password keys
+	// Filter out password keys first
+	var appKeys []string
 	for _, key := range keysResp.Result {
-		// Skip password keys (they end with ":password")
-		if strings.HasSuffix(key.Name, ":password") {
-			fmt.Printf("Skipping password key: %s\n", key.Name)
-			continue
-		}
-
-		fmt.Printf("Attempting to retrieve application: %s\n", key.Name)
-		var app models.Application
-		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
-			fmt.Printf("Successfully retrieved application: %s (ID: %s, Name: %s, VPSName: %s, AppType: %s, Status: %s, URL: %s)\n",
-				key.Name, app.ID, app.Name, app.VPSName, app.AppType, app.Status, app.URL)
-			// Update application status with real-time Helm status
-			// DISABLED: Real-time status checks cause 10+ second delays
-			// TODO: Move to background job or async endpoint
-			// if realTimeStatus, statusErr := s.GetApplicationRealTimeStatus(token, accountID, &app); statusErr == nil {
-			// 	app.Status = realTimeStatus
-			// 	fmt.Printf("Updated status for %s: %s\n", app.ID, realTimeStatus)
-			// } else {
-			// 	fmt.Printf("Could not get real-time status for %s: %v\n", app.ID, statusErr)
-			// }
-			// If we can't get real-time status, keep the cached status
-			app.UpdatedAt = time.Now().Format(time.RFC3339)
-
-			applications = append(applications, app)
-			fmt.Printf("Added application to list: %s\n", app.ID)
+		if !strings.HasSuffix(key.Name, ":password") {
+			appKeys = append(appKeys, key.Name)
 		} else {
-			// Log error to help debug issues
-			fmt.Printf("Error retrieving application %s: %v\n", key.Name, err)
+			fmt.Printf("Skipping password key: %s\n", key.Name)
 		}
 	}
+
+	// Parallel fetch of applications using goroutines
+	applications := make([]models.Application, 0, len(appKeys))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Limit concurrent requests to avoid overwhelming Cloudflare KV API
+	maxConcurrency := 5
+	semaphore := make(chan struct{}, maxConcurrency)
+
+	for _, keyName := range appKeys {
+		wg.Add(1)
+		go func(keyName string) {
+			defer wg.Done()
+			
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			fmt.Printf("Attempting to retrieve application: %s\n", keyName)
+			var app models.Application
+			if err := kvService.GetValue(token, accountID, keyName, &app); err == nil {
+				fmt.Printf("Successfully retrieved application: %s (ID: %s, Name: %s, VPSName: %s, AppType: %s, Status: %s, URL: %s)\n",
+					keyName, app.ID, app.Name, app.VPSName, app.AppType, app.Status, app.URL)
+				
+				// Update timestamp for cached status
+				app.UpdatedAt = time.Now().Format(time.RFC3339)
+
+				// Thread-safe append
+				mu.Lock()
+				applications = append(applications, app)
+				mu.Unlock()
+				
+				fmt.Printf("Added application to list: %s\n", app.ID)
+			} else {
+				fmt.Printf("Error retrieving application %s: %v\n", keyName, err)
+			}
+		}(keyName)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	return applications, nil
 }
@@ -764,20 +782,44 @@ func (s *SimpleApplicationService) getAllApplications(token, accountID string, k
 		return nil, fmt.Errorf("KV API failed")
 	}
 
-	applications := []models.Application{}
-
-	// Fetch each application, but skip password keys
+	// Filter out password keys first
+	var appKeys []string
 	for _, key := range keysResp.Result {
-		// Skip password keys (they end with ":password")
-		if strings.HasSuffix(key.Name, ":password") {
-			continue
-		}
-
-		var app models.Application
-		if err := kvService.GetValue(token, accountID, key.Name, &app); err == nil {
-			applications = append(applications, app)
+		if !strings.HasSuffix(key.Name, ":password") {
+			appKeys = append(appKeys, key.Name)
 		}
 	}
+
+	// Parallel fetch of applications using goroutines
+	applications := make([]models.Application, 0, len(appKeys))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Limit concurrent requests to avoid overwhelming Cloudflare KV API
+	maxConcurrency := 5
+	semaphore := make(chan struct{}, maxConcurrency)
+
+	for _, keyName := range appKeys {
+		wg.Add(1)
+		go func(keyName string) {
+			defer wg.Done()
+			
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			var app models.Application
+			if err := kvService.GetValue(token, accountID, keyName, &app); err == nil {
+				// Thread-safe append
+				mu.Lock()
+				applications = append(applications, app)
+				mu.Unlock()
+			}
+		}(keyName)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	return applications, nil
 }

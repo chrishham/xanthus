@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -272,21 +273,52 @@ func (kvs *KVService) ListDomainSSLConfigs(token, accountID string) (map[string]
 		return nil, fmt.Errorf("KV API failed: %v", keysResp.Errors)
 	}
 
-	configs := make(map[string]*DomainSSLConfig)
-
-	// Fetch each SSL config
+	// Filter SSL config keys and extract domains
+	type sslKeyInfo struct {
+		keyName string
+		domain  string
+	}
+	
+	var sslKeys []sslKeyInfo
 	for _, key := range keysResp.Result {
 		if len(key.Name) > 20 && key.Name[len(key.Name)-11:] == ":ssl_config" {
 			// Extract domain from key format: domain:example.com:ssl_config
 			parts := key.Name[7:]           // Remove "domain:" prefix
 			domain := parts[:len(parts)-11] // Remove ":ssl_config" suffix
-
-			var config DomainSSLConfig
-			if err := kvs.GetValue(token, accountID, key.Name, &config); err == nil {
-				configs[domain] = &config
-			}
+			sslKeys = append(sslKeys, sslKeyInfo{keyName: key.Name, domain: domain})
 		}
 	}
+
+	// Parallel fetch of SSL configs using goroutines
+	configs := make(map[string]*DomainSSLConfig)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Limit concurrent requests to avoid overwhelming Cloudflare KV API
+	maxConcurrency := 5
+	semaphore := make(chan struct{}, maxConcurrency)
+
+	for _, sslKey := range sslKeys {
+		wg.Add(1)
+		go func(keyName, domain string) {
+			defer wg.Done()
+			
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			var config DomainSSLConfig
+			if err := kvs.GetValue(token, accountID, keyName, &config); err == nil {
+				// Thread-safe map write
+				mu.Lock()
+				configs[domain] = &config
+				mu.Unlock()
+			}
+		}(sslKey.keyName, sslKey.domain)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	return configs, nil
 }
@@ -378,17 +410,44 @@ func (kvs *KVService) ListVPSConfigs(token, accountID string) (map[int]*VPSConfi
 		return nil, fmt.Errorf("KV API failed: %v", keysResp.Errors)
 	}
 
-	configs := make(map[int]*VPSConfig)
-
-	// Fetch each VPS config
+	// Filter VPS config keys
+	var vpsKeys []string
 	for _, key := range keysResp.Result {
 		if len(key.Name) > 8 && key.Name[len(key.Name)-7:] == ":config" {
-			var config VPSConfig
-			if err := kvs.GetValue(token, accountID, key.Name, &config); err == nil {
-				configs[config.ServerID] = &config
-			}
+			vpsKeys = append(vpsKeys, key.Name)
 		}
 	}
+
+	// Parallel fetch of VPS configs using goroutines
+	configs := make(map[int]*VPSConfig)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Limit concurrent requests to avoid overwhelming Cloudflare KV API
+	maxConcurrency := 5
+	semaphore := make(chan struct{}, maxConcurrency)
+
+	for _, keyName := range vpsKeys {
+		wg.Add(1)
+		go func(keyName string) {
+			defer wg.Done()
+			
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			var config VPSConfig
+			if err := kvs.GetValue(token, accountID, keyName, &config); err == nil {
+				// Thread-safe map write
+				mu.Lock()
+				configs[config.ServerID] = &config
+				mu.Unlock()
+			}
+		}(keyName)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	return configs, nil
 }
