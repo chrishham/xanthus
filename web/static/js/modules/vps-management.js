@@ -656,7 +656,7 @@ export function vpsManagement() {
                         html: `
                             <div class="text-left">
                                 <div class="mb-2 text-sm text-gray-600">
-                                    Server: ${serverId} | Lines: ${data.lines} | ${data.timestamp}
+                                    Server: ${serverId} | Lines: ${data.lines}
                                 </div>
                                 <textarea readonly class="w-full h-96 p-2 text-xs font-mono bg-gray-100 border rounded" onclick="this.select()">${data.logs}</textarea>
                                 <p class="text-xs text-gray-600 mt-1">Click to select all logs</p>
