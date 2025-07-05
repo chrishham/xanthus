@@ -82,6 +82,7 @@ func (vs *VPSService) EnhanceServersWithCosts(token, accountID string, servers [
 				servers[i].Labels["accumulated_cost"] = fmt.Sprintf("%.2f", accumulatedCost)
 				servers[i].Labels["monthly_cost"] = fmt.Sprintf("%.2f", vpsConfig.MonthlyRate)
 				servers[i].Labels["hourly_cost"] = fmt.Sprintf("%.4f", vpsConfig.HourlyRate)
+				servers[i].Labels["configured_timezone"] = vpsConfig.Timezone
 			}
 		}
 	}

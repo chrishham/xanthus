@@ -378,19 +378,18 @@ func TestKVService_DomainSSLOperations(t *testing.T) {
 func TestKVService_VPSConfigOperations(t *testing.T) {
 	t.Run("StoreVPSConfig", func(t *testing.T) {
 		config := &services.VPSConfig{
-			ServerID:      123,
-			Name:          "test-server",
-			ServerType:    "cx11",
-			Location:      "nbg1",
-			PublicIPv4:    "192.168.1.100",
-			Status:        "running",
-			CreatedAt:     "2023-01-01T00:00:00Z",
-			SSLConfigured: true,
-			SSHKeyName:    "xanthus-key",
-			SSHUser:       "root",
-			SSHPort:       22,
-			HourlyRate:    0.0052,
-			MonthlyRate:   3.79,
+			ServerID:    123,
+			Name:        "test-server",
+			ServerType:  "cx11",
+			Location:    "nbg1",
+			PublicIPv4:  "192.168.1.100",
+			CreatedAt:   "2023-01-01T00:00:00Z",
+			SSHKeyName:  "xanthus-key",
+			SSHUser:     "root",
+			SSHPort:     22,
+			HourlyRate:  0.0052,
+			MonthlyRate: 3.79,
+			Timezone:    "Europe/Berlin",
 		}
 
 		expectedKey := "vps:123:config"
@@ -400,13 +399,12 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 		assert.Equal(t, "cx11", config.ServerType)
 		assert.Equal(t, "nbg1", config.Location)
 		assert.Equal(t, "192.168.1.100", config.PublicIPv4)
-		assert.Equal(t, "running", config.Status)
-		assert.True(t, config.SSLConfigured)
 		assert.Equal(t, "xanthus-key", config.SSHKeyName)
 		assert.Equal(t, "root", config.SSHUser)
 		assert.Equal(t, 22, config.SSHPort)
 		assert.Equal(t, 0.0052, config.HourlyRate)
 		assert.Equal(t, 3.79, config.MonthlyRate)
+		assert.Equal(t, "Europe/Berlin", config.Timezone)
 		assert.Equal(t, expectedKey, fmt.Sprintf("vps:%d:config", config.ServerID))
 	})
 
@@ -463,29 +461,20 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 
 		// Mock existing config
 		config := &services.VPSConfig{
-			ServerID:      123,
-			Status:        "running",
-			PublicIPv4:    "192.168.1.100",
-			SSLConfigured: true,
-			SSHKeyName:    "old-key",
-			SSHUser:       "root",
-			SSHPort:       22,
+			ServerID:   123,
+			PublicIPv4: "192.168.1.100",
+			SSHKeyName: "old-key",
+			SSHUser:    "root",
+			SSHPort:    22,
+			Timezone:   "UTC",
 		}
 
 		// Apply updates
 		for field, value := range updates {
 			switch field {
-			case "status":
-				if status, ok := value.(string); ok {
-					config.Status = status
-				}
 			case "public_ipv4":
 				if ip, ok := value.(string); ok {
 					config.PublicIPv4 = ip
-				}
-			case "ssl_configured":
-				if ssl, ok := value.(bool); ok {
-					config.SSLConfigured = ssl
 				}
 			case "ssh_key_name":
 				if key, ok := value.(string); ok {
@@ -503,9 +492,7 @@ func TestKVService_VPSConfigOperations(t *testing.T) {
 		}
 
 		// Verify updates were applied
-		assert.Equal(t, "stopped", config.Status)
 		assert.Equal(t, "192.168.1.101", config.PublicIPv4)
-		assert.False(t, config.SSLConfigured)
 		assert.Equal(t, "new-key", config.SSHKeyName)
 		assert.Equal(t, "ubuntu", config.SSHUser)
 		assert.Equal(t, 2222, config.SSHPort)
@@ -728,19 +715,18 @@ func createMockDomainSSLConfig(domain string) *services.DomainSSLConfig {
 
 func createMockVPSConfig(serverID int, name string) *services.VPSConfig {
 	return &services.VPSConfig{
-		ServerID:      serverID,
-		Name:          name,
-		ServerType:    "cx11",
-		Location:      "nbg1",
-		PublicIPv4:    fmt.Sprintf("192.168.1.%d", serverID),
-		Status:        "running",
-		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
-		SSLConfigured: false,
-		SSHKeyName:    "xanthus-key",
-		SSHUser:       "root",
-		SSHPort:       22,
-		HourlyRate:    0.0052,
-		MonthlyRate:   3.79,
+		ServerID:    serverID,
+		Name:        name,
+		ServerType:  "cx11",
+		Location:    "nbg1",
+		PublicIPv4:  fmt.Sprintf("192.168.1.%d", serverID),
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+		SSHKeyName:  "xanthus-key",
+		SSHUser:     "root",
+		SSHPort:     22,
+		HourlyRate:  0.0052,
+		MonthlyRate: 3.79,
+		Timezone:    "UTC",
 	}
 }
 
