@@ -224,6 +224,7 @@
                 showLoaderOnConfirm: true,
                 backdrop: true,
                 allowOutsideClick: false,
+                allowEscapeKey: false,
                 position: 'center',
                 heightAuto: false,
                 customClass: {
@@ -310,6 +311,8 @@
                 cancelButtonText: 'Cancel',
                 confirmButtonColor: '#ef4444',
                 showLoaderOnConfirm: true,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
                 preConfirm: async () => {
                     try {
                         const formData = new FormData();

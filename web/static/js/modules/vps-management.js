@@ -1222,13 +1222,17 @@ export function vpsManagement() {
         },
 
         async showTimezoneManager(server) {
+            // Show loading immediately
+            this.setLoadingState('Loading Timezone Manager', 'Fetching timezone information...');
+            
             try {
-                // First, get current timezone
-                const timezoneResponse = await fetch(`/vps/${server.id}/timezone`);
-                const timezoneData = await timezoneResponse.json();
+                // Make both API calls in parallel for better performance
+                const [timezoneResponse, timezonesResponse] = await Promise.all([
+                    fetch(`/vps/${server.id}/timezone`),
+                    fetch('/vps/timezones')
+                ]);
                 
-                // Then, get available timezones
-                const timezonesResponse = await fetch('/vps/timezones');
+                const timezoneData = await timezoneResponse.json();
                 const timezonesData = await timezonesResponse.json();
                 
                 const timezones = timezonesData.timezones || [];
@@ -1238,6 +1242,9 @@ export function vpsManagement() {
                 const timezoneOptions = timezones.map(tz => 
                     `<option value="${tz}" ${tz === currentTimezone ? 'selected' : ''}>${tz}</option>`
                 ).join('');
+                
+                // Stop loading and show the modal
+                this.loading = false;
                 
                 Swal.fire({
                     title: '🕐 Timezone Manager',
@@ -1271,7 +1278,7 @@ export function vpsManagement() {
                             </div>
                             
                             <div class="text-xs text-gray-500 mt-3">
-                                <p>⚠️ <strong>Warning:</strong> Changing the timezone will affect all applications and deployments on this server. The change will take effect immediately.</p>
+                                <p>⚠️ <strong>Warning:</strong> Changing the timezone will update the VPS system immediately. Existing applications need to be restarted to pick up the new timezone. New deployments will automatically use the new timezone.</p>
                             </div>
                         </div>
                     `,
@@ -1297,6 +1304,8 @@ export function vpsManagement() {
                 });
             } catch (error) {
                 console.error('Error loading timezone manager:', error);
+                this.loading = false;
+                
                 Swal.fire({
                     title: 'Error',
                     text: 'Failed to load timezone manager',
@@ -1307,7 +1316,7 @@ export function vpsManagement() {
 
         async changeTimezone(server, timezone) {
             try {
-                this.setLoading(true, 'Changing Timezone', `Updating timezone to ${timezone} for ${server.name}...`);
+                this.setLoadingState('Changing Timezone', `Updating timezone to ${timezone} for ${server.name}...`);
                 
                 const formData = new FormData();
                 formData.append('timezone', timezone);
@@ -1344,7 +1353,7 @@ export function vpsManagement() {
                     icon: 'error'
                 });
             } finally {
-                this.setLoading(false);
+                this.loading = false;
             }
         },
 
