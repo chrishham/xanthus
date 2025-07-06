@@ -94,14 +94,42 @@ export function vpsCreationWizard() {
                 this.loading = false;
             }
         },
+
+        async checkExistingOCIToken() {
+            this.loading = true;
+            this.loadingMessage = 'Checking for existing OCI token...';
+            
+            try {
+                const response = await fetch('/vps/oci/check-token');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.exists) {
+                        this.existingOCIToken = true;
+                        // We don't store the actual token for security, just mark that it exists
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking existing OCI token:', error);
+            } finally {
+                this.loading = false;
+            }
+        },
         
         showNewKeyInput() {
             this.existingKey = '';
+        },
+
+        showNewOCITokenInput() {
+            this.existingOCIToken = false;
         },
         
         async useExistingKey() {
             this.currentStep = 3;
             await this.loadLocations();
+        },
+
+        async useExistingOCIToken() {
+            this.currentStep = 3; // Skip to OCI instance creation
         },
         
         async validateHetznerKey() {
@@ -144,6 +172,7 @@ export function vpsCreationWizard() {
         ociToken: '',
         showTokenGenerator: false,
         validatingOCIToken: false,
+        existingOCIToken: false,
 
         showOCITokenGenerator() {
             this.showTokenGenerator = true;
@@ -367,6 +396,8 @@ export function vpsCreationWizard() {
                 this.currentStep = 2;
                 if (this.selectedProvider === 'hetzner') {
                     await this.checkExistingKey();
+                } else if (this.selectedProvider === 'oci') {
+                    await this.checkExistingOCIToken();
                 }
             } else if (this.currentStep === 2) {
                 if (this.selectedProvider === 'hetzner' && this.selectedLocation) {
@@ -523,17 +554,24 @@ export function vpsCreationWizard() {
             this.loadingMessage = `Creating OCI instance "${this.serverName}"...`;
             
             try {
+                const requestBody = {
+                    name: this.serverName,
+                    shape: 'VM.Standard.A1.Flex', // Always Free tier ARM64
+                    region: this.ociCredentials.region,
+                    timezone: 'UTC'
+                };
+
+                // Include OCI token if available (for first-time setup or token override)
+                if (this.ociToken) {
+                    requestBody.oci_token = this.ociToken;
+                }
+
                 const response = await fetch('/vps/oci/create', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        name: this.serverName,
-                        shape: 'VM.Standard.A1.Flex', // Always Free tier ARM64
-                        region: this.ociCredentials.region,
-                        timezone: 'UTC'
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 const data = await response.json();

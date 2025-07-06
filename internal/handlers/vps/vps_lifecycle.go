@@ -355,10 +355,11 @@ func (h *VPSLifecycleHandler) HandleOCICreate(c *gin.Context) {
 
 	// Parse request data
 	var req struct {
-		Name       string `json:"name" binding:"required"`
-		Shape      string `json:"shape" binding:"required"`
-		Region     string `json:"region"`
-		Timezone   string `json:"timezone"`
+		Name     string `json:"name" binding:"required"`
+		Shape    string `json:"shape" binding:"required"`
+		Region   string `json:"region"`
+		Timezone string `json:"timezone"`
+		OCIToken string `json:"oci_token"` // Optional - for first-time setup
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -366,12 +367,30 @@ func (h *VPSLifecycleHandler) HandleOCICreate(c *gin.Context) {
 		return
 	}
 
-	// Get OCI auth token
-	ociToken, err := utils.GetOCIAuthToken(token, accountID)
+	// Get or store OCI auth token
+	var ociToken string
+	var err error
+
+	// First try to get existing token from KV store
+	ociToken, err = utils.GetOCIAuthToken(token, accountID)
 	if err != nil {
-		log.Printf("OCI Create: Failed to retrieve OCI auth token for account %s: %v", accountID, err)
-		utils.JSONInternalServerError(c, "OCI auth token not found. Please configure your OCI credentials first.")
-		return
+		// If no existing token and one is provided in request, store and use it
+		if req.OCIToken != "" {
+			log.Printf("OCI Create: No existing token found, storing provided token for account %s", accountID)
+			if storeErr := utils.SetOCIAuthToken(token, accountID, req.OCIToken); storeErr != nil {
+				log.Printf("OCI Create: Failed to store OCI auth token for account %s: %v", accountID, storeErr)
+				utils.JSONInternalServerError(c, fmt.Sprintf("Failed to store OCI auth token: %v", storeErr))
+				return
+			}
+			ociToken = req.OCIToken
+			log.Printf("✅ Stored OCI auth token for account %s for future reuse", accountID)
+		} else {
+			log.Printf("OCI Create: Failed to retrieve OCI auth token for account %s: %v", accountID, err)
+			utils.JSONInternalServerError(c, "OCI auth token not found. Please provide oci_token in the request or configure your OCI credentials first.")
+			return
+		}
+	} else {
+		log.Printf("✅ Reusing existing OCI auth token for account %s", accountID)
 	}
 
 	// Create OCI service
@@ -453,16 +472,16 @@ func (h *VPSLifecycleHandler) HandleOCICreate(c *gin.Context) {
 		"success": true,
 		"message": "OCI instance created successfully with K3s and Helm",
 		"server": gin.H{
-			"id":   serverID,
-			"name": ociInstance.DisplayName,
+			"id":     serverID,
+			"name":   ociInstance.DisplayName,
 			"oci_id": ociInstance.ID,
 			"public_net": gin.H{
 				"ipv4": gin.H{
 					"ip": ociInstance.PublicIP,
 				},
 			},
-			"lifecycle_state": ociInstance.LifecycleState,
-			"shape": ociInstance.Shape,
+			"lifecycle_state":     ociInstance.LifecycleState,
+			"shape":               ociInstance.Shape,
 			"availability_domain": ociInstance.AvailabilityDomain,
 		},
 		"config": vpsConfig,
@@ -524,7 +543,12 @@ func (h *VPSLifecycleHandler) HandleOCIDelete(c *gin.Context) {
 	if vpsConfig.ProviderInstanceID != "" {
 		log.Printf("Deleting OCI instance: %s", vpsConfig.ProviderInstanceID)
 		if err := ociService.DeleteVPSWithCleanup(ctx, vpsConfig.ProviderInstanceID, false); err != nil {
-			log.Printf("Error deleting OCI instance %s: %v", vpsConfig.ProviderInstanceID, err)
+			// Check if it's a 404 error (instance not found)
+			if strings.Contains(err.Error(), "not_found") || strings.Contains(err.Error(), "404") {
+				log.Printf("OCI instance %s not found (already deleted), continuing with local cleanup", vpsConfig.ProviderInstanceID)
+			} else {
+				log.Printf("Error deleting OCI instance %s: %v", vpsConfig.ProviderInstanceID, err)
+			}
 			// Continue with local cleanup even if cloud deletion fails
 		} else {
 			log.Printf("✅ Deleted OCI instance: %s", vpsConfig.ProviderInstanceID)
@@ -678,8 +702,26 @@ func (h *VPSLifecycleHandler) HandleOCIValidateToken(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"valid": true,
+		"valid":   true,
 		"message": "OCI auth token is valid",
+	})
+}
+
+// HandleOCICheckToken checks if an OCI auth token exists in KV store
+func (h *VPSLifecycleHandler) HandleOCICheckToken(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	// Try to get existing OCI token
+	_, err := utils.GetOCIAuthToken(token, accountID)
+	exists := err == nil
+
+	log.Printf("OCI token check for account %s: exists=%v", accountID, exists)
+
+	c.JSON(http.StatusOK, gin.H{
+		"exists": exists,
 	})
 }
 

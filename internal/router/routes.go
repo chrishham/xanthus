@@ -96,6 +96,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		// OCI automation routes
 		oci := vps.Group("/oci")
 		{
+			oci.GET("/check-token", config.VPSLifecycleHandler.HandleOCICheckToken)
 			oci.POST("/validate-token", config.VPSLifecycleHandler.HandleOCIValidateToken)
 			oci.POST("/store-token", config.VPSLifecycleHandler.HandleOCIStoreToken)
 			oci.POST("/create", config.VPSLifecycleHandler.HandleOCICreate)
