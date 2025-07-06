@@ -89,7 +89,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.POST("/reboot", config.VPSLifecycleHandler.HandleVPSReboot)
 
 		// Provider-specific routes
-		vps.GET("/ssh-key", config.VPSLifecycleHandler.HandleSSHKey)
+		vps.GET("/oci-ssh-key", config.VPSLifecycleHandler.HandleSSHKey)
 		vps.POST("/add-oci", config.VPSLifecycleHandler.HandleAddOCI)
 
 		// Configuration routes

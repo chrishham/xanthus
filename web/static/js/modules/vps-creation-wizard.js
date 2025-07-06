@@ -47,7 +47,7 @@ export function vpsCreationWizard() {
         
         async loadSSHKey() {
             try {
-                const response = await fetch('/vps/ssh-key');
+                const response = await fetch('/vps/oci-ssh-key');
                 if (response.ok) {
                     const data = await response.json();
                     this.sshPublicKey = data.public_key || 'Loading...';
