@@ -266,11 +266,16 @@ func (h *VPSConfigHandler) HandleVPSGetTimezone(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// Get current timezone from VPS
-	result, err := h.sshService.ExecuteCommand(conn, "timedatectl show --property=Timezone --value")
+	// Get current timezone from VPS - try sudo first, then fall back
+	result, err := h.sshService.ExecuteCommand(conn, "sudo timedatectl show --property=Timezone --value")
 	if err != nil {
-		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to get timezone: %v", err))
-		return
+		log.Printf("Sudo get timezone failed: %v, trying direct command", err)
+		// Try without sudo
+		result, err = h.sshService.ExecuteCommand(conn, "timedatectl show --property=Timezone --value")
+		if err != nil {
+			utils.JSONInternalServerError(c, fmt.Sprintf("Failed to get timezone: %v", err))
+			return
+		}
 	}
 
 	currentTimezone := strings.TrimSpace(result.Output)
@@ -327,18 +332,31 @@ func (h *VPSConfigHandler) HandleVPSSetTimezone(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// Set timezone on VPS
-	cmd := fmt.Sprintf("timedatectl set-timezone %s", timezone)
-	if _, err := h.sshService.ExecuteCommand(conn, cmd); err != nil {
-		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to set timezone: %v", err))
-		return
+	// Set timezone on VPS - try sudo first, then fall back to direct command
+	cmd := fmt.Sprintf("sudo timedatectl set-timezone %s", timezone)
+	result, err := h.sshService.ExecuteCommand(conn, cmd)
+	if err != nil {
+		log.Printf("Sudo command failed: %v, trying direct command", err)
+		// Try without sudo (for root user or if sudo is not available)
+		cmd = fmt.Sprintf("timedatectl set-timezone %s", timezone)
+		if _, err := h.sshService.ExecuteCommand(conn, cmd); err != nil {
+			utils.JSONInternalServerError(c, fmt.Sprintf("Failed to set timezone: %v", err))
+			return
+		}
+	} else {
+		log.Printf("Timezone set successfully with sudo: %s", result.Output)
 	}
 
-	// Verify the change
-	result, err := h.sshService.ExecuteCommand(conn, "timedatectl show --property=Timezone --value")
+	// Verify the change - try sudo first, then fall back
+	result, err = h.sshService.ExecuteCommand(conn, "sudo timedatectl show --property=Timezone --value")
 	if err != nil {
-		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to verify timezone: %v", err))
-		return
+		log.Printf("Sudo verify failed: %v, trying direct command", err)
+		// Try without sudo
+		result, err = h.sshService.ExecuteCommand(conn, "timedatectl show --property=Timezone --value")
+		if err != nil {
+			utils.JSONInternalServerError(c, fmt.Sprintf("Failed to verify timezone: %v", err))
+			return
+		}
 	}
 
 	actualTimezone := strings.TrimSpace(result.Output)
