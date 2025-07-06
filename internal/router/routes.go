@@ -88,6 +88,10 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.POST("/poweron", config.VPSLifecycleHandler.HandleVPSPowerOn)
 		vps.POST("/reboot", config.VPSLifecycleHandler.HandleVPSReboot)
 
+		// Provider-specific routes
+		vps.GET("/ssh-key", config.VPSLifecycleHandler.HandleSSHKey)
+		vps.POST("/add-oci", config.VPSLifecycleHandler.HandleAddOCI)
+
 		// Configuration routes
 		vps.GET("/check-key", config.VPSConfigHandler.HandleVPSCheckKey)
 		vps.POST("/validate-key", config.VPSConfigHandler.HandleVPSValidateKey)

@@ -7,22 +7,30 @@ export function vpsCreationWizard() {
         validatingKey: false,
         creating: false,
         
-        // Step 1: Hetzner Key
+        // Step 1: Provider Selection
+        selectedProvider: '',
+        
+        // Step 2: Hetzner Key (Hetzner only)
         hetznerKey: '',
         existingKey: '',
         
-        // Step 2: Location
+        // OCI Setup data
+        sshPublicKey: '',
+        ociInstanceName: '',
+        ociPublicIP: '',
+        ociUsername: 'ubuntu',
+        ociShape: 'VM.Standard.A1.Flex',
+        
+        // Hetzner: Location and Server Type
         locations: [],
         selectedLocation: null,
-        
-        // Step 3: Server Type
         serverTypes: [],
         filteredServerTypes: [],
         selectedServerType: null,
         architectureFilter: '',
         sortBy: 'price_asc',
         
-        // Step 4: Review
+        // Review Step
         serverName: '',
         nameValidationState: '', // '', 'checking', 'valid', 'invalid'
         nameValidationMessage: '',
@@ -30,11 +38,43 @@ export function vpsCreationWizard() {
         
         async init() {
             this.serverName = `xanthus-k3s-${Date.now()}`;
-            await this.checkExistingKey();
-            // Validate initial name
-            await this.validateName();
+            // Generate SSH key for OCI setup
+            await this.loadSSHKey();
+        },
+        selectProvider(provider) {
+            this.selectedProvider = provider;
         },
         
+        async loadSSHKey() {
+            try {
+                const response = await fetch('/vps/ssh-key');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.sshPublicKey = data.public_key || 'Loading...';
+                } else {
+                    this.sshPublicKey = 'Error loading SSH key';
+                }
+            } catch (error) {
+                console.error('Error loading SSH key:', error);
+                this.sshPublicKey = 'Error loading SSH key';
+            }
+        },
+        
+        async copySSHKey() {
+            try {
+                await navigator.clipboard.writeText(this.sshPublicKey);
+                Swal.fire({
+                    title: 'Copied!',
+                    text: 'SSH public key copied to clipboard',
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            } catch (error) {
+                console.error('Failed to copy SSH key:', error);
+                Swal.fire('Error', 'Failed to copy SSH key to clipboard', 'error');
+            }
+        },
         
         async checkExistingKey() {
             this.loading = true;
@@ -60,7 +100,7 @@ export function vpsCreationWizard() {
         },
         
         async useExistingKey() {
-            this.currentStep = 2;
+            this.currentStep = 3;
             await this.loadLocations();
         },
         
@@ -80,7 +120,7 @@ export function vpsCreationWizard() {
                 const data = await response.json();
                 
                 if (response.ok) {
-                    this.currentStep = 2;
+                    this.currentStep = 3;
                     await this.loadLocations();
                 } else {
                     Swal.fire('Invalid Key', data.error || 'The Hetzner API key is invalid', 'error');
@@ -201,11 +241,26 @@ export function vpsCreationWizard() {
         },
         
         async nextStep() {
-            if (this.currentStep === 2 && this.selectedLocation) {
-                this.currentStep = 3;
-                await this.loadServerTypes();
-            } else if (this.currentStep === 3 && this.selectedServerType) {
-                this.currentStep = 4;
+            if (this.currentStep === 1 && this.selectedProvider) {
+                this.currentStep = 2;
+                if (this.selectedProvider === 'hetzner') {
+                    await this.checkExistingKey();
+                }
+            } else if (this.currentStep === 2) {
+                if (this.selectedProvider === 'hetzner' && this.selectedLocation) {
+                    this.currentStep = 4; // Skip to server type selection
+                    await this.loadServerTypes();
+                } else if (this.selectedProvider === 'oci' && this.ociInstanceName && this.ociPublicIP && this.ociUsername) {
+                    this.currentStep = 3; // Go to OCI review
+                }
+            } else if (this.currentStep === 3) {
+                if (this.selectedProvider === 'hetzner' && this.selectedLocation) {
+                    this.currentStep = 4;
+                    await this.loadServerTypes();
+                }
+            } else if (this.currentStep === 4 && this.selectedProvider === 'hetzner' && this.selectedServerType) {
+                this.currentStep = 5; // Hetzner review
+                await this.validateName();
             }
         },
         
@@ -333,6 +388,63 @@ export function vpsCreationWizard() {
                 console.error('Error creating VPS:', error);
                 this.loading = false;
                 Swal.fire('Error', 'Failed to create VPS', 'error');
+            } finally {
+                this.creating = false;
+            }
+        },
+        
+        async addOCIInstance() {
+            if (!this.ociInstanceName || !this.ociPublicIP || !this.ociUsername) return;
+            
+            this.creating = true;
+            this.loading = true;
+            this.loadingMessage = `Adding OCI instance "${this.ociInstanceName}"...`;
+            
+            try {
+                const response = await fetch('/vps/add-oci', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: this.ociInstanceName,
+                        public_ip: this.ociPublicIP,
+                        username: this.ociUsername,
+                        shape: this.ociShape,
+                        provider: 'oci'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    this.loadingMessage = 'OCI instance added successfully! Setting up K3s...';
+                    
+                    // Brief pause to show success message
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
+                    await Swal.fire({
+                        title: 'OCI Instance Added Successfully!',
+                        html: `
+                            <div class="text-left">
+                                <p class="mb-2">Your OCI instance "${this.ociInstanceName}" has been added to Xanthus.</p>
+                                <p class="mb-2">K3s setup is running in the background and may take 5-10 minutes.</p>
+                                <p class="text-sm text-gray-600">You will be redirected to the VPS management page.</p>
+                            </div>
+                        `,
+                        icon: 'success',
+                        confirmButtonText: 'Go to VPS Management'
+                    });
+                    
+                    window.location.href = '/vps';
+                } else {
+                    this.loading = false;
+                    Swal.fire('Error', data.error || 'Failed to add OCI instance', 'error');
+                }
+            } catch (error) {
+                console.error('Error adding OCI instance:', error);
+                this.loading = false;
+                Swal.fire('Error', 'Failed to add OCI instance', 'error');
             } finally {
                 this.creating = false;
             }

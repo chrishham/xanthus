@@ -217,6 +217,120 @@ func (h *VPSLifecycleHandler) HandleVPSDelete(c *gin.Context) {
 	utils.VPSDeletionSuccess(c)
 }
 
+// HandleSSHKey returns the SSH public key for manual VPS setup
+func (h *VPSLifecycleHandler) HandleSSHKey(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	// Get SSL CSR configuration which contains the private key
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		CSR        string `json:"csr"`
+		PrivateKey string `json:"private_key"`
+		CreatedAt  string `json:"created_at"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Error getting CSR from KV: %v", err)
+		utils.JSONInternalServerError(c, "SSL CSR configuration not found. Please logout and login again.")
+		return
+	}
+
+	// Convert CSR private key to SSH public key
+	sshPublicKey, err := h.cfService.ConvertPrivateKeyToSSH(csrConfig.PrivateKey)
+	if err != nil {
+		log.Printf("Error converting private key to SSH: %v", err)
+		utils.JSONInternalServerError(c, "Failed to generate SSH key from CSR")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"public_key": sshPublicKey,
+	})
+}
+
+// HandleAddOCI adds a manually created OCI instance to Xanthus management
+func (h *VPSLifecycleHandler) HandleAddOCI(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	// Parse JSON request
+	var req struct {
+		Name     string `json:"name" binding:"required"`
+		PublicIP string `json:"public_ip" binding:"required"`
+		Username string `json:"username" binding:"required"`
+		Shape    string `json:"shape" binding:"required"`
+		Provider string `json:"provider" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.JSONBadRequest(c, "Invalid request data")
+		return
+	}
+
+	// Validate provider
+	if req.Provider != "oci" {
+		utils.JSONBadRequest(c, "Only OCI provider is supported for manual addition")
+		return
+	}
+
+	// Get SSH private key for connection
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		CSR        string `json:"csr"`
+		PrivateKey string `json:"private_key"`
+		CreatedAt  string `json:"created_at"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Error getting CSR from KV: %v", err)
+		utils.JSONInternalServerError(c, "SSL CSR configuration not found. Please logout and login again.")
+		return
+	}
+
+	// Convert to SSH public key for validation
+	sshPublicKey, err := h.cfService.ConvertPrivateKeyToSSH(csrConfig.PrivateKey)
+	if err != nil {
+		log.Printf("Error converting private key to SSH: %v", err)
+		utils.JSONInternalServerError(c, "Failed to generate SSH key from CSR")
+		return
+	}
+
+	// Generate a mock server ID for OCI (using timestamp)
+	serverID := int(time.Now().Unix())
+
+	// Create VPS config for OCI instance
+	vpsConfig, err := h.vpsService.CreateOCIVPSConfig(
+		token, accountID,
+		req.Name, req.PublicIP, req.Username, req.Shape,
+		serverID, csrConfig.PrivateKey, sshPublicKey,
+	)
+	if err != nil {
+		log.Printf("Error creating OCI VPS config: %v", err)
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to add OCI instance: %v", err))
+		return
+	}
+
+	log.Printf("✅ Added OCI instance: %s (IP: %s) with ID: %d", req.Name, req.PublicIP, serverID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "OCI instance added successfully. K3s setup is running in the background.",
+		"server": gin.H{
+			"id":   serverID,
+			"name": req.Name,
+			"public_net": gin.H{
+				"ipv4": gin.H{
+					"ip": req.PublicIP,
+				},
+			},
+		},
+		"config": vpsConfig,
+	})
+}
+
 // HandleVPSPowerOff powers off a VPS instance
 func (h *VPSLifecycleHandler) HandleVPSPowerOff(c *gin.Context) {
 	h.performServerAction(c, "poweroff")

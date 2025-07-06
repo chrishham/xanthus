@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xanthus - Create VPS</title>
+    <title>Xanthus - Add VPS</title>
     <link rel="icon" type="image/x-icon" href="/static/icons/favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
@@ -21,8 +21,8 @@
         <div class="mb-8">
             <div class="flex items-center justify-between">
                 <div>
-                    <h2 class="text-3xl font-bold text-gray-900 mb-2">Create New VPS</h2>
-                    <p class="text-gray-600">Step-by-step configuration for your K3s deployment server</p>
+                    <h2 class="text-3xl font-bold text-gray-900 mb-2">Add VPS</h2>
+                    <p class="text-gray-600">Add a new VPS from Hetzner (automated) or Oracle Cloud (manual setup)</p>
                 </div>
                 <a href="/vps" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -37,47 +37,59 @@
         <div class="mb-8">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
-                    <!-- Step 1: Hetzner Key -->
+                    <!-- Step 1: Provider Selection -->
                     <div class="flex items-center" :class="currentStep >= 1 ? 'text-blue-600' : 'text-gray-400'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 1 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
                             <span x-show="currentStep > 1" class="text-sm">✓</span>
                             <span x-show="currentStep <= 1" class="text-sm">1</span>
                         </div>
-                        <span class="ml-2 text-sm font-medium">Hetzner API</span>
+                        <span class="ml-2 text-sm font-medium">Provider</span>
                     </div>
                     
                     <div class="flex-1 h-0.5" :class="currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-300'"></div>
                     
-                    <!-- Step 2: Location -->
+                    <!-- Step 2: Configuration -->
                     <div class="flex items-center" :class="currentStep >= 2 ? 'text-blue-600' : 'text-gray-400'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 2 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
                             <span x-show="currentStep > 2" class="text-sm">✓</span>
                             <span x-show="currentStep <= 2" class="text-sm">2</span>
                         </div>
-                        <span class="ml-2 text-sm font-medium">Location</span>
+                        <span class="ml-2 text-sm font-medium" x-text="selectedProvider === 'hetzner' ? 'API Key' : 'Setup'">Configuration</span>
                     </div>
                     
                     <div class="flex-1 h-0.5" :class="currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-300'"></div>
                     
-                    <!-- Step 3: Server Type -->
-                    <div class="flex items-center" :class="currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'">
+                    <!-- Step 3: Server Configuration -->
+                    <div class="flex items-center" :class="currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'" x-show="selectedProvider === 'hetzner'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 3 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
                             <span x-show="currentStep > 3" class="text-sm">✓</span>
                             <span x-show="currentStep <= 3" class="text-sm">3</span>
                         </div>
-                        <span class="ml-2 text-sm font-medium">Server Type</span>
+                        <span class="ml-2 text-sm font-medium">Location</span>
                     </div>
                     
                     <div class="flex-1 h-0.5" :class="currentStep >= 4 ? 'bg-blue-600' : 'bg-gray-300'"></div>
                     
-                    <!-- Step 4: Review -->
-                    <div class="flex items-center" :class="currentStep >= 4 ? 'text-blue-600' : 'text-gray-400'">
+                    <!-- Step 4: Server Type (Hetzner only) -->
+                    <div class="flex items-center" :class="currentStep >= 4 ? 'text-blue-600' : 'text-gray-400'" x-show="selectedProvider === 'hetzner'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 4 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
-                            <span class="text-sm">4</span>
+                            <span x-show="currentStep > 4" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 4" class="text-sm">4</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Server Type</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 5 ? 'bg-blue-600' : 'bg-gray-300'" x-show="selectedProvider === 'hetzner'"></div>
+                    
+                    <!-- Step 5: Review -->
+                    <div class="flex items-center" :class="currentStep >= 5 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 5 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span class="text-sm" x-text="selectedProvider === 'hetzner' ? '5' : '3'">5</span>
                         </div>
                         <span class="ml-2 text-sm font-medium">Review</span>
                     </div>
@@ -96,9 +108,114 @@
             </div>
         </div>
 
-        <!-- Step 1: Hetzner API Key -->
+        <!-- Step 1: Provider Selection -->
         <div x-show="currentStep === 1 && !loading" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 1: Hetzner Cloud API Key</h3>
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 1: Select Provider</h3>
+            <p class="text-gray-600 mb-6">Choose your cloud provider. Hetzner provides automatic provisioning while OCI requires manual setup.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Hetzner Provider -->
+                <div @click="selectProvider('hetzner')" 
+                     class="border-2 rounded-lg p-6 cursor-pointer transition-colors relative"
+                     :class="selectedProvider === 'hetzner' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mr-4">
+                                <svg class="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z"/>
+                                </svg>
+                            </div>
+                            <h4 class="text-lg font-semibold text-gray-900">Hetzner Cloud</h4>
+                        </div>
+                        <div x-show="selectedProvider === 'hetzner'" class="text-blue-500">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Automatic provisioning
+                        </div>
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Full lifecycle management
+                        </div>
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            K3s auto-installation
+                        </div>
+                    </div>
+                    <div class="mt-4 text-xs text-gray-500">
+                        Requires Hetzner Cloud API key
+                    </div>
+                </div>
+                
+                <!-- OCI Provider -->
+                <div @click="selectProvider('oci')" 
+                     class="border-2 rounded-lg p-6 cursor-pointer transition-colors relative"
+                     :class="selectedProvider === 'oci' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mr-4">
+                                <svg class="w-6 h-6 text-orange-600" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                </svg>
+                            </div>
+                            <h4 class="text-lg font-semibold text-gray-900">Oracle Cloud (OCI)</h4>
+                        </div>
+                        <div x-show="selectedProvider === 'oci'" class="text-blue-500">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center text-sm text-blue-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Manual setup process
+                        </div>
+                        <div class="flex items-center text-sm text-blue-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Bring your own instance
+                        </div>
+                        <div class="flex items-center text-sm text-blue-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Free tier available
+                        </div>
+                    </div>
+                    <div class="mt-4 text-xs text-gray-500">
+                        Manual instance creation required
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <div></div>
+                <button @click="nextStep()" 
+                        :disabled="!selectedProvider"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Continue
+                </button>
+            </div>
+        </div>
+        
+        <!-- Step 2: Hetzner API Key (only for Hetzner) -->
+        <div x-show="currentStep === 2 && !loading && selectedProvider === 'hetzner'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: Hetzner Cloud API Key</h3>
             
             <div x-show="!existingKey" class="space-y-4">
                 <p class="text-gray-600">Enter your Hetzner Cloud API key to manage VPS instances. You can create one in your Hetzner Cloud Console under "Security" → "API Tokens".</p>
@@ -146,9 +263,126 @@
             </div>
         </div>
 
-        <!-- Step 2: Location Selection -->
-        <div x-show="currentStep === 2 && !loading" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: Select Location</h3>
+        <!-- Step 2: OCI Manual Setup Instructions -->
+        <div x-show="currentStep === 2 && !loading && selectedProvider === 'oci'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: OCI Instance Setup</h3>
+            <p class="text-gray-600 mb-6">Follow these steps to create your Oracle Cloud instance and configure it for use with Xanthus.</p>
+            
+            <!-- SSH Key Display -->
+            <div class="mb-6">
+                <h4 class="text-md font-medium text-gray-900 mb-3">📋 SSH Public Key (Copy this key for your OCI instance)</h4>
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm text-gray-500">Public Key:</span>
+                        <button @click="copySSHKey()" class="text-blue-600 hover:text-blue-800 text-sm">
+                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                            Copy Key
+                        </button>
+                    </div>
+                    <textarea 
+                        x-model="sshPublicKey" 
+                        readonly 
+                        class="w-full h-24 p-2 text-xs font-mono bg-white border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Loading SSH key...">
+                    </textarea>
+                </div>
+            </div>
+            
+            <!-- Setup Instructions -->
+            <div class="space-y-6">
+                <div class="border-l-4 border-blue-500 pl-4">
+                    <h4 class="text-md font-medium text-gray-900 mb-2">🚀 Step 1: Create OCI Instance</h4>
+                    <ol class="list-decimal list-inside space-y-1 text-sm text-gray-600">
+                        <li>Log in to your <a href="https://cloud.oracle.com" target="_blank" class="text-blue-600 hover:underline">Oracle Cloud Console</a></li>
+                        <li>Navigate to <strong>Compute → Instances</strong></li>
+                        <li>Click <strong>Create Instance</strong></li>
+                        <li>Configure your instance:
+                            <ul class="list-disc list-inside ml-4 mt-1 space-y-1">
+                                <li><strong>Name:</strong> Choose a descriptive name</li>
+                                <li><strong>Image:</strong> Ubuntu 22.04 LTS (Minimal)</li>
+                                <li><strong>Shape:</strong> VM.Standard.A1.Flex (2 OCPU, 12GB RAM) or VM.Standard.E2.1.Micro (Free tier)</li>
+                                <li><strong>Networking:</strong> Default VCN with public subnet</li>
+                                <li><strong>SSH Keys:</strong> Paste the public key above</li>
+                            </ul>
+                        </li>
+                        <li>Click <strong>Create</strong> and wait for the instance to be running</li>
+                    </ol>
+                </div>
+                
+                <div class="border-l-4 border-green-500 pl-4">
+                    <h4 class="text-md font-medium text-gray-900 mb-2">⚙️ Step 2: Configure Security List</h4>
+                    <ol class="list-decimal list-inside space-y-1 text-sm text-gray-600">
+                        <li>In your instance details, click on the <strong>Subnet</strong> name</li>
+                        <li>Click on <strong>Default Security List</strong></li>
+                        <li>Add these <strong>Ingress Rules</strong>:
+                            <ul class="list-disc list-inside ml-4 mt-1 space-y-1">
+                                <li>HTTP: Port 80, Source: 0.0.0.0/0</li>
+                                <li>HTTPS: Port 443, Source: 0.0.0.0/0</li>
+                                <li>K8s API: Port 6443, Source: 0.0.0.0/0</li>
+                                <li>SSH: Port 22, Source: 0.0.0.0/0 (if not already present)</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+                
+                <div class="border-l-4 border-purple-500 pl-4">
+                    <h4 class="text-md font-medium text-gray-900 mb-2">📝 Step 3: Fill Instance Details</h4>
+                    <p class="text-sm text-gray-600 mb-3">Once your instance is running, fill in the details below:</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Instance Name</label>
+                            <input type="text" 
+                                   x-model="ociInstanceName"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   placeholder="my-oci-instance">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Public IP Address</label>
+                            <input type="text" 
+                                   x-model="ociPublicIP"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   placeholder="150.230.45.123">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">SSH Username</label>
+                            <input type="text" 
+                                   x-model="ociUsername"
+                                   value="ubuntu"
+                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   placeholder="ubuntu">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Instance Shape</label>
+                            <select x-model="ociShape" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                <option value="VM.Standard.A1.Flex">VM.Standard.A1.Flex (ARM - Recommended)</option>
+                                <option value="VM.Standard.E2.1.Micro">VM.Standard.E2.1.Micro (x86 - Free Tier)</option>
+                                <option value="VM.Standard.E3.Flex">VM.Standard.E3.Flex (x86 - Flexible)</option>
+                                <option value="Other">Other (specify in name)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="nextStep()" 
+                        :disabled="!ociInstanceName || !ociPublicIP || !ociUsername"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Continue
+                </button>
+            </div>
+        </div>
+        
+        <!-- Step 3: Location Selection (Hetzner only) -->
+        <div x-show="currentStep === 3 && !loading && selectedProvider === 'hetzner'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Select Location</h3>
             <p class="text-gray-600 mb-6">Choose the datacenter location for your VPS. Select based on your target audience location for optimal performance.</p>
             
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -183,9 +417,9 @@
             </div>
         </div>
 
-        <!-- Step 3: Server Type Selection -->
-        <div x-show="currentStep === 3 && !loading" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Choose Server Type</h3>
+        <!-- Step 4: Server Type Selection (Hetzner only) -->
+        <div x-show="currentStep === 4 && !loading && selectedProvider === 'hetzner'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 4: Choose Server Type</h3>
             <p class="text-gray-600 mb-4">Select the server configuration based on your needs. All servers are shared vCPU instances for cost efficiency.</p>
             
             <!-- Filter and Sort Controls -->
@@ -273,9 +507,76 @@
             </div>
         </div>
 
-        <!-- Step 4: Review and Create -->
-        <div x-show="currentStep === 4 && !loading" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 4: Review Configuration</h3>
+        <!-- Step 3: OCI Review -->
+        <div x-show="currentStep === 3 && !loading && selectedProvider === 'oci'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Review & Add OCI Instance</h3>
+            <p class="text-gray-600 mb-6">Review your OCI instance configuration and add it to Xanthus management.</p>
+            
+            <div class="space-y-4 mb-6">
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h4 class="font-medium text-gray-900 mb-3">Instance Configuration</h4>
+                    <dl class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <dt class="text-gray-500">Provider:</dt>
+                            <dd class="font-medium">Oracle Cloud Infrastructure (OCI)</dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-500">Instance Name:</dt>
+                            <dd class="font-medium" x-text="ociInstanceName"></dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-500">Public IP:</dt>
+                            <dd class="font-medium" x-text="ociPublicIP"></dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-500">SSH Username:</dt>
+                            <dd class="font-medium" x-text="ociUsername"></dd>
+                        </div>
+                        <div class="flex justify-between">
+                            <dt class="text-gray-500">Instance Shape:</dt>
+                            <dd class="font-medium" x-text="ociShape"></dd>
+                        </div>
+                    </dl>
+                </div>
+                
+                <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                    <h4 class="font-medium text-blue-900 mb-2">🔧 Next Steps After Adding</h4>
+                    <ul class="space-y-1 text-sm text-blue-800">
+                        <li>• Xanthus will connect to your instance via SSH</li>
+                        <li>• K3s Kubernetes cluster will be automatically installed</li>
+                        <li>• Helm package manager will be set up</li>
+                        <li>• Instance will be ready for application deployments</li>
+                    </ul>
+                </div>
+                
+                <div class="bg-amber-50 border border-amber-200 p-4 rounded-lg">
+                    <h4 class="font-medium text-amber-900 mb-2">⚠️ Important Notes</h4>
+                    <ul class="space-y-1 text-sm text-amber-800">
+                        <li>• Ensure your OCI instance is running and accessible</li>
+                        <li>• Security list rules must allow ports 80, 443, and 6443</li>
+                        <li>• The SSH key must be correctly configured on the instance</li>
+                        <li>• Initial setup may take 5-10 minutes to complete</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="flex justify-between">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="addOCIInstance()" 
+                        :disabled="!ociInstanceName || !ociPublicIP || !ociUsername || creating"
+                        class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
+                    <span x-show="!creating">Add OCI Instance</span>
+                    <span x-show="creating">Setting up...</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Step 5: Hetzner Review and Create -->
+        <div x-show="currentStep === 5 && !loading && selectedProvider === 'hetzner'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 5: Review Configuration</h3>
             <p class="text-gray-600 mb-6">Review your VPS configuration before creation. The server will be automatically configured with K3s. DNS records will be configured when applications are deployed.</p>
             
             <div class="space-y-4 mb-6">

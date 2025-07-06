@@ -400,3 +400,100 @@ func (vs *VPSService) getApplicationCountsPerVPS(token, accountID string) (map[s
 
 	return counts, nil
 }
+
+// CreateOCIVPSConfig creates a VPS configuration for a manually added OCI instance
+func (vs *VPSService) CreateOCIVPSConfig(
+	token, accountID string,
+	name, publicIP, username, shape string,
+	serverID int, privateKey, publicKey string,
+) (*VPSConfig, error) {
+	// Create VPS configuration for OCI
+	vpsConfig := &VPSConfig{
+		ServerID:    serverID,
+		Name:        name,
+		ServerType:  shape,
+		Location:    "oracle-cloud",
+		PublicIPv4:  publicIP,
+		CreatedAt:   time.Now().Format(time.RFC3339),
+		SSHKeyName:  "xanthus-oci-key",
+		SSHUser:     username,
+		SSHPort:     22,
+		HourlyRate:  0.0,   // OCI instances are managed externally
+		MonthlyRate: 0.0,   // Cost tracking handled outside Xanthus
+		Timezone:    "UTC", // Default timezone, can be updated later
+		Provider:    "Oracle Cloud Infrastructure (OCI)",
+	}
+
+	// Store VPS configuration
+	if err := vs.kv.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
+		return nil, fmt.Errorf("failed to store OCI VPS config: %w", err)
+	}
+
+	// Store SSH private key for this VPS
+	sshKeyData := struct {
+		PrivateKey string `json:"private_key"`
+		PublicKey  string `json:"public_key"`
+		VPSName    string `json:"vps_name"`
+		Provider   string `json:"provider"`
+		CreatedAt  string `json:"created_at"`
+	}{
+		PrivateKey: privateKey,
+		PublicKey:  publicKey,
+		VPSName:    name,
+		Provider:   "oci",
+		CreatedAt:  time.Now().Format(time.RFC3339),
+	}
+
+	kvKey := fmt.Sprintf("vps:%d:ssh", serverID)
+	if err := vs.kv.PutValue(token, accountID, kvKey, sshKeyData); err != nil {
+		log.Printf("Warning: Failed to store SSH key for OCI VPS %d: %v", serverID, err)
+	}
+
+	// Start K3s setup in the background
+	go vs.setupOCIK3s(token, accountID, vpsConfig, privateKey)
+
+	return vpsConfig, nil
+}
+
+// setupOCIK3s sets up K3s on the OCI instance in the background
+func (vs *VPSService) setupOCIK3s(token, accountID string, vpsConfig *VPSConfig, privateKey string) {
+	log.Printf("Starting K3s setup for OCI instance %s (ID: %d)", vpsConfig.Name, vpsConfig.ServerID)
+
+	// Create SSH connection to the OCI instance
+	sshConn, err := vs.ssh.ConnectToVPS(vpsConfig.PublicIPv4, vpsConfig.SSHUser, privateKey)
+	if err != nil {
+		log.Printf("Error connecting to OCI instance %s: %v", vpsConfig.Name, err)
+		return
+	}
+	defer sshConn.Close()
+
+	// Update system packages
+	log.Printf("Updating system packages on OCI instance %s", vpsConfig.Name)
+	if _, err := vs.ssh.ExecuteCommand(sshConn, "sudo apt update && sudo apt upgrade -y"); err != nil {
+		log.Printf("Warning: Failed to update packages on OCI instance %s: %v", vpsConfig.Name, err)
+	}
+
+	// Install K3s
+	log.Printf("Installing K3s on OCI instance %s", vpsConfig.Name)
+	k3sInstallCommand := "curl -sfL https://get.k3s.io | sudo sh -s - --write-kubeconfig-mode 644"
+	if _, err := vs.ssh.ExecuteCommand(sshConn, k3sInstallCommand); err != nil {
+		log.Printf("Error installing K3s on OCI instance %s: %v", vpsConfig.Name, err)
+		return
+	}
+
+	// Wait for K3s to be ready
+	log.Printf("Waiting for K3s to be ready on OCI instance %s", vpsConfig.Name)
+	readyCommand := "sudo k3s kubectl wait --for=condition=Ready nodes --all --timeout=300s"
+	if _, err := vs.ssh.ExecuteCommand(sshConn, readyCommand); err != nil {
+		log.Printf("Warning: K3s readiness check timeout on OCI instance %s: %v", vpsConfig.Name, err)
+	}
+
+	// Install Helm
+	log.Printf("Installing Helm on OCI instance %s", vpsConfig.Name)
+	helmInstallCommand := "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
+	if _, err := vs.ssh.ExecuteCommand(sshConn, helmInstallCommand); err != nil {
+		log.Printf("Warning: Failed to install Helm on OCI instance %s: %v", vpsConfig.Name, err)
+	}
+
+	log.Printf("✅ K3s setup completed for OCI instance %s (ID: %d)", vpsConfig.Name, vpsConfig.ServerID)
+}
