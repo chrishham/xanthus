@@ -33,16 +33,10 @@ func (h *VPSInfoHandler) HandleVPSList(c *gin.Context) {
 		return
 	}
 
-	// Get Hetzner API key
-	hetznerKey, valid := h.getHetznerKey(c, token, accountID)
-	if !valid {
-		return
-	}
-
-	// List servers
-	servers, err := h.hetznerService.ListServers(hetznerKey)
+	// Get servers from KV store (includes both Hetzner and Oracle VPS)
+	servers, err := h.vpsService.GetServersFromKV(token, accountID)
 	if err != nil {
-		log.Printf("Error listing servers: %v", err)
+		log.Printf("Error getting servers from KV: %v", err)
 		utils.JSONInternalServerError(c, "Failed to list servers")
 		return
 	}
