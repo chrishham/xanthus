@@ -358,13 +358,13 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 				},
 			},
 			Labels: map[string]string{
-				"managed_by":           "xanthus",
-				"accumulated_cost":     fmt.Sprintf("%.2f", accumulatedCost),
-				"monthly_cost":         fmt.Sprintf("%.2f", vpsConfig.MonthlyRate),
-				"hourly_cost":          fmt.Sprintf("%.4f", vpsConfig.HourlyRate),
-				"provider":             vpsConfig.Provider,
-				"application_count":    fmt.Sprintf("%d", applicationCount),
-				"configured_timezone":  vpsConfig.Timezone,
+				"managed_by":          "xanthus",
+				"accumulated_cost":    fmt.Sprintf("%.2f", accumulatedCost),
+				"monthly_cost":        fmt.Sprintf("%.2f", vpsConfig.MonthlyRate),
+				"hourly_cost":         fmt.Sprintf("%.4f", vpsConfig.HourlyRate),
+				"provider":            vpsConfig.Provider,
+				"application_count":   fmt.Sprintf("%d", applicationCount),
+				"configured_timezone": vpsConfig.Timezone,
 			},
 		}
 
@@ -508,7 +508,7 @@ func (vs *VPSService) CreateOCIVPSConfig(
 ) (*VPSConfig, error) {
 	// Default to Frankfurt region for Oracle Cloud (most common for European users)
 	location := "eu-frankfurt-1"
-	
+
 	// Resolve timezone for Oracle Cloud
 	timezone := vs.provider.ResolveTimezone("Oracle Cloud Infrastructure (OCI)", location)
 
@@ -811,7 +811,7 @@ func (vs *VPSService) UpdateOCIVPSLocation(token, accountID string, serverID int
 		return fmt.Errorf("failed to update VPS location: %w", err)
 	}
 
-	log.Printf("✅ Updated VPS %d location from 'oracle-cloud' to '%s' with timezone '%s'", 
+	log.Printf("✅ Updated VPS %d location from 'oracle-cloud' to '%s' with timezone '%s'",
 		serverID, newLocation, vpsConfig.Timezone)
 	return nil
 }

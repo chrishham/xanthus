@@ -367,14 +367,14 @@ func (h *VPSConfigHandler) HandleVPSSetTimezone(c *gin.Context) {
 
 	// Update VPS config with new timezone
 	vpsConfig.Timezone = timezone
-	
+
 	// For Oracle Cloud VPS with generic "oracle-cloud" location, update to actual region
 	if strings.Contains(vpsConfig.Provider, "Oracle") && vpsConfig.Location == "oracle-cloud" {
 		// Default to Frankfurt region for European users
 		vpsConfig.Location = "eu-frankfurt-1"
 		log.Printf("🔧 Updated Oracle Cloud VPS location from 'oracle-cloud' to 'eu-frankfurt-1'")
 	}
-	
+
 	if err := h.kvService.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
 		log.Printf("Warning: Failed to store timezone in VPS config: %v", err)
 	}
