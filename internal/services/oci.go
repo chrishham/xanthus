@@ -464,7 +464,7 @@ func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, ima
 		if memory == 0 {
 			memory = 6.0 // Default to 6GB
 		}
-		
+
 		launchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
 			Ocpus:       common.Float32(ocpu),   // Dynamic OCPU count
 			MemoryInGBs: common.Float32(memory), // Dynamic memory in GB
@@ -1197,6 +1197,25 @@ func getBoolValue(ptr *bool) bool {
 		return false
 	}
 	return *ptr
+}
+
+// GetTenancyHomeRegion retrieves the home region for the tenancy
+func (o *OCIService) GetTenancyHomeRegion(ctx context.Context) (string, error) {
+	// Get tenancy details
+	getTenancyRequest := identity.GetTenancyRequest{
+		TenancyId: &o.tenancyOCID,
+	}
+
+	tenancyResponse, err := o.identityClient.GetTenancy(ctx, getTenancyRequest)
+	if err != nil {
+		return "", fmt.Errorf("failed to get tenancy details: %w", err)
+	}
+
+	if tenancyResponse.HomeRegionKey == nil {
+		return "", fmt.Errorf("tenancy home region not found")
+	}
+
+	return *tenancyResponse.HomeRegionKey, nil
 }
 
 // flattenDefinedTags converts OCI's nested defined tags to a flat map

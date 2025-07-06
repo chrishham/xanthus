@@ -99,6 +99,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 			oci.GET("/check-token", config.VPSLifecycleHandler.HandleOCICheckToken)
 			oci.POST("/validate-token", config.VPSLifecycleHandler.HandleOCIValidateToken)
 			oci.POST("/store-token", config.VPSLifecycleHandler.HandleOCIStoreToken)
+			oci.GET("/home-region", config.VPSLifecycleHandler.HandleOCIGetHomeRegion)
 			oci.POST("/create", config.VPSLifecycleHandler.HandleOCICreate)
 			oci.POST("/delete", config.VPSLifecycleHandler.HandleOCIDelete)
 			oci.POST("/poweroff", config.VPSLifecycleHandler.HandleOCIPowerOff)

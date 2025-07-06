@@ -358,9 +358,15 @@
                             <option value="us-phoenix-1">US West (Phoenix)</option>
                             <option value="us-ashburn-1">US East (Ashburn)</option>
                             <option value="eu-frankfurt-1">EU Central (Frankfurt)</option>
+                            <option value="eu-zurich-1">EU (Zurich)</option>
                             <option value="uk-london-1">UK South (London)</option>
-                            <option value="ap-tokyo-1">Asia Pacific (Tokyo)</option>
+                            <option value="ap-mumbai-1">Asia Pacific (Mumbai)</option>
+                            <option value="ap-seoul-1">Asia Pacific (Seoul)</option>
                             <option value="ap-sydney-1">Asia Pacific (Sydney)</option>
+                            <option value="ap-tokyo-1">Asia Pacific (Tokyo)</option>
+                            <option value="sa-saopaulo-1">South America (São Paulo)</option>
+                            <option value="ca-toronto-1">Canada Central (Toronto)</option>
+                            <option value="ca-montreal-1">Canada East (Montreal)</option>
                         </select>
                     </div>
                     <div>
@@ -566,6 +572,35 @@ MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC...
                            :placeholder="'xanthus-oci-' + Date.now()">
                 </div>
                 
+                <div>
+                    <label for="oci-region" class="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                    <select id="oci-region" 
+                            x-model="ociLocation"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Select Region</option>
+                        <option value="us-phoenix-1">US West (Phoenix)</option>
+                        <option value="us-ashburn-1">US East (Ashburn)</option>
+                        <option value="eu-frankfurt-1">EU Central (Frankfurt)</option>
+                        <option value="eu-zurich-1">EU (Zurich)</option>
+                        <option value="uk-london-1">UK South (London)</option>
+                        <option value="ap-mumbai-1">Asia Pacific (Mumbai)</option>
+                        <option value="ap-seoul-1">Asia Pacific (Seoul)</option>
+                        <option value="ap-sydney-1">Asia Pacific (Sydney)</option>
+                        <option value="ap-tokyo-1">Asia Pacific (Tokyo)</option>
+                        <option value="sa-saopaulo-1">South America (São Paulo)</option>
+                        <option value="ca-toronto-1">Canada Central (Toronto)</option>
+                        <option value="ca-montreal-1">Canada East (Montreal)</option>
+                    </select>
+                    <div class="mt-1 text-sm text-gray-500">
+                        <span x-show="ociLocation">
+                            <span x-text="ociLocation"></span> (automatically detected from your tenancy home region)
+                        </span>
+                        <span x-show="!ociLocation">
+                            Your tenancy home region will be automatically detected
+                        </span>
+                    </div>
+                </div>
+                
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-gray-50 p-4 rounded-lg">
                         <h4 class="font-medium text-gray-900 mb-3">Instance Configuration</h4>
@@ -628,7 +663,7 @@ MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC...
                                 </div>
                                 <div class="flex justify-between">
                                     <dt class="text-gray-500">Region:</dt>
-                                    <dd class="font-medium" x-text="ociCredentials.region"></dd>
+                                    <dd class="font-medium" x-text="ociLocation"></dd>
                                 </div>
                             </div>
                         </div>

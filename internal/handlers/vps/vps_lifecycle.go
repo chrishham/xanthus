@@ -359,8 +359,8 @@ func (h *VPSLifecycleHandler) HandleOCICreate(c *gin.Context) {
 		Shape    string  `json:"shape" binding:"required"`
 		Region   string  `json:"region"`
 		Timezone string  `json:"timezone"`
-		OCPU     float32 `json:"ocpu"`   // OCPU count for flexible shapes
-		Memory   float32 `json:"memory"` // Memory in GB for flexible shapes
+		OCPU     float32 `json:"ocpu"`      // OCPU count for flexible shapes
+		Memory   float32 `json:"memory"`    // Memory in GB for flexible shapes
 		OCIToken string  `json:"oci_token"` // Optional - for first-time setup
 	}
 
@@ -783,5 +783,61 @@ func (h *VPSLifecycleHandler) HandleOCIStoreToken(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "OCI auth token stored successfully",
+	})
+}
+
+// HandleOCIGetHomeRegion retrieves the home region for the tenancy
+func (h *VPSLifecycleHandler) HandleOCIGetHomeRegion(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	// Get stored OCI auth token
+	ociAuthToken, err := utils.GetOCIAuthToken(token, accountID)
+	if err != nil {
+		log.Printf("❌ Failed to retrieve OCI auth token for account %s: %v", accountID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to retrieve OCI auth token",
+		})
+		return
+	}
+
+	if ociAuthToken == "" {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "OCI auth token not found",
+		})
+		return
+	}
+
+	// Create OCI service
+	ociService, err := services.NewOCIService(ociAuthToken)
+	if err != nil {
+		log.Printf("❌ Failed to create OCI service for account %s: %v", accountID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to create OCI service",
+		})
+		return
+	}
+
+	// Get home region
+	homeRegion, err := ociService.GetTenancyHomeRegion(c.Request.Context())
+	if err != nil {
+		log.Printf("❌ Failed to get home region for account %s: %v", accountID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"message": "Failed to get home region",
+		})
+		return
+	}
+
+	log.Printf("✅ Retrieved home region %s for account %s", homeRegion, accountID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":     true,
+		"home_region": homeRegion,
 	})
 }

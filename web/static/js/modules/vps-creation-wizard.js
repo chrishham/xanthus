@@ -20,6 +20,7 @@ export function vpsCreationWizard() {
         ociPublicIP: '',
         ociUsername: 'ubuntu',
         ociShape: 'VM.Standard.A1.Flex',
+        ociLocation: '', // Will be set to home region automatically
         ociConfig: {
             ocpu: 1,
             memory: 6
@@ -169,7 +170,7 @@ export function vpsCreationWizard() {
         ociCredentials: {
             tenancy: '',
             user: '',
-            region: 'us-phoenix-1',
+            region: '',
             fingerprint: '',
             privateKey: ''
         },
@@ -240,6 +241,8 @@ export function vpsCreationWizard() {
                 if (response.ok) {
                     // Store the token and proceed
                     await this.storeOCIToken();
+                    // Get home region and set as default
+                    await this.getHomeRegion();
                     this.currentStep = 3; // Go to OCI instance creation step
                 } else {
                     Swal.fire('Invalid Token', data.error || 'The OCI auth token is invalid', 'error');
@@ -269,6 +272,27 @@ export function vpsCreationWizard() {
             } catch (error) {
                 console.error('Error storing OCI token:', error);
                 Swal.fire('Warning', 'Token validated but storage failed. You may need to re-enter it.', 'warning');
+            }
+        },
+
+        async getHomeRegion() {
+            try {
+                const response = await fetch('/vps/oci/home-region');
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // Set the home region as default for new VPS creation
+                    this.ociLocation = data.home_region;
+                    console.log('Set default OCI region to:', data.home_region);
+                } else {
+                    console.warn('Failed to get home region:', data.message || 'Unknown error');
+                    // Fallback to us-phoenix-1 if home region fetch fails
+                    this.ociLocation = 'us-phoenix-1';
+                }
+            } catch (error) {
+                console.error('Error fetching home region:', error);
+                // Fallback to us-phoenix-1 if home region fetch fails
+                this.ociLocation = 'us-phoenix-1';
             }
         },
 
@@ -551,7 +575,7 @@ export function vpsCreationWizard() {
         },
 
         async createOCIInstance() {
-            if (!this.serverName || !this.ociCredentials.region) return;
+            if (!this.serverName || !this.ociLocation) return;
             
             this.creating = true;
             this.loading = true;
@@ -561,7 +585,7 @@ export function vpsCreationWizard() {
                 const requestBody = {
                     name: this.serverName,
                     shape: 'VM.Standard.A1.Flex', // Always Free tier ARM64
-                    region: this.ociCredentials.region,
+                    region: this.ociLocation,
                     timezone: 'UTC',
                     ocpu: this.ociConfig.ocpu,
                     memory: this.ociConfig.memory
