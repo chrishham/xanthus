@@ -265,9 +265,24 @@ func (h *VPSInfoHandler) HandleVPSTerminal(c *gin.Context) {
 	// Parse server ID for terminal session
 	serverID, _ := utils.ParseServerID(serverIDStr)
 
+	// Update VPS SSH user configuration if needed (for migration/correction)
+	if err := h.vpsService.UpdateVPSSSHUser(token, accountID, serverID); err != nil {
+		log.Printf("Warning: Failed to update VPS SSH user configuration: %v", err)
+	}
+
+	// Resolve SSH user using provider resolver
+	resolvedSSHUser, err := h.vpsService.ResolveSSHUser(token, accountID, serverID)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to resolve SSH user: %v", err))
+		return
+	}
+
+	log.Printf("🔍 VPS Terminal Debug - ServerID: %d, Provider: %s, StoredUser: %s, ResolvedUser: %s", 
+		serverID, vpsConfig.Provider, vpsConfig.SSHUser, resolvedSSHUser)
+
 	// Create terminal session
 	terminalService := services.NewTerminalService()
-	session, err := terminalService.CreateSession(serverID, vpsConfig.PublicIPv4, vpsConfig.SSHUser, privateKey)
+	session, err := terminalService.CreateSession(serverID, vpsConfig.PublicIPv4, resolvedSSHUser, privateKey)
 	if err != nil {
 		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to create terminal session: %v", err))
 		return
@@ -278,6 +293,48 @@ func (h *VPSInfoHandler) HandleVPSTerminal(c *gin.Context) {
 		"session_id": session.ID,
 		"url":        fmt.Sprintf("/terminal/%s", session.ID),
 		"port":       session.Port,
+	})
+}
+
+// HandleVPSSSHUserDebug provides debug information about SSH user resolution for a VPS
+func (h *VPSInfoHandler) HandleVPSSSHUserDebug(c *gin.Context) {
+	serverIDStr := c.Param("id")
+	vpsConfig, valid := h.getVPSConfig(c, serverIDStr)
+	if !valid {
+		return
+	}
+
+	token, accountID, _ := h.validateTokenAndAccount(c)
+	serverID, _ := utils.ParseServerID(serverIDStr)
+
+	// Get current configuration
+	storedSSHUser := vpsConfig.SSHUser
+	
+	// Get provider defaults
+	providerDefaults := h.vpsService.GetProviderDefaults(vpsConfig.Provider)
+	
+	// Get resolved SSH user
+	resolvedSSHUser, err := h.vpsService.ResolveSSHUser(token, accountID, serverID)
+	if err != nil {
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to resolve SSH user: %v", err))
+		return
+	}
+
+	// Get correct SSH user (ignoring stored value)
+	correctSSHUser := h.vpsService.GetCorrectSSHUserFromProvider(vpsConfig.Provider)
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"server_id": serverID,
+		"provider": vpsConfig.Provider,
+		"stored_ssh_user": storedSSHUser,
+		"provider_default_ssh_user": providerDefaults.DefaultSSHUser,
+		"resolved_ssh_user": resolvedSSHUser,
+		"correct_ssh_user": correctSSHUser,
+		"needs_update": storedSSHUser != correctSSHUser,
+		"debug_info": gin.H{
+			"provider_supports_api": providerDefaults.SupportsAPICreation,
+			"provider_default_port": providerDefaults.DefaultSSHPort,
+		},
 	})
 }
 

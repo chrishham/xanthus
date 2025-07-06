@@ -10,21 +10,24 @@ import (
 
 // VPSService provides high-level business logic for VPS operations
 type VPSService struct {
-	hetzner *HetznerService
-	kv      *KVService
-	ssh     *SSHService
-	cf      *CloudflareService
-	cache   *CacheService
+	hetzner  *HetznerService
+	kv       *KVService
+	ssh      *SSHService
+	cf       *CloudflareService
+	cache    *CacheService
+	provider *ProviderResolver
 }
 
 // NewVPSService creates a new VPS service instance
 func NewVPSService() *VPSService {
+	kvService := NewKVService()
 	return &VPSService{
-		hetzner: NewHetznerService(),
-		kv:      NewKVService(),
-		ssh:     NewSSHService(),
-		cf:      NewCloudflareService(),
-		cache:   NewCacheService(),
+		hetzner:  NewHetznerService(),
+		kv:       kvService,
+		ssh:      NewSSHService(),
+		cf:       NewCloudflareService(),
+		cache:    NewCacheService(),
+		provider: NewProviderResolver(kvService),
 	}
 }
 
@@ -116,7 +119,7 @@ func (vs *VPSService) CreateVPSWithConfig(
 	hourlyRate, monthlyRate float64,
 ) (*HetznerServer, *VPSConfig, error) {
 	// Calculate timezone for the location
-	timezone := vs.getTimezoneForLocation(location)
+	timezone := vs.provider.ResolveTimezone("Hetzner", location)
 
 	// Create server using Hetzner service
 	server, err := vs.hetzner.CreateServer(hetznerKey, name, serverType, location, sshKeyName, domain, domainCert, domainKey, timezone)
@@ -133,8 +136,8 @@ func (vs *VPSService) CreateVPSWithConfig(
 		PublicIPv4:  server.PublicNet.IPv4.IP,
 		CreatedAt:   server.Created,
 		SSHKeyName:  sshKeyName,
-		SSHUser:     "root",
-		SSHPort:     22,
+		SSHUser:     vs.provider.GetProviderDefaults("Hetzner").DefaultSSHUser,
+		SSHPort:     vs.provider.GetProviderDefaults("Hetzner").DefaultSSHPort,
 		HourlyRate:  hourlyRate,
 		MonthlyRate: monthlyRate,
 		Timezone:    timezone,
@@ -255,29 +258,6 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 	return servers, nil
 }
 
-// getTimezoneForLocation maps Hetzner datacenter locations to appropriate timezones
-func (vs *VPSService) getTimezoneForLocation(location string) string {
-	locationTimezones := map[string]string{
-		"nbg1":    "Europe/Berlin",    // Nuremberg, Germany
-		"fsn1":    "Europe/Berlin",    // Falkenstein, Germany
-		"hel1":    "Europe/Helsinki",  // Helsinki, Finland
-		"ash":     "America/New_York", // Ashburn, USA
-		"hil":     "America/New_York", // Hillsboro, USA
-		"cax":     "America/New_York", // Central US
-		"default": "Europe/Athens",    // Default for Greece-based deployments
-	}
-
-	// Extract location prefix (e.g., "nbg1" from "nbg1-dc3")
-	for prefix, timezone := range locationTimezones {
-		if strings.HasPrefix(location, prefix) {
-			return timezone
-		}
-	}
-
-	// Default fallback
-	return locationTimezones["default"]
-}
-
 // UpdateVPSTimezone updates the timezone for an existing VPS configuration
 func (vs *VPSService) UpdateVPSTimezone(token, accountID string, serverID int) error {
 	// Get existing VPS configuration
@@ -287,7 +267,7 @@ func (vs *VPSService) UpdateVPSTimezone(token, accountID string, serverID int) e
 	}
 
 	// Update timezone based on location
-	vpsConfig.Timezone = vs.getTimezoneForLocation(vpsConfig.Location)
+	vpsConfig.Timezone = vs.provider.ResolveTimezone(vpsConfig.Provider, vpsConfig.Location)
 
 	// Store updated configuration
 	if err := vs.kv.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
@@ -440,7 +420,7 @@ func (vs *VPSService) CreateOCIVPSConfig(
 		PrivateKey: privateKey,
 		PublicKey:  publicKey,
 		VPSName:    name,
-		Provider:   "oci",
+		Provider:   "Oracle Cloud Infrastructure (OCI)",
 		CreatedAt:  time.Now().Format(time.RFC3339),
 	}
 
@@ -496,4 +476,52 @@ func (vs *VPSService) setupOCIK3s(token, accountID string, vpsConfig *VPSConfig,
 	}
 
 	log.Printf("✅ K3s setup completed for OCI instance %s (ID: %d)", vpsConfig.Name, vpsConfig.ServerID)
+}
+
+// ResolveSSHUser resolves the SSH user for a VPS using the provider resolver
+func (vs *VPSService) ResolveSSHUser(token, accountID string, serverID int) (string, error) {
+	return vs.provider.ResolveSSHUser(token, accountID, serverID)
+}
+
+// GetProviderDefaults returns provider defaults for a given provider string
+func (vs *VPSService) GetProviderDefaults(provider string) *ProviderDefaults {
+	return vs.provider.GetProviderDefaults(provider)
+}
+
+// GetCorrectSSHUserFromProvider returns the correct SSH user for a provider (ignoring stored config)
+func (vs *VPSService) GetCorrectSSHUserFromProvider(provider string) string {
+	defaults := vs.provider.GetProviderDefaults(provider)
+	return defaults.DefaultSSHUser
+}
+
+// UpdateVPSSSHUser updates the SSH user for a VPS configuration based on provider defaults
+func (vs *VPSService) UpdateVPSSSHUser(token, accountID string, serverID int) error {
+	// Get existing VPS configuration
+	vpsConfig, err := vs.kv.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS config: %w", err)
+	}
+
+	// Resolve correct SSH user based on provider (always use provider defaults)
+	correctSSHUser := vs.provider.GetCorrectSSHUserFromConfig(vpsConfig)
+
+	// Update if different
+	if vpsConfig.SSHUser != correctSSHUser {
+		log.Printf("🔧 Updating VPS %d SSH user from '%s' to '%s' (provider: %s)",
+			serverID, vpsConfig.SSHUser, correctSSHUser, vpsConfig.Provider)
+
+		vpsConfig.SSHUser = correctSSHUser
+
+		// Store updated configuration
+		if err := vs.kv.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
+			return fmt.Errorf("failed to update VPS SSH user: %w", err)
+		}
+
+		log.Printf("✅ Updated SSH user for VPS %d to %s", serverID, correctSSHUser)
+	} else {
+		log.Printf("✅ VPS %d SSH user already correct: %s (provider: %s)", 
+			serverID, correctSSHUser, vpsConfig.Provider)
+	}
+
+	return nil
 }

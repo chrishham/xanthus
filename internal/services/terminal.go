@@ -76,11 +76,14 @@ func (ts *TerminalService) CreateSession(serverID int, host, user, privateKey st
 	session.cancel = cancel
 
 	// GoTTY command with SSH
+	sshTarget := fmt.Sprintf("%s@%s", user, host)
+	log.Printf("🚀 Creating terminal session - SSH Target: %s (ServerID: %d)", sshTarget, serverID)
+	
 	cmd := exec.CommandContext(ctx, "gotty",
 		"--port", strconv.Itoa(port),
 		"--permit-write",
 		"--reconnect",
-		"--title-format", fmt.Sprintf("Xanthus SSH - %s@%s", user, host),
+		"--title-format", fmt.Sprintf("Xanthus SSH - %s", sshTarget),
 		"--close-signal", "9",
 		"--close-timeout", "10",
 		"ssh",
@@ -88,7 +91,7 @@ func (ts *TerminalService) CreateSession(serverID int, host, user, privateKey st
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "ConnectTimeout=10",
-		fmt.Sprintf("%s@%s", user, host),
+		sshTarget,
 	)
 
 	session.process = cmd

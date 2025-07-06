@@ -14,14 +14,17 @@ import (
 
 // WebSocketTerminalHandler handles WebSocket terminal connections
 type WebSocketTerminalHandler struct {
-	terminalService *services.WebSocketTerminalService
-	upgrader        websocket.Upgrader
+	terminalService  *services.WebSocketTerminalService
+	providerResolver *services.ProviderResolver
+	upgrader         websocket.Upgrader
 }
 
 // NewWebSocketTerminalHandler creates a new WebSocket terminal handler
 func NewWebSocketTerminalHandler() *WebSocketTerminalHandler {
+	kvService := services.NewKVService()
 	return &WebSocketTerminalHandler{
-		terminalService: services.NewWebSocketTerminalService(),
+		terminalService:  services.NewWebSocketTerminalService(),
+		providerResolver: services.NewProviderResolver(kvService),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				// Allow connections from same origin
@@ -33,8 +36,10 @@ func NewWebSocketTerminalHandler() *WebSocketTerminalHandler {
 
 // NewWebSocketTerminalHandlerWithService creates a new WebSocket terminal handler with shared service
 func NewWebSocketTerminalHandlerWithService(wsService *services.WebSocketTerminalService) *WebSocketTerminalHandler {
+	kvService := services.NewKVService()
 	return &WebSocketTerminalHandler{
-		terminalService: wsService,
+		terminalService:  wsService,
+		providerResolver: services.NewProviderResolver(kvService),
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				// Allow connections from same origin
@@ -155,7 +160,7 @@ func (h *WebSocketTerminalHandler) HandleTerminalCreate(c *gin.Context) {
 	var req struct {
 		ServerID   int    `json:"server_id" binding:"required"`
 		Host       string `json:"host" binding:"required"`
-		User       string `json:"user" binding:"required"`
+		User       string `json:"user"` // Optional - will be resolved from provider if not provided
 		PrivateKey string `json:"private_key" binding:"required"`
 	}
 
@@ -164,11 +169,29 @@ func (h *WebSocketTerminalHandler) HandleTerminalCreate(c *gin.Context) {
 		return
 	}
 
+	// Always resolve SSH user from provider (ignore provided user to ensure correctness)
+	log.Printf("🔍 WebSocket Terminal Request - ServerID: %d, ProvidedUser: '%s', Host: %s", 
+		req.ServerID, req.User, req.Host)
+	
+	log.Printf("🔧 Resolving SSH user from provider resolver...")
+	resolvedUser, err := h.providerResolver.ResolveSSHUser(token.(string), accountID.(string), req.ServerID)
+	if err != nil {
+		log.Printf("❌ Failed to resolve SSH user: %v", err)
+		utils.JSONError(c, http.StatusInternalServerError, fmt.Sprintf("Failed to resolve SSH user: %v", err))
+		return
+	}
+	
+	user := resolvedUser
+	if req.User != "" && req.User != user {
+		log.Printf("⚠️ Frontend provided user '%s' but using resolved user '%s' from provider", req.User, user)
+	}
+	log.Printf("✅ Using SSH user: %s", user)
+
 	// Create terminal session
 	session, err := h.terminalService.CreateSession(
 		req.ServerID,
 		req.Host,
-		req.User,
+		user,
 		req.PrivateKey,
 		token.(string),
 		accountID.(string),
