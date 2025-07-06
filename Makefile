@@ -2,7 +2,7 @@
 
 # Development mode
 dev: css
-	go run main.go
+	go run *.go
 
 # Build for production
 build: assets
