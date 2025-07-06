@@ -1,6 +1,7 @@
 package services
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,11 +15,22 @@ import (
 )
 
 // SimpleApplicationService provides core CRUD operations for applications using existing services
-type SimpleApplicationService struct{}
+type SimpleApplicationService struct{
+	embedFS *embed.FS
+}
 
 // NewSimpleApplicationService creates a new SimpleApplicationService
 func NewSimpleApplicationService() *SimpleApplicationService {
-	return &SimpleApplicationService{}
+	return &SimpleApplicationService{
+		embedFS: nil,
+	}
+}
+
+// NewSimpleApplicationServiceWithEmbedFS creates a new SimpleApplicationService with embedded FS
+func NewSimpleApplicationServiceWithEmbedFS(embedFS *embed.FS) *SimpleApplicationService {
+	return &SimpleApplicationService{
+		embedFS: embedFS,
+	}
 }
 
 // ListApplications returns all applications for the given account with real-time status updates

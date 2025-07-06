@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -32,8 +34,12 @@ func main() {
 	// Setup templates with cache busting
 	setupTemplates(r)
 
-	// Setup static files
-	r.Static("/static", "web/static")
+	// Setup static files from embedded filesystem
+	staticFS, err := fs.Sub(StaticFiles, "web/static")
+	if err != nil {
+		log.Fatal("Failed to create static files sub-filesystem:", err)
+	}
+	r.StaticFS("/static", http.FS(staticFS))
 
 	// Initialize shared services
 	wsTerminalService := services.NewWebSocketTerminalService()
@@ -45,7 +51,7 @@ func main() {
 	vpsInfoHandler := vps.NewVPSInfoHandler()
 	vpsConfigHandler := vps.NewVPSConfigHandler()
 	vpsMetaHandler := vps.NewVPSMetaHandler()
-	appsHandler := applications.NewHandler()
+	appsHandler := applications.NewHandlerWithEmbedFS(&AllApplicationFiles)
 	terminalHandler := handlers.NewTerminalHandlerWithService(wsTerminalService)
 	webSocketTerminalHandler := handlers.NewWebSocketTerminalHandlerWithService(wsTerminalService)
 	pagesHandler := handlers.NewPagesHandler()
@@ -105,11 +111,11 @@ func setupTemplates(r *gin.Engine) {
 		},
 	}
 
-	// Pre-compile templates once at startup for better performance
-	log.Println("📋 Pre-compiling HTML templates...")
+	// Pre-compile templates once at startup for better performance using embedded files
+	log.Println("📋 Pre-compiling HTML templates from embedded files...")
 	tmpl := template.New("").Funcs(funcMap)
-	tmpl = template.Must(tmpl.ParseGlob("web/templates/*.html"))
-	tmpl = template.Must(tmpl.ParseGlob("web/templates/partials/*/*.html"))
+	tmpl = template.Must(tmpl.ParseFS(HTMLTemplates, "web/templates/*.html"))
+	tmpl = template.Must(tmpl.ParseFS(HTMLTemplates, "web/templates/partials/*/*.html"))
 	r.SetHTMLTemplate(tmpl)
-	log.Println("✅ Templates pre-compiled successfully")
+	log.Println("✅ Templates pre-compiled successfully from embedded files")
 }

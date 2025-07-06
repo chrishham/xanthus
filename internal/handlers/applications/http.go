@@ -17,7 +17,7 @@ func (h *Handler) HandleApplicationsPage(c *gin.Context) {
 	accountID := c.GetString("account_id")
 
 	// Get applications list using service
-	appService := services.NewSimpleApplicationService()
+	appService := h.GetApplicationService()
 	applications, err := appService.ListApplications(token, accountID)
 	if err != nil {
 		log.Printf("Error getting applications: %v", err)
@@ -40,7 +40,7 @@ func (h *Handler) HandleApplicationsList(c *gin.Context) {
 	accountID := c.GetString("account_id")
 
 	// Get applications list using service
-	appService := services.NewSimpleApplicationService()
+	appService := h.GetApplicationService()
 	applications, err := appService.ListApplications(token, accountID)
 	if err != nil {
 		log.Printf("Error getting applications: %v", err)
@@ -166,7 +166,7 @@ func (h *Handler) HandleApplicationsCreate(c *gin.Context) {
 	}
 
 	// Create application using service
-	appService := services.NewSimpleApplicationService()
+	appService := h.GetApplicationService()
 	app, err := appService.CreateApplication(token, accountID, appDataMap, predefinedApp)
 	if err != nil {
 		log.Printf("Error creating application: %v", err)
@@ -438,7 +438,7 @@ func (h *Handler) HandleApplicationDelete(c *gin.Context) {
 	appID := c.Param("id")
 
 	// Delete application using service
-	appService := services.NewSimpleApplicationService()
+	appService := h.GetApplicationService()
 	err := appService.DeleteApplication(token, accountID, appID)
 	if err != nil {
 		log.Printf("Error deleting application: %v", err)

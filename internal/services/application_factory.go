@@ -1,6 +1,8 @@
 package services
 
 import (
+	"embed"
+
 	"github.com/chrishham/xanthus/internal/models"
 )
 
@@ -11,6 +13,7 @@ type ApplicationServiceFactory struct {
 	configLoader           models.ConfigLoader
 	registry               ApplicationRegistry
 	enhancedValidator      *EnhancedApplicationValidator
+	embedFS                *embed.FS
 }
 
 // NewApplicationServiceFactory creates a new application service factory
@@ -34,6 +37,32 @@ func NewApplicationServiceFactory() *ApplicationServiceFactory {
 		configLoader:           configLoader,
 		registry:               registry,
 		enhancedValidator:      enhancedValidator,
+		embedFS:                nil,
+	}
+}
+
+// NewApplicationServiceFactoryWithEmbedFS creates a new application service factory with embedded FS
+func NewApplicationServiceFactoryWithEmbedFS(embedFS *embed.FS) *ApplicationServiceFactory {
+	// Create config loader for enhanced version service with embedded FS
+	validator := models.NewDefaultApplicationValidator()
+	configLoader := models.NewYAMLConfigLoaderWithEmbedFS(validator, embedFS)
+
+	// Create enhanced version service
+	enhancedVersionService := NewEnhancedDefaultVersionService(configLoader)
+
+	// Create enhanced validator
+	enhancedValidator := NewEnhancedApplicationValidator(validator)
+
+	// Create application registry
+	registry := NewInMemoryApplicationRegistry(enhancedValidator)
+
+	return &ApplicationServiceFactory{
+		versionService:         enhancedVersionService, // Use enhanced service as default
+		enhancedVersionService: enhancedVersionService,
+		configLoader:           configLoader,
+		registry:               registry,
+		enhancedValidator:      enhancedValidator,
+		embedFS:                embedFS,
 	}
 }
 
@@ -45,12 +74,18 @@ func (f *ApplicationServiceFactory) CreateCatalogService() ApplicationCatalog {
 // CreateConfigCatalogService creates a new configuration-driven catalog service
 func (f *ApplicationServiceFactory) CreateConfigCatalogService() ApplicationCatalog {
 	configPath := GetDefaultConfigPath()
+	if f.embedFS != nil {
+		return NewConfigDrivenCatalogServiceWithEmbedFS(configPath, f.versionService, f.embedFS)
+	}
 	return NewConfigDrivenCatalogService(configPath, f.versionService)
 }
 
 // CreateHybridCatalogService creates a hybrid catalog service (config + fallback)
 func (f *ApplicationServiceFactory) CreateHybridCatalogService() ApplicationCatalog {
 	configPath := GetDefaultConfigPath()
+	if f.embedFS != nil {
+		return NewHybridCatalogServiceWithEmbedFS(configPath, f.versionService, f.embedFS)
+	}
 	return NewHybridCatalogService(configPath, f.versionService)
 }
 
@@ -94,7 +129,12 @@ func (f *ApplicationServiceFactory) CreateRegistryBasedCatalogService() Applicat
 func (f *ApplicationServiceFactory) CreateRegistryWithDefaults() (ApplicationRegistry, error) {
 	// Load default applications from configuration
 	configPath := GetDefaultConfigPath()
-	configCatalog := NewConfigDrivenCatalogService(configPath, f.versionService)
+	var configCatalog ApplicationCatalog
+	if f.embedFS != nil {
+		configCatalog = NewConfigDrivenCatalogServiceWithEmbedFS(configPath, f.versionService, f.embedFS)
+	} else {
+		configCatalog = NewConfigDrivenCatalogService(configPath, f.versionService)
+	}
 
 	// Get default applications
 	defaultApps := configCatalog.GetApplications()

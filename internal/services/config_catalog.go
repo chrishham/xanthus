@@ -1,6 +1,7 @@
 package services
 
 import (
+	"embed"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -24,6 +25,28 @@ type ConfigDrivenCatalogService struct {
 func NewConfigDrivenCatalogService(configPath string, versionService VersionService) ApplicationCatalog {
 	validator := models.NewDefaultApplicationValidator()
 	configLoader := models.NewYAMLConfigLoader(validator)
+
+	service := &ConfigDrivenCatalogService{
+		configPath:     configPath,
+		configLoader:   configLoader,
+		versionService: versionService,
+		applications:   []models.PredefinedApplication{},
+		categories:     []string{},
+	}
+
+	// Load applications on startup
+	if err := service.loadApplications(); err != nil {
+		log.Printf("Warning: Failed to load applications from config: %v", err)
+		log.Printf("Falling back to empty catalog")
+	}
+
+	return service
+}
+
+// NewConfigDrivenCatalogServiceWithEmbedFS creates a new configuration-driven catalog service with embedded FS
+func NewConfigDrivenCatalogServiceWithEmbedFS(configPath string, versionService VersionService, embedFS *embed.FS) ApplicationCatalog {
+	validator := models.NewDefaultApplicationValidator()
+	configLoader := models.NewYAMLConfigLoaderWithEmbedFS(validator, embedFS)
 
 	service := &ConfigDrivenCatalogService{
 		configPath:     configPath,
@@ -157,6 +180,17 @@ type HybridCatalogService struct {
 // NewHybridCatalogService creates a catalog that tries configuration first, then falls back to hardcoded
 func NewHybridCatalogService(configPath string, versionService VersionService) ApplicationCatalog {
 	configCatalog := NewConfigDrivenCatalogService(configPath, versionService)
+	fallbackCatalog := NewApplicationCatalogService(versionService)
+
+	return &HybridCatalogService{
+		configCatalog:   configCatalog,
+		fallbackCatalog: fallbackCatalog,
+	}
+}
+
+// NewHybridCatalogServiceWithEmbedFS creates a catalog that tries embedded configuration first, then falls back to hardcoded
+func NewHybridCatalogServiceWithEmbedFS(configPath string, versionService VersionService, embedFS *embed.FS) ApplicationCatalog {
+	configCatalog := NewConfigDrivenCatalogServiceWithEmbedFS(configPath, versionService, embedFS)
 	fallbackCatalog := NewApplicationCatalogService(versionService)
 
 	return &HybridCatalogService{

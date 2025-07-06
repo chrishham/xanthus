@@ -1,7 +1,9 @@
 package models
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,12 +69,22 @@ type ConfigLoader interface {
 // YAMLConfigLoader implements ConfigLoader for YAML files
 type YAMLConfigLoader struct {
 	validator ApplicationValidator
+	embedFS   *embed.FS
 }
 
 // NewYAMLConfigLoader creates a new YAML configuration loader
 func NewYAMLConfigLoader(validator ApplicationValidator) ConfigLoader {
 	return &YAMLConfigLoader{
 		validator: validator,
+		embedFS:   nil,
+	}
+}
+
+// NewYAMLConfigLoaderWithEmbedFS creates a new YAML configuration loader with embedded FS
+func NewYAMLConfigLoaderWithEmbedFS(validator ApplicationValidator, embedFS *embed.FS) ConfigLoader {
+	return &YAMLConfigLoader{
+		validator: validator,
+		embedFS:   embedFS,
 	}
 }
 
@@ -80,6 +92,12 @@ func NewYAMLConfigLoader(validator ApplicationValidator) ConfigLoader {
 func (l *YAMLConfigLoader) LoadApplications(configPath string) ([]PredefinedApplication, error) {
 	var applications []PredefinedApplication
 
+	// Use embedded files if available
+	if l.embedFS != nil {
+		return l.loadApplicationsFromEmbedFS(configPath)
+	}
+
+	// Fallback to filesystem
 	// Check if directory exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("configuration directory does not exist: %s", configPath)
@@ -117,11 +135,59 @@ func (l *YAMLConfigLoader) LoadApplications(configPath string) ([]PredefinedAppl
 	return applications, nil
 }
 
+// loadApplicationsFromEmbedFS loads applications from embedded filesystem
+func (l *YAMLConfigLoader) loadApplicationsFromEmbedFS(configPath string) ([]PredefinedApplication, error) {
+	var applications []PredefinedApplication
+
+	// Read all YAML files from embedded FS
+	files, err := fs.Glob(*l.embedFS, configPath+"/*.yaml")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded configuration files: %w", err)
+	}
+
+	// Also check for .yml extension
+	ymlFiles, err := fs.Glob(*l.embedFS, configPath+"/*.yml")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read embedded configuration files: %w", err)
+	}
+	files = append(files, ymlFiles...)
+
+	for _, file := range files {
+		// Skip template files
+		if strings.Contains(filepath.Base(file), "template") {
+			continue
+		}
+
+		app, err := l.LoadApplication(file)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load application from %s: %w", file, err)
+		}
+
+		if app != nil {
+			applications = append(applications, *app)
+		}
+	}
+
+	return applications, nil
+}
+
 // LoadApplication loads a single application configuration from a YAML file
 func (l *YAMLConfigLoader) LoadApplication(configFile string) (*PredefinedApplication, error) {
-	data, err := os.ReadFile(configFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+	var data []byte
+	var err error
+
+	// Use embedded files if available
+	if l.embedFS != nil {
+		data, err = fs.ReadFile(*l.embedFS, configFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read embedded config file: %w", err)
+		}
+	} else {
+		// Fallback to filesystem
+		data, err = os.ReadFile(configFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config file: %w", err)
+		}
 	}
 
 	var config ApplicationConfig

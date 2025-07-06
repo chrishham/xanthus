@@ -2,15 +2,15 @@
 
 # Development mode
 dev: css
-	go run cmd/xanthus/main.go
+	go run main.go
 
 # Build for production
 build: assets
-	go build -o bin/xanthus cmd/xanthus/main.go
+	go build -o bin/xanthus .
 
 # Build for Windows 64-bit
 build-windows: assets
-	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o bin/xanthus.exe cmd/xanthus/main.go
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o bin/xanthus.exe .
 
 # Build all assets (CSS + JS)
 assets:

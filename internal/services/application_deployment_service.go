@@ -1,7 +1,9 @@
 package services
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"strings"
@@ -16,6 +18,7 @@ type ApplicationDeploymentService struct {
 	helmService *HelmService
 	sshService  *SSHService
 	kvService   *KVService
+	embedFS     *embed.FS
 }
 
 // NewApplicationDeploymentService creates a new ApplicationDeploymentService
@@ -24,6 +27,17 @@ func NewApplicationDeploymentService() *ApplicationDeploymentService {
 		helmService: NewHelmService(),
 		sshService:  NewSSHService(),
 		kvService:   NewKVService(),
+		embedFS:     nil,
+	}
+}
+
+// NewApplicationDeploymentServiceWithEmbedFS creates a new ApplicationDeploymentService with embedded FS
+func NewApplicationDeploymentServiceWithEmbedFS(embedFS *embed.FS) *ApplicationDeploymentService {
+	return &ApplicationDeploymentService{
+		helmService: NewHelmService(),
+		sshService:  NewSSHService(),
+		kvService:   NewKVService(),
+		embedFS:     embedFS,
 	}
 }
 
@@ -308,10 +322,21 @@ func (ads *ApplicationDeploymentService) copyLocalChartToVPS(conn *SSHConnection
 
 // copyFileToVPS copies a local file to the VPS via SSH
 func (ads *ApplicationDeploymentService) copyFileToVPS(conn *SSHConnection, localPath, remotePath string) error {
-	// Read local file
-	content, err := os.ReadFile(localPath)
-	if err != nil {
-		return fmt.Errorf("failed to read local file %s: %v", localPath, err)
+	// Read file - use embedded FS if available
+	var content []byte
+	var err error
+	
+	if ads.embedFS != nil {
+		content, err = fs.ReadFile(*ads.embedFS, localPath)
+		if err != nil {
+			return fmt.Errorf("failed to read embedded file %s: %v", localPath, err)
+		}
+	} else {
+		// Fallback to filesystem
+		content, err = os.ReadFile(localPath)
+		if err != nil {
+			return fmt.Errorf("failed to read local file %s: %v", localPath, err)
+		}
 	}
 
 	// Write to remote file using cat with heredoc

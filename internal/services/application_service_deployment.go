@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -459,10 +460,21 @@ func (s *SimpleApplicationService) copyLocalChartToVPS(conn *SSHConnection, sshS
 
 // copyFileToVPS copies a local file to the VPS via SSH
 func (s *SimpleApplicationService) copyFileToVPS(conn *SSHConnection, sshService *SSHService, localPath, remotePath string) error {
-	// Read local file
-	content, err := os.ReadFile(localPath)
-	if err != nil {
-		return fmt.Errorf("failed to read local file %s: %v", localPath, err)
+	// Read file - use embedded FS if available
+	var content []byte
+	var err error
+	
+	if s.embedFS != nil {
+		content, err = fs.ReadFile(*s.embedFS, localPath)
+		if err != nil {
+			return fmt.Errorf("failed to read embedded file %s: %v", localPath, err)
+		}
+	} else {
+		// Fallback to filesystem
+		content, err = os.ReadFile(localPath)
+		if err != nil {
+			return fmt.Errorf("failed to read local file %s: %v", localPath, err)
+		}
 	}
 
 	// Write to remote file using cat with heredoc

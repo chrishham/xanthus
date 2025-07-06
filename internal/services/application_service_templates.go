@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -23,10 +24,21 @@ func (s *SimpleApplicationService) generateValuesFile(predefinedApp *models.Pred
 func (s *SimpleApplicationService) generateFromTemplate(predefinedApp *models.PredefinedApplication, subdomain, domain, releaseName, timezone string) (string, error) {
 	templatePath := fmt.Sprintf("internal/templates/applications/%s", predefinedApp.HelmChart.ValuesTemplate)
 
-	// Read the template file
-	templateContent, err := os.ReadFile(templatePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read template file %s: %w", templatePath, err)
+	// Read the template file - use embedded FS if available
+	var templateContent []byte
+	var err error
+	
+	if s.embedFS != nil {
+		templateContent, err = fs.ReadFile(*s.embedFS, templatePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read embedded template file %s: %w", templatePath, err)
+		}
+	} else {
+		// Fallback to filesystem
+		templateContent, err = os.ReadFile(templatePath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read template file %s: %w", templatePath, err)
+		}
 	}
 
 	// Use UTC as default timezone if none specified
