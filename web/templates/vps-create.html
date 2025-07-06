@@ -22,7 +22,7 @@
             <div class="flex items-center justify-between">
                 <div>
                     <h2 class="text-3xl font-bold text-gray-900 mb-2">Add VPS</h2>
-                    <p class="text-gray-600">Add a new VPS from Hetzner (automated) or Oracle Cloud (manual setup)</p>
+                    <p class="text-gray-600">Add a new VPS from Hetzner Cloud or Oracle Cloud Infrastructure with automated provisioning</p>
                 </div>
                 <a href="/vps" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -61,17 +61,17 @@
                     
                     <div class="flex-1 h-0.5" :class="currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-300'"></div>
                     
-                    <!-- Step 3: Server Configuration -->
-                    <div class="flex items-center" :class="currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'" x-show="selectedProvider === 'hetzner'">
+                    <!-- Step 3: Server Configuration (Hetzner: Location, OCI: Instance) -->
+                    <div class="flex items-center" :class="currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 3 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
                             <span x-show="currentStep > 3" class="text-sm">✓</span>
                             <span x-show="currentStep <= 3" class="text-sm">3</span>
                         </div>
-                        <span class="ml-2 text-sm font-medium">Location</span>
+                        <span class="ml-2 text-sm font-medium" x-text="selectedProvider === 'hetzner' ? 'Location' : 'Instance'">Configuration</span>
                     </div>
                     
-                    <div class="flex-1 h-0.5" :class="currentStep >= 4 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+                    <div class="flex-1 h-0.5" :class="currentStep >= 4 ? 'bg-blue-600' : 'bg-gray-300'" x-show="selectedProvider === 'hetzner'"></div>
                     
                     <!-- Step 4: Server Type (Hetzner only) -->
                     <div class="flex items-center" :class="currentStep >= 4 ? 'text-blue-600' : 'text-gray-400'" x-show="selectedProvider === 'hetzner'">
@@ -85,11 +85,11 @@
                     
                     <div class="flex-1 h-0.5" :class="currentStep >= 5 ? 'bg-blue-600' : 'bg-gray-300'" x-show="selectedProvider === 'hetzner'"></div>
                     
-                    <!-- Step 5: Review -->
-                    <div class="flex items-center" :class="currentStep >= 5 ? 'text-blue-600' : 'text-gray-400'">
+                    <!-- Step 5: Review (Hetzner only, OCI goes directly to creation) -->
+                    <div class="flex items-center" :class="currentStep >= 5 ? 'text-blue-600' : 'text-gray-400'" x-show="selectedProvider === 'hetzner'">
                         <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
                              :class="currentStep >= 5 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
-                            <span class="text-sm" x-text="selectedProvider === 'hetzner' ? '5' : '3'">5</span>
+                            <span class="text-sm">5</span>
                         </div>
                         <span class="ml-2 text-sm font-medium">Review</span>
                     </div>
@@ -111,7 +111,7 @@
         <!-- Step 1: Provider Selection -->
         <div x-show="currentStep === 1 && !loading" class="bg-white rounded-lg shadow-md p-6">
             <h3 class="text-lg font-medium text-gray-900 mb-4">Step 1: Select Provider</h3>
-            <p class="text-gray-600 mb-6">Choose your cloud provider. Hetzner provides automatic provisioning while OCI requires manual setup.</p>
+            <p class="text-gray-600 mb-6">Choose your cloud provider. Both Hetzner Cloud and Oracle Cloud Infrastructure support automated provisioning with K3s.</p>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- Hetzner Provider -->
@@ -178,27 +178,27 @@
                         </div>
                     </div>
                     <div class="space-y-2">
-                        <div class="flex items-center text-sm text-blue-600">
+                        <div class="flex items-center text-sm text-green-600">
                             <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
                             </svg>
-                            Manual setup process
+                            Automatic provisioning
                         </div>
-                        <div class="flex items-center text-sm text-blue-600">
+                        <div class="flex items-center text-sm text-green-600">
                             <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
                             </svg>
-                            Bring your own instance
+                            Always Free tier support
                         </div>
-                        <div class="flex items-center text-sm text-blue-600">
+                        <div class="flex items-center text-sm text-green-600">
                             <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
                             </svg>
-                            Free tier available
+                            K3s auto-installation
                         </div>
                     </div>
                     <div class="mt-4 text-xs text-gray-500">
-                        Manual instance creation required
+                        Requires OCI API credentials
                     </div>
                 </div>
             </div>
@@ -263,107 +263,126 @@
             </div>
         </div>
 
-        <!-- Step 2: OCI Manual Setup Instructions -->
+        <!-- Step 2: OCI Auth Token Configuration -->
         <div x-show="currentStep === 2 && !loading && selectedProvider === 'oci'" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: OCI Instance Setup</h3>
-            <p class="text-gray-600 mb-6">Follow these steps to create your Oracle Cloud instance and configure it for use with Xanthus.</p>
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: OCI API Credentials</h3>
+            <p class="text-gray-600 mb-6">Configure your Oracle Cloud Infrastructure API credentials for automated instance provisioning.</p>
             
-            <!-- SSH Key Display -->
-            <div class="mb-6">
-                <h4 class="text-md font-medium text-gray-900 mb-3">📋 SSH Public Key (Copy this key for your OCI instance)</h4>
-                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-sm text-gray-500">Public Key:</span>
-                        <button @click="copySSHKey()" class="text-blue-600 hover:text-blue-800 text-sm">
-                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                            </svg>
-                            Copy Key
-                        </button>
-                    </div>
-                    <textarea 
-                        x-model="sshPublicKey" 
-                        readonly 
-                        class="w-full h-24 p-2 text-xs font-mono bg-white border border-gray-300 rounded resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Loading SSH key...">
-                    </textarea>
+            <!-- Instructions Panel -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h4 class="text-md font-medium text-blue-900 mb-2">📋 Getting Your OCI API Credentials</h4>
+                <ol class="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                    <li>Log in to your <a href="https://cloud.oracle.com" target="_blank" class="text-blue-600 hover:underline">Oracle Cloud Console</a></li>
+                    <li>Navigate to <strong>Identity & Security → Users</strong></li>
+                    <li>Click on your username, then <strong>API Keys</strong></li>
+                    <li>Click <strong>Add API Key</strong> and generate a new key pair</li>
+                    <li>Copy the configuration details and paste them below</li>
+                </ol>
+            </div>
+
+            <!-- Token Generator -->
+            <div x-show="!showTokenGenerator" class="space-y-4">
+                <div>
+                    <label for="oci-token" class="block text-sm font-medium text-gray-700 mb-1">OCI Auth Token</label>
+                    <input type="password" 
+                           id="oci-token" 
+                           x-model="ociToken"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Paste your OCI auth token or generate one below">
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="validateOCIToken()" 
+                            :disabled="!ociToken || validatingOCIToken"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                        <span x-show="!validatingOCIToken">Validate & Continue</span>
+                        <span x-show="validatingOCIToken">Validating...</span>
+                    </button>
+                    <button @click="showOCITokenGenerator()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        🔧 Generate Token
+                    </button>
                 </div>
             </div>
-            
-            <!-- Setup Instructions -->
-            <div class="space-y-6">
-                <div class="border-l-4 border-blue-500 pl-4">
-                    <h4 class="text-md font-medium text-gray-900 mb-2">🚀 Step 1: Create OCI Instance</h4>
-                    <ol class="list-decimal list-inside space-y-1 text-sm text-gray-600">
-                        <li>Log in to your <a href="https://cloud.oracle.com" target="_blank" class="text-blue-600 hover:underline">Oracle Cloud Console</a></li>
-                        <li>Navigate to <strong>Compute → Instances</strong></li>
-                        <li>Click <strong>Create Instance</strong></li>
-                        <li>Configure your instance:
-                            <ul class="list-disc list-inside ml-4 mt-1 space-y-1">
-                                <li><strong>Name:</strong> Choose a descriptive name</li>
-                                <li><strong>Image:</strong> Ubuntu 22.04 LTS (Minimal)</li>
-                                <li><strong>Shape:</strong> VM.Standard.A1.Flex (2 OCPU, 12GB RAM) or VM.Standard.E2.1.Micro (Free tier)</li>
-                                <li><strong>Networking:</strong> Default VCN with public subnet</li>
-                                <li><strong>SSH Keys:</strong> Paste the public key above</li>
-                            </ul>
-                        </li>
-                        <li>Click <strong>Create</strong> and wait for the instance to be running</li>
-                    </ol>
+
+            <!-- Built-in Token Generator -->
+            <div x-show="showTokenGenerator" class="space-y-4">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 class="text-md font-medium text-yellow-900 mb-2">🔧 OCI Auth Token Generator</h4>
+                    <p class="text-sm text-yellow-800">Fill in your OCI API credentials to generate a single auth token.</p>
                 </div>
                 
-                <div class="border-l-4 border-green-500 pl-4">
-                    <h4 class="text-md font-medium text-gray-900 mb-2">⚙️ Step 2: Configure Security List</h4>
-                    <ol class="list-decimal list-inside space-y-1 text-sm text-gray-600">
-                        <li>In your instance details, click on the <strong>Subnet</strong> name</li>
-                        <li>Click on <strong>Default Security List</strong></li>
-                        <li>Add these <strong>Ingress Rules</strong>:
-                            <ul class="list-disc list-inside ml-4 mt-1 space-y-1">
-                                <li>HTTP: Port 80, Source: 0.0.0.0/0</li>
-                                <li>HTTPS: Port 443, Source: 0.0.0.0/0</li>
-                                <li>K8s API: Port 6443, Source: 0.0.0.0/0</li>
-                                <li>SSH: Port 22, Source: 0.0.0.0/0 (if not already present)</li>
-                            </ul>
-                        </li>
-                    </ol>
-                </div>
-                
-                <div class="border-l-4 border-purple-500 pl-4">
-                    <h4 class="text-md font-medium text-gray-900 mb-2">📝 Step 3: Fill Instance Details</h4>
-                    <p class="text-sm text-gray-600 mb-3">Once your instance is running, fill in the details below:</p>
-                    
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Instance Name</label>
-                            <input type="text" 
-                                   x-model="ociInstanceName"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                   placeholder="my-oci-instance">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Public IP Address</label>
-                            <input type="text" 
-                                   x-model="ociPublicIP"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                   placeholder="150.230.45.123">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">SSH Username</label>
-                            <input type="text" 
-                                   x-model="ociUsername"
-                                   value="ubuntu"
-                                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                   placeholder="ubuntu">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Instance Shape</label>
-                            <select x-model="ociShape" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="VM.Standard.A1.Flex">VM.Standard.A1.Flex (ARM - Recommended)</option>
-                                <option value="VM.Standard.E2.1.Micro">VM.Standard.E2.1.Micro (x86 - Free Tier)</option>
-                                <option value="VM.Standard.E3.Flex">VM.Standard.E3.Flex (x86 - Flexible)</option>
-                                <option value="Other">Other (specify in name)</option>
-                            </select>
-                        </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tenancy OCID</label>
+                        <input type="text" 
+                               x-model="ociCredentials.tenancy"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="ocid1.tenancy.oc1..aaaa...">
                     </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">User OCID</label>
+                        <input type="text" 
+                               x-model="ociCredentials.user"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="ocid1.user.oc1..bbbb...">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                        <select x-model="ociCredentials.region" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Select Region</option>
+                            <option value="us-phoenix-1">US West (Phoenix)</option>
+                            <option value="us-ashburn-1">US East (Ashburn)</option>
+                            <option value="eu-frankfurt-1">EU Central (Frankfurt)</option>
+                            <option value="uk-london-1">UK South (London)</option>
+                            <option value="ap-tokyo-1">Asia Pacific (Tokyo)</option>
+                            <option value="ap-sydney-1">Asia Pacific (Sydney)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key Fingerprint</label>
+                        <input type="text" 
+                               x-model="ociCredentials.fingerprint"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="aa:bb:cc:dd:ee:ff...">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">API Private Key</label>
+                    <textarea 
+                        x-model="ociCredentials.privateKey"
+                        class="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="-----BEGIN PRIVATE KEY-----
+MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC...
+-----END PRIVATE KEY-----">
+                    </textarea>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="generateOCIToken()" 
+                            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+                        Generate Auth Token
+                    </button>
+                    <button @click="copyOCIToken()" 
+                            :disabled="!ociToken"
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                        📋 Copy Token
+                    </button>
+                    <button @click="hideOCITokenGenerator()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Hide Generator
+                    </button>
+                </div>
+                
+                <div x-show="ociToken" class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Generated Token:</label>
+                    <textarea 
+                        x-model="ociToken" 
+                        readonly 
+                        class="w-full h-20 p-2 text-xs font-mono bg-white border border-gray-300 rounded resize-none focus:outline-none"
+                        placeholder="Generated token will appear here...">
+                    </textarea>
                 </div>
             </div>
             
@@ -372,10 +391,11 @@
                         class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
                     Previous
                 </button>
-                <button @click="nextStep()" 
-                        :disabled="!ociInstanceName || !ociPublicIP || !ociUsername"
+                <button @click="validateOCIToken()" 
+                        :disabled="!ociToken || validatingOCIToken"
                         class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
-                    Continue
+                    <span x-show="!validatingOCIToken">Validate & Continue</span>
+                    <span x-show="validatingOCIToken">Validating...</span>
                 </button>
             </div>
         </div>
@@ -507,69 +527,133 @@
             </div>
         </div>
 
-        <!-- Step 3: OCI Review -->
+        <!-- Step 3: OCI Instance Configuration -->
         <div x-show="currentStep === 3 && !loading && selectedProvider === 'oci'" class="bg-white rounded-lg shadow-md p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Review & Add OCI Instance</h3>
-            <p class="text-gray-600 mb-6">Review your OCI instance configuration and add it to Xanthus management.</p>
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Create OCI Instance</h3>
+            <p class="text-gray-600 mb-6">Configure your Oracle Cloud Infrastructure instance for automated provisioning with K3s.</p>
             
-            <div class="space-y-4 mb-6">
-                <div class="bg-gray-50 p-4 rounded-lg">
-                    <h4 class="font-medium text-gray-900 mb-3">Instance Configuration</h4>
-                    <dl class="space-y-2 text-sm">
+            <div class="space-y-6">
+                <div>
+                    <label for="oci-server-name" class="block text-sm font-medium text-gray-700 mb-1">Instance Name</label>
+                    <input type="text" 
+                           id="oci-server-name" 
+                           x-model="serverName"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                           :placeholder="'xanthus-oci-' + Date.now()">
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-900 mb-3">Instance Configuration</h4>
+                        <dl class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Shape:</dt>
+                                <dd class="font-medium">VM.Standard.A1.Flex</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">OCPU:</dt>
+                                <dd class="font-medium">1 ARM64 vCPU</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Memory:</dt>
+                                <dd class="font-medium">6 GB RAM</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Storage:</dt>
+                                <dd class="font-medium">50 GB Boot Volume</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">OS:</dt>
+                                <dd class="font-medium">Ubuntu 24.04 LTS ARM64</dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Region:</dt>
+                                <dd class="font-medium" x-text="ociCredentials.region"></dd>
+                            </div>
+                        </dl>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-900 mb-3">Included Features</h4>
+                        <ul class="space-y-2 text-sm">
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Ubuntu 24.04 LTS
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                K3s Kubernetes Cluster
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Helm Package Manager
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Network & Security Setup
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                SSH Key Authentication
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="bg-green-50 border border-green-200 p-4 rounded-lg">
+                    <h4 class="font-medium text-green-900 mb-2">💰 Always Free Tier</h4>
+                    <div class="space-y-1 text-sm">
                         <div class="flex justify-between">
-                            <dt class="text-gray-500">Provider:</dt>
-                            <dd class="font-medium">Oracle Cloud Infrastructure (OCI)</dd>
+                            <span class="text-green-700">Instance Cost:</span>
+                            <span class="font-medium text-green-900">FREE (Always Free)</span>
                         </div>
                         <div class="flex justify-between">
-                            <dt class="text-gray-500">Instance Name:</dt>
-                            <dd class="font-medium" x-text="ociInstanceName"></dd>
+                            <span class="text-green-700">Network Resources:</span>
+                            <span class="font-medium text-green-900">FREE (Always Free)</span>
                         </div>
-                        <div class="flex justify-between">
-                            <dt class="text-gray-500">Public IP:</dt>
-                            <dd class="font-medium" x-text="ociPublicIP"></dd>
+                        <div class="border-t border-green-200 pt-1 mt-2 flex justify-between font-medium">
+                            <span class="text-green-900">Total Monthly:</span>
+                            <span class="text-green-900">$0.00 USD</span>
                         </div>
-                        <div class="flex justify-between">
-                            <dt class="text-gray-500">SSH Username:</dt>
-                            <dd class="font-medium" x-text="ociUsername"></dd>
+                        <div class="mt-2 pt-1 border-t border-green-200">
+                            <p class="text-xs text-green-600">💡 <strong>Always Free:</strong> This configuration uses OCI Always Free tier resources</p>
+                            <p class="text-xs text-green-600 mt-1">⏱️ <strong>Setup Time:</strong> Instance provisioning typically takes 3-5 minutes</p>
                         </div>
-                        <div class="flex justify-between">
-                            <dt class="text-gray-500">Instance Shape:</dt>
-                            <dd class="font-medium" x-text="ociShape"></dd>
-                        </div>
-                    </dl>
+                    </div>
                 </div>
                 
                 <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                    <h4 class="font-medium text-blue-900 mb-2">🔧 Next Steps After Adding</h4>
+                    <h4 class="font-medium text-blue-900 mb-2">🔧 Automated Setup Process</h4>
                     <ul class="space-y-1 text-sm text-blue-800">
-                        <li>• Xanthus will connect to your instance via SSH</li>
-                        <li>• K3s Kubernetes cluster will be automatically installed</li>
-                        <li>• Helm package manager will be set up</li>
-                        <li>• Instance will be ready for application deployments</li>
-                    </ul>
-                </div>
-                
-                <div class="bg-amber-50 border border-amber-200 p-4 rounded-lg">
-                    <h4 class="font-medium text-amber-900 mb-2">⚠️ Important Notes</h4>
-                    <ul class="space-y-1 text-sm text-amber-800">
-                        <li>• Ensure your OCI instance is running and accessible</li>
-                        <li>• Security list rules must allow ports 80, 443, and 6443</li>
-                        <li>• The SSH key must be correctly configured on the instance</li>
-                        <li>• Initial setup may take 5-10 minutes to complete</li>
+                        <li>• Create VCN and network resources if needed</li>
+                        <li>• Launch compute instance with Ubuntu 24.04</li>
+                        <li>• Configure security groups for K3s ports</li>
+                        <li>• Install and configure K3s Kubernetes cluster</li>
+                        <li>• Set up Helm and prepare for application deployment</li>
                     </ul>
                 </div>
             </div>
             
-            <div class="flex justify-between">
+            <div class="flex justify-between mt-6">
                 <button @click="previousStep()" 
                         class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
                     Previous
                 </button>
-                <button @click="addOCIInstance()" 
-                        :disabled="!ociInstanceName || !ociPublicIP || !ociUsername || creating"
+                <button @click="createOCIInstance()" 
+                        :disabled="!serverName || creating"
                         class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
-                    <span x-show="!creating">Add OCI Instance</span>
-                    <span x-show="creating">Setting up...</span>
+                    <span x-show="!creating">Create OCI Instance</span>
+                    <span x-show="creating">Creating...</span>
                 </button>
             </div>
         </div>

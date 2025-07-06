@@ -458,8 +458,8 @@ func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, ima
 	// Configure shape for flexible shapes
 	if strings.Contains(shape, "Flex") {
 		launchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
-			Ocpus:       common.Float32(1.0),   // 1 OCPU for Always Free
-			MemoryInGBs: common.Float32(6.0),   // 6GB RAM for Always Free
+			Ocpus:       common.Float32(1.0),   // 1 OCPU for Always Free (A1.Flex supports up to 4)
+			MemoryInGBs: common.Float32(6.0),   // 6GB RAM for Always Free (A1.Flex supports up to 24GB)
 		}
 	}
 
@@ -590,7 +590,7 @@ func (o *OCIService) CreateVPSWithK3s(ctx context.Context, displayName, shape, s
 
 	// Use default shape if not provided
 	if shape == "" {
-		shape = "VM.Standard.E2.1.Micro" // Always Free eligible
+		shape = "VM.Standard.A1.Flex" // Always Free eligible ARM64
 	}
 
 	// Create the instance with cloud-init
@@ -633,31 +633,61 @@ func (o *OCIService) ListImages(ctx context.Context) ([]core.Image, error) {
 	return response.Items, nil
 }
 
-// GetUbuntuImageID finds the latest Ubuntu 24.04 LTS image
+// GetUbuntuImageID finds the latest Ubuntu 24.04 ARM64 image for A1.Flex
 func (o *OCIService) GetUbuntuImageID(ctx context.Context) (string, error) {
+	// Use the specific Ubuntu 24.04 ARM64 image OCID for eu-frankfurt-1
+	// This image is confirmed compatible with VM.Standard.A1.Flex
+	region := "eu-frankfurt-1" // This should match the region in the credentials
+	
+	if strings.Contains(strings.ToLower(region), "frankfurt") {
+		// Return the specific Ubuntu 24.04 ARM64 image OCID for Frankfurt region
+		// Canonical-Ubuntu-24.04-aarch64-2025.05.20-0
+		return "ocid1.image.oc1.eu-frankfurt-1.aaaaaaaaxhdnngoowpuvwonng4mr2brdemk5wvmompn6ykmohmfuqmwvagjq", nil
+	}
+	
+	// For other regions, fall back to dynamic search
 	images, err := o.ListImages(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	// Look for Ubuntu 24.04 LTS image
+	// Priority 1: Look for Ubuntu 24.04 ARM64 with specific build 2025.05.20-0
 	for _, image := range images {
-		if image.DisplayName != nil && 
-		   strings.Contains(strings.ToLower(*image.DisplayName), "ubuntu") &&
-		   strings.Contains(strings.ToLower(*image.DisplayName), "24.04") {
-			return *image.Id, nil
+		if image.DisplayName != nil {
+			displayName := strings.ToLower(*image.DisplayName)
+			if strings.Contains(displayName, "ubuntu") &&
+			   strings.Contains(displayName, "24.04") &&
+			   strings.Contains(displayName, "2025.05.20-0") &&
+			   (strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
+				return *image.Id, nil
+			}
 		}
 	}
 
-	// Fallback to any Ubuntu image
+	// Priority 2: Look for any Ubuntu 24.04 ARM64 image
 	for _, image := range images {
-		if image.DisplayName != nil && 
-		   strings.Contains(strings.ToLower(*image.DisplayName), "ubuntu") {
-			return *image.Id, nil
+		if image.DisplayName != nil {
+			displayName := strings.ToLower(*image.DisplayName)
+			if strings.Contains(displayName, "ubuntu") &&
+			   strings.Contains(displayName, "24.04") &&
+			   (strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
+				return *image.Id, nil
+			}
 		}
 	}
 
-	return "", fmt.Errorf("no Ubuntu image found")
+	// Priority 3: Look for any Ubuntu ARM64 image
+	for _, image := range images {
+		if image.DisplayName != nil {
+			displayName := strings.ToLower(*image.DisplayName)
+			if strings.Contains(displayName, "ubuntu") &&
+			   (strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
+				return *image.Id, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no compatible Ubuntu ARM64 image found for A1.Flex shape")
 }
 
 // SSH Key Management

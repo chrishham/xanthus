@@ -530,7 +530,7 @@ export function vpsCreationWizard() {
                     },
                     body: JSON.stringify({
                         name: this.serverName,
-                        shape: 'VM.Standard.E2.1.Micro', // Always Free tier
+                        shape: 'VM.Standard.A1.Flex', // Always Free tier ARM64
                         region: this.ociCredentials.region,
                         timezone: 'UTC'
                     })
