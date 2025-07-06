@@ -345,3 +345,371 @@ func (h *VPSLifecycleHandler) HandleVPSPowerOn(c *gin.Context) {
 func (h *VPSLifecycleHandler) HandleVPSReboot(c *gin.Context) {
 	h.performServerAction(c, "reboot")
 }
+
+// HandleOCICreate creates a new OCI compute instance with K3s setup
+func (h *VPSLifecycleHandler) HandleOCICreate(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	// Parse request data
+	var req struct {
+		Name       string `json:"name" binding:"required"`
+		Shape      string `json:"shape" binding:"required"`
+		Region     string `json:"region"`
+		Timezone   string `json:"timezone"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.JSONBadRequest(c, "Invalid request data: "+err.Error())
+		return
+	}
+
+	// Get OCI auth token
+	ociToken, err := utils.GetOCIAuthToken(token, accountID)
+	if err != nil {
+		log.Printf("OCI Create: Failed to retrieve OCI auth token for account %s: %v", accountID, err)
+		utils.JSONInternalServerError(c, "OCI auth token not found. Please configure your OCI credentials first.")
+		return
+	}
+
+	// Create OCI service
+	ociService, err := services.NewOCIService(ociToken)
+	if err != nil {
+		log.Printf("OCI Create: Failed to create OCI service: %v", err)
+		utils.JSONInternalServerError(c, "Failed to initialize OCI service")
+		return
+	}
+
+	// Test connection
+	ctx := c.Request.Context()
+	if err := ociService.TestConnection(ctx); err != nil {
+		log.Printf("OCI Create: Connection test failed: %v", err)
+		utils.JSONInternalServerError(c, "Failed to connect to OCI")
+		return
+	}
+
+	// Get SSH keys
+	client := &http.Client{Timeout: 10 * time.Second}
+	var csrConfig struct {
+		CSR        string `json:"csr"`
+		PrivateKey string `json:"private_key"`
+		CreatedAt  string `json:"created_at"`
+	}
+	if err := utils.GetKVValue(client, token, accountID, "config:ssl:csr", &csrConfig); err != nil {
+		log.Printf("Error getting CSR from KV: %v", err)
+		utils.JSONInternalServerError(c, "SSL CSR configuration not found. Please logout and login again.")
+		return
+	}
+
+	// Convert to SSH public key
+	sshPublicKey, err := h.cfService.ConvertPrivateKeyToSSH(csrConfig.PrivateKey)
+	if err != nil {
+		log.Printf("Error converting private key to SSH: %v", err)
+		utils.JSONInternalServerError(c, "Failed to generate SSH key from CSR")
+		return
+	}
+
+	// Use default timezone if not provided
+	timezone := req.Timezone
+	if timezone == "" {
+		timezone = "UTC"
+	}
+
+	// Create VPS with K3s using OCI service
+	log.Printf("Creating OCI instance: %s with shape %s", req.Name, req.Shape)
+	ociInstance, err := ociService.CreateVPSWithK3s(ctx, req.Name, req.Shape, sshPublicKey, timezone)
+	if err != nil {
+		log.Printf("Error creating OCI instance: %v", err)
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to create OCI instance: %v", err))
+		return
+	}
+
+	// Create VPS config in KV store
+	serverID := int(time.Now().Unix()) // Generate unique ID
+	vpsConfig, err := h.vpsService.CreateOCIVPSConfig(
+		token, accountID,
+		ociInstance.DisplayName, ociInstance.PublicIP, "ubuntu", ociInstance.Shape,
+		serverID, csrConfig.PrivateKey, sshPublicKey,
+	)
+	if err != nil {
+		log.Printf("Error creating OCI VPS config: %v", err)
+		// Instance was created but config failed - log this for cleanup
+		log.Printf("WARNING: OCI instance %s (%s) was created but config storage failed", ociInstance.ID, ociInstance.PublicIP)
+		utils.JSONInternalServerError(c, "Instance created but configuration storage failed")
+		return
+	}
+
+	// Also store the OCI instance ID for future management
+	vpsConfig.ProviderInstanceID = ociInstance.ID
+	if err := h.vpsService.UpdateVPSConfig(token, accountID, serverID, vpsConfig); err != nil {
+		log.Printf("Warning: Failed to update VPS config with OCI instance ID: %v", err)
+	}
+
+	log.Printf("✅ Created OCI instance: %s (ID: %s) with IP: %s", ociInstance.DisplayName, ociInstance.ID, ociInstance.PublicIP)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "OCI instance created successfully with K3s and Helm",
+		"server": gin.H{
+			"id":   serverID,
+			"name": ociInstance.DisplayName,
+			"oci_id": ociInstance.ID,
+			"public_net": gin.H{
+				"ipv4": gin.H{
+					"ip": ociInstance.PublicIP,
+				},
+			},
+			"lifecycle_state": ociInstance.LifecycleState,
+			"shape": ociInstance.Shape,
+			"availability_domain": ociInstance.AvailabilityDomain,
+		},
+		"config": vpsConfig,
+	})
+}
+
+// HandleOCIDelete deletes an OCI instance and cleans up configuration
+func (h *VPSLifecycleHandler) HandleOCIDelete(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	serverIDStr := c.PostForm("server_id")
+	serverID, err := utils.ParseServerID(serverIDStr)
+	if err != nil {
+		utils.JSONServerIDInvalid(c)
+		return
+	}
+
+	// Get VPS config to get the OCI instance ID
+	vpsConfig, err := h.vpsService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Error getting VPS config for deletion: %v", err)
+		utils.JSONInternalServerError(c, "Failed to get VPS configuration")
+		return
+	}
+
+	// Verify it's an OCI instance
+	if vpsConfig.Provider != "oci" && vpsConfig.Provider != "OCI" && vpsConfig.Provider != "Oracle Cloud Infrastructure (OCI)" {
+		utils.JSONBadRequest(c, "This endpoint is only for OCI instances")
+		return
+	}
+
+	// Get OCI auth token
+	ociToken, err := utils.GetOCIAuthToken(token, accountID)
+	if err != nil {
+		log.Printf("OCI Delete: Failed to retrieve OCI auth token: %v", err)
+		// Still try to clean up local config even if we can't delete the instance
+		log.Printf("Cleaning up local configuration for server %d", serverID)
+		if err := h.vpsService.DeleteVPSConfig(token, accountID, serverID); err != nil {
+			log.Printf("Error cleaning up VPS config: %v", err)
+		}
+		utils.JSONInternalServerError(c, "OCI auth token not found, but local configuration cleaned up")
+		return
+	}
+
+	// Create OCI service
+	ociService, err := services.NewOCIService(ociToken)
+	if err != nil {
+		log.Printf("OCI Delete: Failed to create OCI service: %v", err)
+		utils.JSONInternalServerError(c, "Failed to initialize OCI service")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Delete the OCI instance if we have the instance ID
+	if vpsConfig.ProviderInstanceID != "" {
+		log.Printf("Deleting OCI instance: %s", vpsConfig.ProviderInstanceID)
+		if err := ociService.DeleteVPSWithCleanup(ctx, vpsConfig.ProviderInstanceID, false); err != nil {
+			log.Printf("Error deleting OCI instance %s: %v", vpsConfig.ProviderInstanceID, err)
+			// Continue with local cleanup even if cloud deletion fails
+		} else {
+			log.Printf("✅ Deleted OCI instance: %s", vpsConfig.ProviderInstanceID)
+		}
+	} else {
+		log.Printf("Warning: No OCI instance ID found for server %d, skipping cloud deletion", serverID)
+	}
+
+	// Clean up local configuration
+	if err := h.vpsService.DeleteVPSConfig(token, accountID, serverID); err != nil {
+		log.Printf("Error cleaning up VPS config: %v", err)
+		utils.JSONInternalServerError(c, "Failed to clean up VPS configuration")
+		return
+	}
+
+	log.Printf("✅ Deleted OCI instance and cleaned up configuration for server: %s (ID: %d)", vpsConfig.Name, serverID)
+	utils.VPSDeletionSuccess(c)
+}
+
+// HandleOCIPowerOff powers off an OCI instance
+func (h *VPSLifecycleHandler) HandleOCIPowerOff(c *gin.Context) {
+	h.performOCIServerAction(c, "poweroff")
+}
+
+// HandleOCIPowerOn powers on an OCI instance
+func (h *VPSLifecycleHandler) HandleOCIPowerOn(c *gin.Context) {
+	h.performOCIServerAction(c, "poweron")
+}
+
+// HandleOCIReboot reboots an OCI instance
+func (h *VPSLifecycleHandler) HandleOCIReboot(c *gin.Context) {
+	h.performOCIServerAction(c, "reboot")
+}
+
+// performOCIServerAction is a helper for OCI server power management actions
+func (h *VPSLifecycleHandler) performOCIServerAction(c *gin.Context, action string) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	serverIDStr := c.PostForm("server_id")
+	serverID, err := utils.ParseServerID(serverIDStr)
+	if err != nil {
+		utils.JSONServerIDInvalid(c)
+		return
+	}
+
+	// Get VPS config to get the OCI instance ID
+	vpsConfig, err := h.vpsService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Error getting VPS config for action %s: %v", action, err)
+		utils.JSONInternalServerError(c, "Failed to get VPS configuration")
+		return
+	}
+
+	// Verify it's an OCI instance
+	if vpsConfig.Provider != "oci" && vpsConfig.Provider != "OCI" && vpsConfig.Provider != "Oracle Cloud Infrastructure (OCI)" {
+		utils.JSONBadRequest(c, "This endpoint is only for OCI instances")
+		return
+	}
+
+	if vpsConfig.ProviderInstanceID == "" {
+		utils.JSONInternalServerError(c, "OCI instance ID not found in configuration")
+		return
+	}
+
+	// Get OCI auth token
+	ociToken, err := utils.GetOCIAuthToken(token, accountID)
+	if err != nil {
+		log.Printf("OCI %s: Failed to retrieve OCI auth token: %v", action, err)
+		utils.JSONInternalServerError(c, "OCI auth token not found")
+		return
+	}
+
+	// Create OCI service
+	ociService, err := services.NewOCIService(ociToken)
+	if err != nil {
+		log.Printf("OCI %s: Failed to create OCI service: %v", action, err)
+		utils.JSONInternalServerError(c, "Failed to initialize OCI service")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Perform the action
+	var actionErr error
+	switch action {
+	case "poweroff":
+		actionErr = ociService.PowerOffInstance(ctx, vpsConfig.ProviderInstanceID)
+	case "poweron":
+		actionErr = ociService.PowerOnInstance(ctx, vpsConfig.ProviderInstanceID)
+	case "reboot":
+		actionErr = ociService.RebootInstance(ctx, vpsConfig.ProviderInstanceID)
+	default:
+		utils.JSONBadRequest(c, "Invalid action")
+		return
+	}
+
+	if actionErr != nil {
+		log.Printf("Error performing %s on OCI instance %s: %v", action, vpsConfig.ProviderInstanceID, actionErr)
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to %s instance", action))
+		return
+	}
+
+	log.Printf("✅ Successfully performed %s on OCI instance: %s", action, vpsConfig.ProviderInstanceID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": fmt.Sprintf("Server %s completed successfully", action),
+	})
+}
+
+// HandleOCIValidateToken validates an OCI auth token
+func (h *VPSLifecycleHandler) HandleOCIValidateToken(c *gin.Context) {
+	var req struct {
+		Token string `json:"token" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.JSONBadRequest(c, "Invalid request data")
+		return
+	}
+
+	// Validate the token format
+	if err := utils.ValidateOCIToken(req.Token); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"valid": false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Try to create service and test connection
+	ociService, err := services.NewOCIService(req.Token)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"valid": false,
+			"error": fmt.Sprintf("Failed to create OCI service: %v", err),
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := ociService.TestConnection(ctx); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"valid": false,
+			"error": fmt.Sprintf("Connection test failed: %v", err),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"valid": true,
+		"message": "OCI auth token is valid",
+	})
+}
+
+// HandleOCIStoreToken stores an OCI auth token in KV
+func (h *VPSLifecycleHandler) HandleOCIStoreToken(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	var req struct {
+		OCIToken string `json:"oci_token" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.JSONBadRequest(c, "Invalid request data")
+		return
+	}
+
+	// Validate and store the token
+	if err := utils.SetOCIAuthToken(token, accountID, req.OCIToken); err != nil {
+		log.Printf("Error storing OCI auth token: %v", err)
+		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to store OCI auth token: %v", err))
+		return
+	}
+
+	log.Printf("✅ Stored OCI auth token for account %s", accountID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "OCI auth token stored successfully",
+	})
+}

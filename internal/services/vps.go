@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
@@ -29,6 +30,118 @@ func NewVPSService() *VPSService {
 		cache:    NewCacheService(),
 		provider: NewProviderResolver(kvService),
 	}
+}
+
+// CreateOCIVPSWithConfig creates an OCI VPS instance with full configuration
+func (vs *VPSService) CreateOCIVPSWithConfig(
+	token, accountID, ociAuthToken,
+	name, shape, region,
+	sshPublicKey, timezone string,
+	hourlyRate, monthlyRate float64,
+) (*OCIInstance, *VPSConfig, error) {
+	// Create OCI service
+	ociService, err := NewOCIService(ociAuthToken)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create OCI service: %w", err)
+	}
+
+	// Create VPS instance
+	instance, err := ociService.CreateVPSWithK3s(context.Background(), name, shape, sshPublicKey, timezone)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create OCI instance: %w", err)
+	}
+
+	// Create VPS configuration
+	vpsConfig := &VPSConfig{
+		ServerID:           vs.parseOCIInstanceID(instance.ID),
+		Name:               instance.DisplayName,
+		Provider:           "Oracle Cloud Infrastructure (OCI)",
+		Location:           region,
+		ServerType:         shape,
+		PublicIPv4:         instance.PublicIP,
+		CreatedAt:          time.Now().Format(time.RFC3339),
+		Timezone:           timezone,
+		SSHUser:            "ubuntu", // OCI default
+		SSHPort:            22,
+		HourlyRate:         hourlyRate,
+		MonthlyRate:        monthlyRate,
+		ProviderInstanceID: instance.ID,
+	}
+
+	// Store VPS configuration
+	err = vs.kv.StoreVPSConfig(token, accountID, vpsConfig)
+	if err != nil {
+		// Attempt to cleanup the created instance if config storage fails
+		_ = ociService.TerminateInstance(context.Background(), instance.ID)
+		return nil, nil, fmt.Errorf("failed to store VPS configuration: %w", err)
+	}
+
+	return instance, vpsConfig, nil
+}
+
+// parseOCIInstanceID converts OCI instance OCID to integer for storage compatibility
+func (vs *VPSService) parseOCIInstanceID(instanceID string) int {
+	// Since OCI uses OCIDs (not simple integers), we'll use a hash approach
+	// This is a simple approach - in production you might want a more sophisticated mapping
+	hash := 0
+	for _, char := range instanceID {
+		hash = hash*31 + int(char)
+	}
+	if hash < 0 {
+		hash = -hash
+	}
+	// Use last 8 digits to avoid overflow and ensure uniqueness within reasonable bounds
+	return hash % 100000000
+}
+
+// DeleteOCIVPS deletes an OCI VPS instance and cleans up configuration
+func (vs *VPSService) DeleteOCIVPS(token, accountID, ociAuthToken string, serverID int) error {
+	// Get VPS configuration to get the actual OCI instance ID
+	vpsConfig, err := vs.kv.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS config: %w", err)
+	}
+
+	// We need to store the actual OCI instance ID in the config for proper deletion
+	// For now, this is a limitation - we'll need to improve the storage approach
+	
+	// Create OCI service
+	ociService, err := NewOCIService(ociAuthToken)
+	if err != nil {
+		return fmt.Errorf("failed to create OCI service: %w", err)
+	}
+
+	// List instances to find the one with matching name/IP
+	instances, err := ociService.ListInstances(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to list OCI instances: %w", err)
+	}
+
+	var instanceID string
+	for _, instance := range instances {
+		if instance.DisplayName == vpsConfig.Name || instance.PublicIP == vpsConfig.PublicIPv4 {
+			instanceID = instance.ID
+			break
+		}
+	}
+
+	if instanceID == "" {
+		return fmt.Errorf("could not find OCI instance for VPS %d", serverID)
+	}
+
+	// Delete the instance
+	err = ociService.TerminateInstance(context.Background(), instanceID)
+	if err != nil {
+		return fmt.Errorf("failed to terminate OCI instance: %w", err)
+	}
+
+	// Remove VPS configuration
+	err = vs.kv.DeleteVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Warning: Failed to delete VPS config for %d: %v", serverID, err)
+	}
+
+	return nil
 }
 
 // EnhancedVPS represents a VPS with additional cost and status information
@@ -552,3 +665,19 @@ func (vs *VPSService) UpdateVPSSSHUser(token, accountID string, serverID int) er
 
 	return nil
 }
+
+// UpdateVPSConfig updates a VPS configuration
+func (vs *VPSService) UpdateVPSConfig(token, accountID string, serverID int, vpsConfig *VPSConfig) error {
+	return vs.kv.StoreVPSConfig(token, accountID, vpsConfig)
+}
+
+// GetVPSConfig retrieves a VPS configuration
+func (vs *VPSService) GetVPSConfig(token, accountID string, serverID int) (*VPSConfig, error) {
+	return vs.kv.GetVPSConfig(token, accountID, serverID)
+}
+
+// DeleteVPSConfig deletes a VPS configuration
+func (vs *VPSService) DeleteVPSConfig(token, accountID string, serverID int) error {
+	return vs.kv.DeleteVPSConfig(token, accountID, serverID)
+}
+

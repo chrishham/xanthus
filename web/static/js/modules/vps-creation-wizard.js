@@ -132,6 +132,128 @@ export function vpsCreationWizard() {
                 this.validatingKey = false;
             }
         },
+
+        // OCI Token Generator and Validation
+        ociCredentials: {
+            tenancy: '',
+            user: '',
+            region: 'us-phoenix-1',
+            fingerprint: '',
+            privateKey: ''
+        },
+        ociToken: '',
+        showTokenGenerator: false,
+        validatingOCIToken: false,
+
+        showOCITokenGenerator() {
+            this.showTokenGenerator = true;
+        },
+
+        hideOCITokenGenerator() {
+            this.showTokenGenerator = false;
+        },
+
+        generateOCIToken() {
+            if (!this.ociCredentials.tenancy || !this.ociCredentials.user || 
+                !this.ociCredentials.region || !this.ociCredentials.fingerprint || 
+                !this.ociCredentials.privateKey) {
+                Swal.fire('Missing Information', 'Please fill in all OCI credential fields', 'warning');
+                return;
+            }
+
+            try {
+                const tokenData = {
+                    tenancy: this.ociCredentials.tenancy,
+                    user: this.ociCredentials.user,
+                    region: this.ociCredentials.region,
+                    fingerprint: this.ociCredentials.fingerprint,
+                    private_key: this.ociCredentials.privateKey
+                };
+
+                // Base64 encode the JSON
+                this.ociToken = btoa(JSON.stringify(tokenData));
+                
+                Swal.fire({
+                    title: 'Token Generated!',
+                    text: 'Your OCI auth token has been generated successfully.',
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            } catch (error) {
+                console.error('Error generating OCI token:', error);
+                Swal.fire('Error', 'Failed to generate OCI token', 'error');
+            }
+        },
+
+        async validateOCIToken() {
+            if (!this.ociToken) {
+                Swal.fire('Missing Token', 'Please provide an OCI auth token', 'warning');
+                return;
+            }
+            
+            this.validatingOCIToken = true;
+            try {
+                const response = await fetch('/vps/oci/validate-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ token: this.ociToken })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Store the token and proceed
+                    await this.storeOCIToken();
+                    this.currentStep = 3; // Go to OCI instance creation step
+                } else {
+                    Swal.fire('Invalid Token', data.error || 'The OCI auth token is invalid', 'error');
+                }
+            } catch (error) {
+                console.error('Error validating OCI token:', error);
+                Swal.fire('Error', 'Failed to validate OCI token', 'error');
+            } finally {
+                this.validatingOCIToken = false;
+            }
+        },
+
+        async storeOCIToken() {
+            try {
+                const response = await fetch('/vps/oci/store-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ oci_token: this.ociToken })
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    throw new Error(data.error || 'Failed to store OCI token');
+                }
+            } catch (error) {
+                console.error('Error storing OCI token:', error);
+                Swal.fire('Warning', 'Token validated but storage failed. You may need to re-enter it.', 'warning');
+            }
+        },
+
+        copyOCIToken() {
+            if (!this.ociToken) return;
+            
+            navigator.clipboard.writeText(this.ociToken).then(() => {
+                Swal.fire({
+                    title: 'Copied!',
+                    text: 'OCI auth token copied to clipboard',
+                    icon: 'success',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            }).catch(() => {
+                Swal.fire('Error', 'Failed to copy token to clipboard', 'error');
+            });
+        },
         
         async loadLocations() {
             this.loading = true;
@@ -388,6 +510,64 @@ export function vpsCreationWizard() {
                 console.error('Error creating VPS:', error);
                 this.loading = false;
                 Swal.fire('Error', 'Failed to create VPS', 'error');
+            } finally {
+                this.creating = false;
+            }
+        },
+
+        async createOCIInstance() {
+            if (!this.serverName || !this.ociCredentials.region) return;
+            
+            this.creating = true;
+            this.loading = true;
+            this.loadingMessage = `Creating OCI instance "${this.serverName}"...`;
+            
+            try {
+                const response = await fetch('/vps/oci/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: this.serverName,
+                        shape: 'VM.Standard.E2.1.Micro', // Always Free tier
+                        region: this.ociCredentials.region,
+                        timezone: 'UTC'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    this.loadingMessage = 'OCI instance created successfully! Redirecting...';
+                    
+                    // Brief pause to show success message
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    
+                    await Swal.fire({
+                        title: 'OCI Instance Created Successfully!',
+                        html: `
+                            <div class="text-left">
+                                <p class="mb-2">Your OCI instance "${this.serverName}" has been created and configured.</p>
+                                <p class="mb-2">K3s and Helm are being installed automatically.</p>
+                                <p class="mb-2"><strong>Instance ID:</strong> ${data.server.oci_id}</p>
+                                <p class="mb-2"><strong>IP Address:</strong> ${data.server.public_net.ipv4.ip}</p>
+                                <p class="text-sm text-gray-600">You will be redirected to the VPS management page.</p>
+                            </div>
+                        `,
+                        icon: 'success',
+                        confirmButtonText: 'Go to VPS Management'
+                    });
+                    
+                    window.location.href = '/vps';
+                } else {
+                    this.loading = false;
+                    Swal.fire('Error', data.error || 'Failed to create OCI instance', 'error');
+                }
+            } catch (error) {
+                console.error('Error creating OCI instance:', error);
+                this.loading = false;
+                Swal.fire('Error', 'Failed to create OCI instance', 'error');
             } finally {
                 this.creating = false;
             }

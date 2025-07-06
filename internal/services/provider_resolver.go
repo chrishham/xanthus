@@ -48,10 +48,22 @@ func (pr *ProviderResolver) GetProviderDefaults(provider string) *ProviderDefaul
 		return &ProviderDefaults{
 			DefaultSSHUser:      "ubuntu", // Common default for OCI instances
 			DefaultSSHPort:      22,
-			SupportsAPICreation: false,
+			SupportsAPICreation: true, // Now supports API creation
 			LocationTimezones: map[string]string{
-				"oracle-cloud": "UTC",
-				"default":      "UTC",
+				"us-phoenix-1":   "America/Phoenix",
+				"us-ashburn-1":   "America/New_York",
+				"eu-frankfurt-1": "Europe/Berlin",
+				"eu-zurich-1":    "Europe/Zurich",
+				"uk-london-1":    "Europe/London",
+				"ap-mumbai-1":    "Asia/Kolkata",
+				"ap-seoul-1":     "Asia/Seoul",
+				"ap-sydney-1":    "Australia/Sydney",
+				"ap-tokyo-1":     "Asia/Tokyo",
+				"sa-saopaulo-1":  "America/Sao_Paulo",
+				"ca-toronto-1":   "America/Toronto",
+				"ca-montreal-1":  "America/Montreal",
+				"oracle-cloud":   "UTC",
+				"default":        "UTC",
 			},
 		}
 	case "AWS":

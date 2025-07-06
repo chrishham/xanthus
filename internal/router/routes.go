@@ -93,6 +93,18 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		vps.GET("/oci-ssh-key", config.VPSLifecycleHandler.HandleSSHKey)
 		vps.POST("/add-oci", config.VPSLifecycleHandler.HandleAddOCI)
 
+		// OCI automation routes
+		oci := vps.Group("/oci")
+		{
+			oci.POST("/validate-token", config.VPSLifecycleHandler.HandleOCIValidateToken)
+			oci.POST("/store-token", config.VPSLifecycleHandler.HandleOCIStoreToken)
+			oci.POST("/create", config.VPSLifecycleHandler.HandleOCICreate)
+			oci.POST("/delete", config.VPSLifecycleHandler.HandleOCIDelete)
+			oci.POST("/poweroff", config.VPSLifecycleHandler.HandleOCIPowerOff)
+			oci.POST("/poweron", config.VPSLifecycleHandler.HandleOCIPowerOn)
+			oci.POST("/reboot", config.VPSLifecycleHandler.HandleOCIReboot)
+		}
+
 		// Configuration routes
 		vps.GET("/check-key", config.VPSConfigHandler.HandleVPSCheckKey)
 		vps.POST("/validate-key", config.VPSConfigHandler.HandleVPSValidateKey)
