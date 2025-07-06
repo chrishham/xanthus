@@ -213,6 +213,9 @@ func (h *VPSLifecycleHandler) HandleVPSDelete(c *gin.Context) {
 		serverName = vpsConfig.Name
 	}
 
+	// Invalidate VPS cache to ensure immediate UI update
+	h.vpsService.InvalidateVPSCache(accountID)
+
 	log.Printf("✅ Deleted server: %s (ID: %d) and cleaned up configuration", serverName, serverID)
 	utils.VPSDeletionSuccess(c)
 }
@@ -594,6 +597,9 @@ func (h *VPSLifecycleHandler) HandleOCIDelete(c *gin.Context) {
 		return
 	}
 
+	// Invalidate VPS cache to ensure immediate UI update
+	h.vpsService.InvalidateVPSCache(accountID)
+
 	log.Printf("✅ Deleted OCI instance and cleaned up configuration for server: %s (ID: %d)", vpsConfig.Name, serverID)
 	utils.VPSDeletionSuccess(c)
 }
@@ -839,5 +845,76 @@ func (h *VPSLifecycleHandler) HandleOCIGetHomeRegion(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success":     true,
 		"home_region": homeRegion,
+	})
+}
+
+// HandleUpdateVPSConfig allows manual updates to VPS configuration
+func (h *VPSLifecycleHandler) HandleUpdateVPSConfig(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	serverIDStr := c.Param("id")
+	serverID, err := utils.ParseServerID(serverIDStr)
+	if err != nil {
+		utils.JSONServerIDInvalid(c)
+		return
+	}
+
+	// Parse request body
+	var updateRequest struct {
+		Region   string  `json:"region,omitempty"`
+		OCPU     float32 `json:"ocpu,omitempty"`
+		Memory   float32 `json:"memory,omitempty"`
+		Timezone string  `json:"timezone,omitempty"`
+		Location string  `json:"location,omitempty"`
+	}
+
+	if err := c.ShouldBindJSON(&updateRequest); err != nil {
+		utils.JSONBadRequest(c, "Invalid request format")
+		return
+	}
+
+	// Get existing VPS config
+	vpsConfig, err := h.vpsService.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		log.Printf("Error getting VPS config for update: %v", err)
+		utils.JSONInternalServerError(c, "Failed to get VPS configuration")
+		return
+	}
+
+	// Update fields if provided
+	if updateRequest.Region != "" {
+		vpsConfig.Region = updateRequest.Region
+	}
+	if updateRequest.OCPU > 0 {
+		vpsConfig.OCPU = updateRequest.OCPU
+	}
+	if updateRequest.Memory > 0 {
+		vpsConfig.Memory = updateRequest.Memory
+	}
+	if updateRequest.Timezone != "" {
+		vpsConfig.Timezone = updateRequest.Timezone
+	}
+	if updateRequest.Location != "" {
+		vpsConfig.Location = updateRequest.Location
+	}
+
+	// Store updated config
+	if err := h.vpsService.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
+		log.Printf("Error storing updated VPS config: %v", err)
+		utils.JSONInternalServerError(c, "Failed to update VPS configuration")
+		return
+	}
+
+	// Invalidate cache
+	h.vpsService.InvalidateVPSCache(accountID)
+
+	log.Printf("✅ Updated VPS config for server %d", serverID)
+	c.JSON(http.StatusOK, map[string]interface{}{
+		"success": true,
+		"message": "VPS configuration updated successfully",
+		"config":  vpsConfig,
 	})
 }

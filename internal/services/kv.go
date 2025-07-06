@@ -355,6 +355,11 @@ type VPSConfig struct {
 	Timezone           string  `json:"timezone"`             // e.g., "Europe/Berlin", "UTC"
 	Provider           string  `json:"provider"`             // VPS provider (e.g., "Hetzner", "OCI", "AWS", "DigitalOcean")
 	ProviderInstanceID string  `json:"provider_instance_id"` // Provider-specific instance ID (e.g., OCI instance OCID)
+	// OCI-specific fields
+	OCPU         float32 `json:"ocpu,omitempty"`         // Number of OCPUs (for OCI flexible shapes)
+	Memory       float32 `json:"memory,omitempty"`       // Memory in GB (for OCI flexible shapes)
+	Region       string  `json:"region,omitempty"`       // Cloud provider region (e.g., "eu-zurich-1")
+	Architecture string  `json:"architecture,omitempty"` // CPU architecture (e.g., "ARM64", "x86_64")
 }
 
 // StoreVPSConfig stores VPS configuration in KV

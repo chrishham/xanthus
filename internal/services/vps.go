@@ -58,6 +58,7 @@ func (vs *VPSService) CreateOCIVPSWithConfig(
 		Name:               instance.DisplayName,
 		Provider:           "Oracle Cloud Infrastructure (OCI)",
 		Location:           region,
+		Region:             region, // Store actual region
 		ServerType:         shape,
 		PublicIPv4:         instance.PublicIP,
 		CreatedAt:          time.Now().Format(time.RFC3339),
@@ -67,6 +68,9 @@ func (vs *VPSService) CreateOCIVPSWithConfig(
 		HourlyRate:         hourlyRate,
 		MonthlyRate:        monthlyRate,
 		ProviderInstanceID: instance.ID,
+		OCPU:               ocpu,   // Store actual OCPU count
+		Memory:             memory, // Store actual memory in GB
+		Architecture:       "ARM64 Ampere Altra",
 	}
 
 	// Store VPS configuration
@@ -333,6 +337,24 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 		// Get resource specs based on provider and server type
 		resourceSpecs := vs.getResourceSpecs(vpsConfig.Provider, vpsConfig.ServerType)
 
+		// Use actual stored values for OCI instances, fallback to resource specs for others
+		cores := resourceSpecs.Cores
+		memory := resourceSpecs.Memory
+		locationDesc := vpsConfig.Location
+
+		// For OCI instances, use stored actual values if available
+		if vpsConfig.Provider == "Oracle Cloud Infrastructure (OCI)" {
+			if vpsConfig.OCPU > 0 {
+				cores = int(vpsConfig.OCPU)
+			}
+			if vpsConfig.Memory > 0 {
+				memory = float64(vpsConfig.Memory)
+			}
+			if vpsConfig.Region != "" {
+				locationDesc = vpsConfig.Region
+			}
+		}
+
 		// Create HetznerServer from VPS config for UI compatibility
 		server := HetznerServer{
 			ID:      vpsConfig.ServerID,
@@ -342,14 +364,14 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 			ServerType: HetznerServerTypeInfo{
 				Name:        vpsConfig.ServerType,
 				Description: resourceSpecs.Description,
-				Cores:       resourceSpecs.Cores,
-				Memory:      resourceSpecs.Memory,
+				Cores:       cores,
+				Memory:      memory,
 				Disk:        resourceSpecs.Disk,
 				CPUType:     resourceSpecs.CPUType,
 			},
 			Datacenter: HetznerDatacenterInfo{
 				Location: HetznerLocation{
-					Description: vpsConfig.Location,
+					Description: locationDesc,
 				},
 			},
 			PublicNet: HetznerPublicNet{
@@ -365,6 +387,10 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 				"provider":            vpsConfig.Provider,
 				"application_count":   fmt.Sprintf("%d", applicationCount),
 				"configured_timezone": vpsConfig.Timezone,
+				"region":              vpsConfig.Region,
+				"ocpu":                fmt.Sprintf("%.1f", vpsConfig.OCPU),
+				"memory":              fmt.Sprintf("%.1f", vpsConfig.Memory),
+				"ip_address":          vpsConfig.PublicIPv4,
 			},
 		}
 
@@ -395,6 +421,23 @@ func (vs *VPSService) UpdateVPSTimezone(token, accountID string, serverID int) e
 
 	log.Printf("✅ Updated timezone for VPS %d to %s", serverID, vpsConfig.Timezone)
 	return nil
+}
+
+// InvalidateVPSCache removes the VPS cache for the given account to force refresh
+func (vs *VPSService) InvalidateVPSCache(accountID string) {
+	cacheKey := "vps_servers:" + accountID
+	vs.cache.Delete(cacheKey)
+	log.Printf("🗑️ Invalidated VPS cache for account: %s", accountID)
+}
+
+// StoreVPSConfig stores a VPS configuration in KV store
+func (vs *VPSService) StoreVPSConfig(token, accountID string, config *VPSConfig) error {
+	return vs.kv.StoreVPSConfig(token, accountID, config)
+}
+
+// GetVPSConfig retrieves a VPS configuration from KV store
+func (vs *VPSService) GetVPSConfig(token, accountID string, serverID int) (*VPSConfig, error) {
+	return vs.kv.GetVPSConfig(token, accountID, serverID)
 }
 
 // deleteAssociatedApplications deletes all applications associated with a VPS
@@ -681,11 +724,6 @@ func (vs *VPSService) UpdateVPSSSHUser(token, accountID string, serverID int) er
 // UpdateVPSConfig updates a VPS configuration
 func (vs *VPSService) UpdateVPSConfig(token, accountID string, serverID int, vpsConfig *VPSConfig) error {
 	return vs.kv.StoreVPSConfig(token, accountID, vpsConfig)
-}
-
-// GetVPSConfig retrieves a VPS configuration
-func (vs *VPSService) GetVPSConfig(token, accountID string, serverID int) (*VPSConfig, error) {
-	return vs.kv.GetVPSConfig(token, accountID, serverID)
 }
 
 // DeleteVPSConfig deletes a VPS configuration

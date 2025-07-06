@@ -189,10 +189,11 @@
                             <h3 class="text-lg font-medium text-gray-900" x-text="server.name"></h3>
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
                                   :class="{
-                                      'bg-green-100 text-green-800': server.status === 'running',
-                                      'bg-yellow-100 text-yellow-800': server.status === 'initializing',
-                                      'bg-red-100 text-red-800': server.status === 'off',
-                                      'bg-gray-100 text-gray-800': !['running', 'initializing', 'off'].includes(server.status)
+                                      'bg-green-100 text-green-800': ['running', 'RUNNING'].includes(server.status),
+                                      'bg-yellow-100 text-yellow-800': ['initializing', 'starting', 'PROVISIONING', 'STARTING'].includes(server.status),
+                                      'bg-red-100 text-red-800': ['off', 'stopped', 'STOPPED', 'TERMINATED'].includes(server.status),
+                                      'bg-blue-100 text-blue-800': ['stopping', 'STOPPING'].includes(server.status),
+                                      'bg-gray-100 text-gray-800': !['running', 'RUNNING', 'initializing', 'starting', 'PROVISIONING', 'STARTING', 'off', 'stopped', 'STOPPED', 'TERMINATED', 'stopping', 'STOPPING'].includes(server.status)
                                   }"
                                   x-text="server.status">
                             </span>
@@ -212,22 +213,22 @@
                             <!-- Location -->
                             <div class="flex items-center justify-between">
                                 <span class="text-sm text-gray-500">Location:</span>
-                                <span class="text-sm font-medium text-gray-900" x-text="server.datacenter.location.description"></span>
+                                <span class="text-sm font-medium text-gray-900" x-text="server.datacenter?.location?.description || (server.labels?.region || 'Unknown')"></span>
                             </div>
                             
                             <!-- Resources -->
                             <div class="flex items-center justify-between">
                                 <span class="text-sm text-gray-500">Resources:</span>
                                 <span class="text-sm font-medium text-gray-900" 
-                                      x-text="server.server_type.cores + ' CPU, ' + server.server_type.memory + 'GB RAM, ' + server.server_type.disk + 'GB Storage'"></span>
+                                      x-text="(server.server_type?.cores || server.labels?.ocpu || 'N/A') + ' CPU, ' + (server.server_type?.memory || server.labels?.memory || 'N/A') + 'GB RAM, ' + (server.server_type?.disk || server.labels?.disk || 'N/A') + 'GB Storage'"></span>
                             </div>
                             
                             <!-- Public IP -->
                             <div class="flex items-center justify-between">
                                 <span class="text-sm text-gray-500">Public IP:</span>
                                 <div class="flex items-center space-x-2">
-                                    <span class="text-sm font-medium text-gray-900 font-mono" x-text="server.public_net.ipv4.ip"></span>
-                                    <button @click="navigator.clipboard.writeText(server.public_net.ipv4.ip); $event.target.innerHTML='✓'; setTimeout(() => $event.target.innerHTML='📋', 1000)" 
+                                    <span class="text-sm font-medium text-gray-900 font-mono" x-text="server.public_net?.ipv4?.ip || server.labels?.ip_address || 'N/A'"></span>
+                                    <button @click="navigator.clipboard.writeText(server.public_net?.ipv4?.ip || server.labels?.ip_address || 'N/A'); $event.target.innerHTML='✓'; setTimeout(() => $event.target.innerHTML='📋', 1000)" 
                                             class="text-gray-400 hover:text-gray-600 focus:outline-none" 
                                             title="Copy IP address">
                                         📋
@@ -302,7 +303,7 @@
                                         class="flex-1 text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 focus:outline-none focus:ring-1 focus:ring-green-500">
                                     🔍 Health Check
                                 </button>
-                                <button @click="showSSHInstructions(server.public_net.ipv4.ip)" 
+                                <button @click="showSSHInstructions(server.public_net?.ipv4?.ip || server.labels?.ip_address)" 
                                         class="flex-1 text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500">
                                     🔑 SSH Setup
                                 </button>
