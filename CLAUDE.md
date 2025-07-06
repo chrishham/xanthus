@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 📚 Architecture Documentation
+
+For detailed architecture information, see the following documentation:
+
+- **[Handlers Architecture](internal/handlers/README.md)** - HTTP request processing, domain organization, dependency injection
+- **[Services Architecture](internal/services/README.md)** - Business logic, external integrations, deployment orchestration  
+- **[Models Architecture](internal/models/README.md)** - Data structures, validation, serialization patterns
+- **[Configuration System](configs/README.md)** - YAML-driven app definitions, configuration-driven deployment
+- **[Charts Architecture](charts/README.md)** - Local Helm charts, Kubernetes manifests, deployment templates
+- **[Testing Strategy](tests/README.md)** - Three-tier testing, mock vs live modes, test organization
+- **[Web Templates](web/templates/README.md)** - HTMX integration, Alpine.js components, UI patterns
+
 ## Development Commands
 
 ### Building and Running
@@ -49,288 +61,114 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make test-coverage` - Generate coverage reports (coverage.html)
 - `make clean` - Remove build artifacts and test files
 
-## Architecture Overview
+## 🏗️ High-Level Architecture
 
-Xanthus is a **web-based infrastructure management platform** for deploying and managing applications on Hetzner VPS instances with Cloudflare DNS integration. It's built as a full-stack Go application using Gin web framework with HTMX frontend.
+Xanthus is a **configuration-driven infrastructure management platform** for deploying applications on cloud VPS instances with automated DNS/SSL management.
 
-### Core Components
-
-**Backend (Go):**
-- **Gin** web framework with middleware-based architecture
-- **Handler-Service-Model** pattern with domain separation
-- **Structured testing** with unit, integration, and E2E tiers
-- **Template-driven** HTML rendering with custom functions
-
-**Frontend Stack:**
-- **HTMX** for dynamic interactions without complex JavaScript
-- **Alpine.js** for client-side reactivity
-- **Tailwind CSS** for styling
-- **SweetAlert2** for notifications
-
-### Directory Structure
-
-```
-cmd/xanthus/           # Application entry point
-internal/              # Private application code
-├── handlers/          # HTTP handlers by domain
-│   ├── applications/  # App deployment handlers
-│   └── vps/          # VPS management handlers
-├── middleware/        # Auth, logging, etc.
-├── models/           # Data structures
-├── router/           # Route configuration
-├── services/         # Business logic
-├── templates/        # Configuration templates
-└── utils/            # Shared utilities
-web/                  # Frontend assets
-├── static/           # CSS, JS, images
-└── templates/        # HTML templates
-tests/                # Comprehensive test suite
-├── unit/             # Component tests
-├── integration/      # Cross-component tests
-└── integration/e2e/  # End-to-end scenarios
-```
+### Core Architecture Patterns
+- **Handler-Service-Model (HSM)** - Clean separation of concerns
+- **Configuration-Driven Deployment** - No code changes for new apps
+- **Type-Based Namespaces** - Organized resource management
+- **Three-Tier Testing** - Unit, integration, and E2E with mock/live modes
 
 ### Key Integrations
+- **Hetzner Cloud & Oracle Cloud** - VPS provisioning
+- **Cloudflare** - DNS and SSL certificate management  
+- **K3s** - Kubernetes orchestration on VPS
+- **Helm** - Application deployment via local charts
+- **HTMX + Alpine.js** - Dynamic UI without complex JavaScript
 
-- **Hetzner Cloud** - VPS provisioning and management
-- **Cloudflare** - DNS and SSL certificate management
-- **K3s** - Kubernetes orchestration on provisioned VPS
-- **Helm** - Application deployment via charts
-- **SSH** - Server configuration and management
+### Quick Reference
+- **Entry Point**: `cmd/xanthus/main.go:51-61` (RouteConfig dependency injection)
+- **Application Creation**: `internal/services/application_service_core.go:124`
+- **Deployment Pipeline**: `internal/services/application_service_deployment.go:14`
+- **Handler Patterns**: See [Handlers README](internal/handlers/README.md)
+- **Service Orchestration**: See [Services README](internal/services/README.md)
 
-### Application Deployment Architecture
+## 🚀 Key Features & Workflows
 
-Xanthus uses a **configuration-driven application deployment system** that supports multiple application types through a unified pipeline:
-
-**Configuration Structure:**
+### Configuration-Driven Deployment
 ```
-configs/applications/           # Application definitions
-├── code-server.yaml           # VS Code in browser
-├── argocd.yaml               # GitOps CD tool
-└── [future-apps].yaml        # Extensible for new applications
-
-internal/templates/applications/ # Helm values templates
-├── code-server.yaml           # Code-server deployment template
-├── argocd.yaml               # ArgoCD deployment template
-└── [future-apps].yaml        # Templates for new applications
+YAML Config → Template Processing → Helm Values → K8s Deployment
 ```
+- **Add new apps** without code changes - see [Configuration System](configs/README.md)
+- **Local Helm charts** for fast, reliable deployments - see [Charts Architecture](charts/README.md)
+- **Template substitution** - `{{VERSION}}`, `{{SUBDOMAIN}}`, `{{DOMAIN}}`
 
-**Deployment Flow (All Applications):**
-1. **Load Configuration** - Read app definition from `configs/applications/`
-2. **Version Resolution** - Fetch latest version (GitHub API, Helm repos, etc.)
-3. **Repository Setup** - Clone GitHub repos or add Helm repositories
-4. **Values Generation** - Process templates with placeholder substitution
-5. **Helm Deployment** - Deploy using generated values and chart configuration
+### Application Namespace Strategy
+- **Type-based namespaces** - All `code-server` apps in `code-server` namespace
+- **Clean resource management** - Easier monitoring and operations
+- **Consistent structure** - Predictable deployment patterns
 
-**Supported Application Types:**
+### Auto-Refresh UI System
+- **30-second intervals** with visual countdown timer
+- **Smart pause/resume** when tab becomes hidden/visible
+- **Background updates** without loading spinners
+- **Network-aware** error handling
 
-| Application | Repository Type | Version Source | Special Features |
-|------------|----------------|----------------|-----------------|
-| **Code-Server** | GitHub clone | GitHub API | VS Code settings, init containers |
-| **ArgoCD** | Helm repository | Helm API* | RBAC, multi-component deployment |
+### Password Management
+- **Intelligent retrieval** - KV store first, VPS fallback
+- **Automatic caching** - Faster subsequent access
+- **Encrypted storage** - Token-based encryption
 
-*Note: Helm version fetching not yet implemented, defaults to "latest"
+## 🛠️ Common Development Workflows
 
-**Key Features:**
-- **Template-driven deployment** - No hardcoded application logic
-- **Dynamic chart handling** - Supports both GitHub and Helm repositories
-- **Placeholder substitution** - `{{VERSION}}`, `{{SUBDOMAIN}}`, `{{DOMAIN}}`, etc.
-- **Extensible architecture** - Add new applications via YAML configuration
-- **Unified pipeline** - Same deployment flow for all application types
-
-### Application Namespace Structure
-
-Xanthus uses a **type-based namespace organization** for clean resource management:
-
-**Namespace Design:**
-- **All code-server applications** deploy to the `code-server` namespace
-- **All ArgoCD applications** deploy to the `argocd` namespace
-- **Future application types** will follow the same pattern (e.g., `grafana`, `jenkins`)
-
-**Benefits:**
-- ✅ **Clean organization**: Applications grouped by type instead of individual namespaces
-- ✅ **Better resource management**: Easier to monitor and manage applications by type
-- ✅ **Simplified operations**: Consistent namespace structure across deployments
-- ✅ **Reduced namespace proliferation**: No more one-namespace-per-application
-
-**Examples:**
+### Quick Development Tasks
 ```bash
-# All code-server instances in one namespace
-kubectl get pods -n code-server
-# my-codeserver-app-123
-# dev-codeserver-app-456
-# test-codeserver-app-789
-
-# All ArgoCD instances in one namespace  
-kubectl get pods -n argocd
-# prod-argocd-app-111
-# staging-argocd-app-222
+make dev              # Start development with CSS watching
+make test            # Quick tests (< 5 minutes)
+make lint            # Format and validate code
 ```
 
-### Handler Architecture
+### Adding New Applications (No Code Required!)
+1. **Create config**: `configs/applications/new-app.yaml` - see [Configuration System](configs/README.md)
+2. **Create template**: `internal/templates/applications/new-app.yaml`
+3. **Test deployment**: App automatically available in catalog
 
-Handlers are organized by domain with clear separation:
-- **VPS handlers** (`internal/handlers/vps/`) - Server lifecycle, configuration, metadata
-- **Application handlers** (`internal/handlers/applications/`) - App deployment and management
-- **Core handlers** (`internal/handlers/`) - Auth, DNS, terminal, pages
-
-Each handler follows dependency injection pattern through the `RouteConfig` struct in `cmd/xanthus/main.go:51-61`.
-
-### Development Patterns
-
-**Configuration Management:**
-- YAML-based application configurations in `configs/applications/`
-- Template-driven Helm values in `internal/templates/applications/`
-- Template-driven server setup in `internal/templates/`
-- Environment-based feature flags for testing
-
-**Application Development:**
-- New applications added via YAML configuration (no code changes required)
-- Template-based deployment with placeholder substitution
-- Unified deployment pipeline for all application types
-- Version management through GitHub API or Helm repositories
-
-**Password Management:**
-- **Intelligent password retrieval** - Attempts KV store first, falls back to VPS if not found
-- **Automatic password caching** - Stores retrieved passwords in KV for faster future access
-- **Multi-application support** - Works with both code-server and ArgoCD applications
-- **Robust error handling** - Gracefully handles missing passwords and connection issues
-
-**Error Handling:**
-- Structured error responses for API endpoints
-- User-friendly error messages in web interface
-- Comprehensive logging for debugging
-
-**Security:**
-- Middleware-based authentication
-- Trusted proxy configuration
-- Input validation and sanitization
-
-## UI Features
-
-### Auto-Refresh System
-
-The applications page includes an **intelligent auto-refresh system** for real-time status monitoring:
-
-**Auto-Refresh Features:**
-- **Enabled by default** with 30-second intervals for optimal balance between freshness and performance
-- **Visual countdown timer** showing time until next refresh ("Next: 29s")
-- **Smart visibility detection** - automatically pauses when tab is hidden, resumes when visible
-- **Concurrent request protection** - prevents multiple simultaneous refresh requests
-- **Graceful error handling** - handles network issues and authentication failures
-
-**Visual Indicators:**
-- **Toggle button**: Shows "Auto-refresh ON/OFF" status
-- **Pulsing green dot**: Indicates active auto-refresh
-- **Live countdown**: Real-time countdown to next refresh
-- **Status badges**: Color-coded application status indicators
-
-**Status Color Mapping:**
-- 🟢 **Running/deployed** - Green badge (application is healthy and accessible)
-- 🔵 **Deploying/Creating** - Blue badge (deployment in progress)
-- 🟡 **pending** - Yellow badge (waiting for resources or dependencies)
-- 🔴 **Failed/failed** - Red badge (deployment or runtime failure)
-- ⚪ **Not Deployed** - Gray badge (application not found or removed)
-
-**Performance Optimizations:**
-- **Background refresh** - Updates data without loading spinners during auto-refresh
-- **Network-aware** - Automatically stops on repeated network failures
-- **Resource-efficient** - 30-second intervals prevent server overload
-- **Page focus detection** - Reduces unnecessary requests when user is away
-
-**Usage:**
-```javascript
-// Auto-refresh controls in applications.html
-toggleAutoRefresh()     // Enable/disable auto-refresh
-refreshApplications()   // Manual refresh with loading indicator
-refreshApplicationsQuietly() // Background refresh without UI feedback
-```
-
-## Testing Philosophy
-
-The codebase uses a **three-tier testing approach**:
-
-1. **Unit tests** - Test individual components in isolation
-2. **Integration tests** - Test component interactions without external dependencies
-3. **End-to-end tests** - Test complete workflows with mock or live external services
-
-**Important:** E2E tests in live mode create real infrastructure resources and incur costs. Always use mock mode for development and CI/CD.
-
-## Common Development Workflows
-
-**Starting Development:**
+### Testing Strategy
 ```bash
-make dev  # Starts server with CSS watching
+make test-e2e        # E2E tests (mock mode, free)
+make test-e2e-live   # E2E tests (real APIs, costs money)
+make test-everything # Full test suite
 ```
+See [Testing Strategy](tests/README.md) for comprehensive testing approach.
 
-**Before Committing:**
+### Code Organization Guidelines
+- **500-line limit** for Go files - refactor if exceeded
+- **Handler-Service-Model** pattern - see [Handlers](internal/handlers/README.md) and [Services](internal/services/README.md)
+- **Domain separation** - VPS handlers separate from application handlers
+
+## 🔧 Debugging & Investigation
+
+### VPS SSH Connection
+**Dynamic connection** (don't hardcode IPs):
 ```bash
-make lint         # Format and check code
-make test         # Run fast test suite
-make test-coverage # Verify coverage
-```
-
-**Feature Testing:**
-```bash
-make test-e2e     # Test with mocked external services
-```
-
-**Production Build:**
-```bash
-make build        # Creates bin/xanthus executable
-```
-
-**Adding New Applications:**
-1. Create YAML configuration in `configs/applications/new-app.yaml`
-2. Create Helm values template in `internal/templates/applications/new-app.yaml`
-3. Application automatically available through the unified deployment pipeline
-4. No code changes required - configuration-driven architecture
-
-## VPS Investigation
-
-To investigate issues on VPS instances, you need to dynamically retrieve the correct SSH connection details from the KV store rather than using hardcoded values.
-
-### SSH Connection Process
-
-1. **Retrieve VPS details from KV store**: Use the application or VPS management endpoints to get the current IP address and SSH user
-2. **Get SSH key**: Use the `@xanthus-key.pem` file for authentication
-3. **Connect dynamically**: `ssh -i xanthus-key.pem {user}@{ip_address}`
-
-### VPS Types and SSH Users
-
-**Hetzner VPS:**
-- **Default SSH user**: `root`
-- **IP**: Retrieved from Hetzner Cloud API and stored in KV
-
-**Oracle Cloud VPS:**
-- **Default SSH user**: `ubuntu` (not root)
-- **IP**: Retrieved from Oracle Cloud API and stored in KV
-
-### Getting VPS Information
-
-Before SSH connection, retrieve VPS details using:
-```bash
-# Get VPS list to find target VPS
+# 1. Get VPS details via API
 curl -X GET "http://localhost:8081/vps" -b cookies.txt
 
-# Or use the application endpoints to get VPS info
-curl -X GET "http://localhost:8081/applications" -b cookies.txt
+# 2. Connect with provider-specific user
+ssh -i xanthus-key.pem root@{hetzner_ip}      # Hetzner (root)
+ssh -i xanthus-key.pem ubuntu@{oracle_ip}     # Oracle (ubuntu)
 ```
 
-### Example SSH Connection Flow
+### Authentication & API Testing
+- **Login**: Use `CLOUDFARE_API_TOKEN` from `.env`
+- **API Reference**: See `logic/curl-commands.md` for complete API examples
+- **Code-Server Flow**: See `logic/code-server-deployment-flow.md` for deployment details
 
-1. **Get VPS details**: Query KV store or API endpoints
-2. **Identify VPS type**: Check if it's Hetzner (user: `root`) or Oracle (user: `ubuntu`)
-3. **Connect with correct user**: `ssh -i xanthus-key.pem ubuntu@{oracle_ip}` or `ssh -i xanthus-key.pem root@{hetzner_ip}`
+### Performance Monitoring
+- **Coverage**: `make test-coverage` → `coverage.html`
+- **Auto-refresh**: 30-second intervals with smart pause/resume
+- **Resource limits**: See [Charts Architecture](charts/README.md) for container limits
 
-### Authentication
+---
 
-You can login to the app with the CLOUDFARE_API_TOKEN found at .env
+## 📖 Additional Resources
 
-Always use instructions at @logic/curl-commands.md to interact with the app, check changes and iterate.
+- **[Complete API Examples](logic/curl-commands.md)** - curl commands for all endpoints
+- **[Code-Server Deployment Flow](logic/code-server-deployment-flow.md)** - Step-by-step deployment process
+- **[Performance Findings](logic/performance-optimization-findings.md)** - Optimization insights
 
-For deploying a new code-server application in Xanthus always consult the @logic/code-server-deployment-flow.md
+---
 
-## Important!!!
-
-All *.go files shouldn't exceed the 500 lines limit. If you encounter such a case please tell me and suggest a refactor plan.
+**⚠️ Important**: All Go files must stay under 500 lines. If exceeded, suggest refactoring plan.
