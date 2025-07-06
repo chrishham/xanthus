@@ -286,9 +286,44 @@ make build        # Creates bin/xanthus executable
 3. Application automatically available through the unified deployment pipeline
 4. No code changes required - configuration-driven architecture
 
-## Vps investigation
+## VPS Investigation
 
-You can ssh to the vps at any time to investigate issues by using the @xanthus-key.pem and ssh -i xanthus-key.pem root@91.99.236.70
+To investigate issues on VPS instances, you need to dynamically retrieve the correct SSH connection details from the KV store rather than using hardcoded values.
+
+### SSH Connection Process
+
+1. **Retrieve VPS details from KV store**: Use the application or VPS management endpoints to get the current IP address and SSH user
+2. **Get SSH key**: Use the `@xanthus-key.pem` file for authentication
+3. **Connect dynamically**: `ssh -i xanthus-key.pem {user}@{ip_address}`
+
+### VPS Types and SSH Users
+
+**Hetzner VPS:**
+- **Default SSH user**: `root`
+- **IP**: Retrieved from Hetzner Cloud API and stored in KV
+
+**Oracle Cloud VPS:**
+- **Default SSH user**: `ubuntu` (not root)
+- **IP**: Retrieved from Oracle Cloud API and stored in KV
+
+### Getting VPS Information
+
+Before SSH connection, retrieve VPS details using:
+```bash
+# Get VPS list to find target VPS
+curl -X GET "http://localhost:8081/vps" -b cookies.txt
+
+# Or use the application endpoints to get VPS info
+curl -X GET "http://localhost:8081/applications" -b cookies.txt
+```
+
+### Example SSH Connection Flow
+
+1. **Get VPS details**: Query KV store or API endpoints
+2. **Identify VPS type**: Check if it's Hetzner (user: `root`) or Oracle (user: `ubuntu`)
+3. **Connect with correct user**: `ssh -i xanthus-key.pem ubuntu@{oracle_ip}` or `ssh -i xanthus-key.pem root@{hetzner_ip}`
+
+### Authentication
 
 You can login to the app with the CLOUDFARE_API_TOKEN found at .env
 
