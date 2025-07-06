@@ -78,7 +78,7 @@ func (ts *TerminalService) CreateSession(serverID int, host, user, privateKey st
 	// GoTTY command with SSH
 	sshTarget := fmt.Sprintf("%s@%s", user, host)
 	log.Printf("🚀 Creating terminal session - SSH Target: %s (ServerID: %d)", sshTarget, serverID)
-	
+
 	cmd := exec.CommandContext(ctx, "gotty",
 		"--port", strconv.Itoa(port),
 		"--permit-write",

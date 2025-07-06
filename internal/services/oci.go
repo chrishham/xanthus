@@ -2,11 +2,11 @@ package services
 
 import (
 	"context"
+	_ "embed"
 	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
-	_ "embed"
 
 	"github.com/chrishham/xanthus/internal/utils"
 	"github.com/oracle/oci-go-sdk/v65/common"
@@ -80,32 +80,32 @@ func NewOCIService(authToken string) (*OCIService, error) {
 
 // OCIInstance represents an OCI compute instance
 type OCIInstance struct {
-	ID               string            `json:"id"`
-	DisplayName      string            `json:"display_name"`
-	LifecycleState   string            `json:"lifecycle_state"`
-	AvailabilityDomain string          `json:"availability_domain"`
-	CompartmentID    string            `json:"compartment_id"`
-	Shape            string            `json:"shape"`
-	TimeCreated      *common.SDKTime   `json:"time_created"`
-	PublicIP         string            `json:"public_ip"`
-	PrivateIP        string            `json:"private_ip"`
-	FreeformTags     map[string]string `json:"freeform_tags"`
-	DefinedTags      map[string]interface{} `json:"defined_tags"`
+	ID                 string                 `json:"id"`
+	DisplayName        string                 `json:"display_name"`
+	LifecycleState     string                 `json:"lifecycle_state"`
+	AvailabilityDomain string                 `json:"availability_domain"`
+	CompartmentID      string                 `json:"compartment_id"`
+	Shape              string                 `json:"shape"`
+	TimeCreated        *common.SDKTime        `json:"time_created"`
+	PublicIP           string                 `json:"public_ip"`
+	PrivateIP          string                 `json:"private_ip"`
+	FreeformTags       map[string]string      `json:"freeform_tags"`
+	DefinedTags        map[string]interface{} `json:"defined_tags"`
 }
 
 // OCIShape represents an OCI compute shape
 type OCIShape struct {
-	Shape                   string   `json:"shape"`
-	ProcessorDescription    string   `json:"processor_description"`
-	Ocpus                   float32  `json:"ocpus"`
-	MemoryInGBs             float32  `json:"memory_in_gbs"`
+	Shape                     string  `json:"shape"`
+	ProcessorDescription      string  `json:"processor_description"`
+	Ocpus                     float32 `json:"ocpus"`
+	MemoryInGBs               float32 `json:"memory_in_gbs"`
 	NetworkingBandwidthInGbps float32 `json:"networking_bandwidth_in_gbps"`
-	MaxVnicAttachments      int      `json:"max_vnic_attachments"`
-	GPUs                    int      `json:"gpus"`
-	LocalDisks              int      `json:"local_disks"`
-	LocalDisksTotalSizeInGBs float32 `json:"local_disks_total_size_in_gbs"`
-	IsLiveMigrationSupported bool    `json:"is_live_migration_supported"`
-	IsFlexible              bool     `json:"is_flexible"`
+	MaxVnicAttachments        int     `json:"max_vnic_attachments"`
+	GPUs                      int     `json:"gpus"`
+	LocalDisks                int     `json:"local_disks"`
+	LocalDisksTotalSizeInGBs  float32 `json:"local_disks_total_size_in_gbs"`
+	IsLiveMigrationSupported  bool    `json:"is_live_migration_supported"`
+	IsFlexible                bool    `json:"is_flexible"`
 }
 
 // OCIVirtualCloudNetwork represents a VCN
@@ -167,17 +167,17 @@ func (o *OCIService) ListInstances(ctx context.Context) ([]OCIInstance, error) {
 		}
 
 		instances = append(instances, OCIInstance{
-			ID:               *instance.Id,
-			DisplayName:      *instance.DisplayName,
-			LifecycleState:   string(instance.LifecycleState),
+			ID:                 *instance.Id,
+			DisplayName:        *instance.DisplayName,
+			LifecycleState:     string(instance.LifecycleState),
 			AvailabilityDomain: *instance.AvailabilityDomain,
-			CompartmentID:    *instance.CompartmentId,
-			Shape:            *instance.Shape,
-			TimeCreated:      instance.TimeCreated,
-			PublicIP:         publicIP,
-			PrivateIP:        privateIP,
-			FreeformTags:     instance.FreeformTags,
-			DefinedTags:      flattenDefinedTags(instance.DefinedTags),
+			CompartmentID:      *instance.CompartmentId,
+			Shape:              *instance.Shape,
+			TimeCreated:        instance.TimeCreated,
+			PublicIP:           publicIP,
+			PrivateIP:          privateIP,
+			FreeformTags:       instance.FreeformTags,
+			DefinedTags:        flattenDefinedTags(instance.DefinedTags),
 		})
 	}
 
@@ -210,17 +210,17 @@ func (o *OCIService) GetInstance(ctx context.Context, instanceID string) (*OCIIn
 	}
 
 	return &OCIInstance{
-		ID:               *instance.Id,
-		DisplayName:      *instance.DisplayName,
-		LifecycleState:   string(instance.LifecycleState),
+		ID:                 *instance.Id,
+		DisplayName:        *instance.DisplayName,
+		LifecycleState:     string(instance.LifecycleState),
 		AvailabilityDomain: *instance.AvailabilityDomain,
-		CompartmentID:    *instance.CompartmentId,
-		Shape:            *instance.Shape,
-		TimeCreated:      instance.TimeCreated,
-		PublicIP:         publicIP,
-		PrivateIP:        privateIP,
-		FreeformTags:     instance.FreeformTags,
-		DefinedTags:      flattenDefinedTags(instance.DefinedTags),
+		CompartmentID:      *instance.CompartmentId,
+		Shape:              *instance.Shape,
+		TimeCreated:        instance.TimeCreated,
+		PublicIP:           publicIP,
+		PrivateIP:          privateIP,
+		FreeformTags:       instance.FreeformTags,
+		DefinedTags:        flattenDefinedTags(instance.DefinedTags),
 	}, nil
 }
 
@@ -394,17 +394,17 @@ func (o *OCIService) ListComputeShapes(ctx context.Context) ([]OCIShape, error) 
 	var shapes []OCIShape
 	for _, shape := range response.Items {
 		shapes = append(shapes, OCIShape{
-			Shape:                   *shape.Shape,
-			ProcessorDescription:    getStringValue(shape.ProcessorDescription),
-			Ocpus:                   getFloat32Value(shape.Ocpus),
-			MemoryInGBs:             getFloat32Value(shape.MemoryInGBs),
+			Shape:                     *shape.Shape,
+			ProcessorDescription:      getStringValue(shape.ProcessorDescription),
+			Ocpus:                     getFloat32Value(shape.Ocpus),
+			MemoryInGBs:               getFloat32Value(shape.MemoryInGBs),
 			NetworkingBandwidthInGbps: getFloat32Value(shape.NetworkingBandwidthInGbps),
-			MaxVnicAttachments:      getIntValue(shape.MaxVnicAttachments),
-			GPUs:                    getIntValue(shape.Gpus),
-			LocalDisks:              getIntValue(shape.LocalDisks),
-			LocalDisksTotalSizeInGBs: getFloat32Value(shape.LocalDisksTotalSizeInGBs),
-			IsLiveMigrationSupported: getBoolValue(shape.IsLiveMigrationSupported),
-			IsFlexible:              getBoolValue(shape.IsFlexible),
+			MaxVnicAttachments:        getIntValue(shape.MaxVnicAttachments),
+			GPUs:                      getIntValue(shape.Gpus),
+			LocalDisks:                getIntValue(shape.LocalDisks),
+			LocalDisksTotalSizeInGBs:  getFloat32Value(shape.LocalDisksTotalSizeInGBs),
+			IsLiveMigrationSupported:  getBoolValue(shape.IsLiveMigrationSupported),
+			IsFlexible:                getBoolValue(shape.IsFlexible),
 		})
 	}
 
@@ -422,7 +422,7 @@ func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, ima
 		} else {
 			userData = strings.ReplaceAll(userData, "${TIMEZONE}", "UTC")
 		}
-		
+
 		// Base64 encode the user data
 		userData = base64.StdEncoding.EncodeToString([]byte(userData))
 	}
@@ -444,9 +444,9 @@ func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, ima
 		ImageId:            &imageID,
 		Shape:              &shape,
 		CreateVnicDetails: &core.CreateVnicDetails{
-			SubnetId:        &subnetID,
-			AssignPublicIp:  common.Bool(true),
-			DisplayName:     common.String(fmt.Sprintf("%s-vnic", displayName)),
+			SubnetId:       &subnetID,
+			AssignPublicIp: common.Bool(true),
+			DisplayName:    common.String(fmt.Sprintf("%s-vnic", displayName)),
 		},
 		Metadata: metadata,
 		FreeformTags: map[string]string{
@@ -458,8 +458,8 @@ func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, ima
 	// Configure shape for flexible shapes
 	if strings.Contains(shape, "Flex") {
 		launchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
-			Ocpus:       common.Float32(1.0),   // 1 OCPU for Always Free (A1.Flex supports up to 4)
-			MemoryInGBs: common.Float32(6.0),   // 6GB RAM for Always Free (A1.Flex supports up to 24GB)
+			Ocpus:       common.Float32(1.0), // 1 OCPU for Always Free (A1.Flex supports up to 4)
+			MemoryInGBs: common.Float32(6.0), // 6GB RAM for Always Free (A1.Flex supports up to 24GB)
 		}
 	}
 
@@ -489,7 +489,7 @@ func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, ima
 // waitForInstanceState waits for an instance to reach a specific lifecycle state
 func (o *OCIService) waitForInstanceState(ctx context.Context, instanceID string, targetState core.InstanceLifecycleStateEnum, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	
+
 	for time.Now().Before(deadline) {
 		instance, err := o.GetInstance(ctx, instanceID)
 		if err != nil {
@@ -502,7 +502,7 @@ func (o *OCIService) waitForInstanceState(ctx context.Context, instanceID string
 
 		// Check for failed states
 		if instance.LifecycleState == string(core.InstanceLifecycleStateTerminated) ||
-		   instance.LifecycleState == string(core.InstanceLifecycleStateTerminating) {
+			instance.LifecycleState == string(core.InstanceLifecycleStateTerminating) {
 			return fmt.Errorf("instance reached unexpected state: %s", instance.LifecycleState)
 		}
 
@@ -638,13 +638,13 @@ func (o *OCIService) GetUbuntuImageID(ctx context.Context) (string, error) {
 	// Use the specific Ubuntu 24.04 ARM64 image OCID for eu-frankfurt-1
 	// This image is confirmed compatible with VM.Standard.A1.Flex
 	region := "eu-frankfurt-1" // This should match the region in the credentials
-	
+
 	if strings.Contains(strings.ToLower(region), "frankfurt") {
 		// Return the specific Ubuntu 24.04 ARM64 image OCID for Frankfurt region
 		// Canonical-Ubuntu-24.04-aarch64-2025.05.20-0
 		return "ocid1.image.oc1.eu-frankfurt-1.aaaaaaaaxhdnngoowpuvwonng4mr2brdemk5wvmompn6ykmohmfuqmwvagjq", nil
 	}
-	
+
 	// For other regions, fall back to dynamic search
 	images, err := o.ListImages(ctx)
 	if err != nil {
@@ -656,9 +656,9 @@ func (o *OCIService) GetUbuntuImageID(ctx context.Context) (string, error) {
 		if image.DisplayName != nil {
 			displayName := strings.ToLower(*image.DisplayName)
 			if strings.Contains(displayName, "ubuntu") &&
-			   strings.Contains(displayName, "24.04") &&
-			   strings.Contains(displayName, "2025.05.20-0") &&
-			   (strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
+				strings.Contains(displayName, "24.04") &&
+				strings.Contains(displayName, "2025.05.20-0") &&
+				(strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
 				return *image.Id, nil
 			}
 		}
@@ -669,8 +669,8 @@ func (o *OCIService) GetUbuntuImageID(ctx context.Context) (string, error) {
 		if image.DisplayName != nil {
 			displayName := strings.ToLower(*image.DisplayName)
 			if strings.Contains(displayName, "ubuntu") &&
-			   strings.Contains(displayName, "24.04") &&
-			   (strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
+				strings.Contains(displayName, "24.04") &&
+				(strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
 				return *image.Id, nil
 			}
 		}
@@ -681,7 +681,7 @@ func (o *OCIService) GetUbuntuImageID(ctx context.Context) (string, error) {
 		if image.DisplayName != nil {
 			displayName := strings.ToLower(*image.DisplayName)
 			if strings.Contains(displayName, "ubuntu") &&
-			   (strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
+				(strings.Contains(displayName, "arm64") || strings.Contains(displayName, "aarch64")) {
 				return *image.Id, nil
 			}
 		}

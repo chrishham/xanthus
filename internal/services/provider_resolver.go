@@ -112,7 +112,7 @@ func (pr *ProviderResolver) ResolveSSHUser(token, accountID string, serverID int
 		return "", fmt.Errorf("failed to get VPS config: %w", err)
 	}
 
-	log.Printf("🔍 ProviderResolver.ResolveSSHUser - ServerID: %d, Provider: %s, StoredSSHUser: %s", 
+	log.Printf("🔍 ProviderResolver.ResolveSSHUser - ServerID: %d, Provider: %s, StoredSSHUser: %s",
 		serverID, vpsConfig.Provider, vpsConfig.SSHUser)
 
 	// If SSH user is explicitly set in config, use it

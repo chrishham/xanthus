@@ -277,7 +277,7 @@ func (h *VPSInfoHandler) HandleVPSTerminal(c *gin.Context) {
 		return
 	}
 
-	log.Printf("🔍 VPS Terminal Debug - ServerID: %d, Provider: %s, StoredUser: %s, ResolvedUser: %s", 
+	log.Printf("🔍 VPS Terminal Debug - ServerID: %d, Provider: %s, StoredUser: %s, ResolvedUser: %s",
 		serverID, vpsConfig.Provider, vpsConfig.SSHUser, resolvedSSHUser)
 
 	// Create terminal session
@@ -309,10 +309,10 @@ func (h *VPSInfoHandler) HandleVPSSSHUserDebug(c *gin.Context) {
 
 	// Get current configuration
 	storedSSHUser := vpsConfig.SSHUser
-	
+
 	// Get provider defaults
 	providerDefaults := h.vpsService.GetProviderDefaults(vpsConfig.Provider)
-	
+
 	// Get resolved SSH user
 	resolvedSSHUser, err := h.vpsService.ResolveSSHUser(token, accountID, serverID)
 	if err != nil {
@@ -324,13 +324,13 @@ func (h *VPSInfoHandler) HandleVPSSSHUserDebug(c *gin.Context) {
 	correctSSHUser := h.vpsService.GetCorrectSSHUserFromProvider(vpsConfig.Provider)
 
 	utils.JSONResponse(c, http.StatusOK, gin.H{
-		"server_id": serverID,
-		"provider": vpsConfig.Provider,
-		"stored_ssh_user": storedSSHUser,
+		"server_id":                 serverID,
+		"provider":                  vpsConfig.Provider,
+		"stored_ssh_user":           storedSSHUser,
 		"provider_default_ssh_user": providerDefaults.DefaultSSHUser,
-		"resolved_ssh_user": resolvedSSHUser,
-		"correct_ssh_user": correctSSHUser,
-		"needs_update": storedSSHUser != correctSSHUser,
+		"resolved_ssh_user":         resolvedSSHUser,
+		"correct_ssh_user":          correctSSHUser,
+		"needs_update":              storedSSHUser != correctSSHUser,
 		"debug_info": gin.H{
 			"provider_supports_api": providerDefaults.SupportsAPICreation,
 			"provider_default_port": providerDefaults.DefaultSSHPort,

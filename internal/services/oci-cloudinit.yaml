@@ -100,8 +100,8 @@ write_files:
       update_status "INSTALLING_K3S"
       log "Installing K3s with OCI configuration..."
       
-      # K3s installation with OCI-friendly settings
-      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable=traefik --write-kubeconfig-mode=644" sh -
+      # K3s installation with OCI-friendly settings (keeping Traefik enabled)
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode=644" sh -
       systemctl enable k3s
       systemctl start k3s
       
@@ -134,16 +134,10 @@ write_files:
       # Verify Helm installation
       helm version --short >> "$LOG_FILE"
       
-      # Install NGINX Ingress Controller (since we disabled Traefik)
-      update_status "INSTALLING_NGINX"
-      log "Installing NGINX Ingress Controller..."
-      helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-      helm repo update
-      helm install ingress-nginx ingress-nginx/ingress-nginx \
-        --namespace ingress-nginx \
-        --create-namespace \
-        --set controller.service.type=LoadBalancer \
-        --wait --timeout=10m
+      # Wait for Traefik to be ready
+      update_status "WAITING_TRAEFIK"
+      log "Waiting for Traefik ingress controller to be ready..."
+      timeout 300 bash -c 'until kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik --no-headers 2>/dev/null | grep -q "Running"; do sleep 5; done' || log "WARNING: Traefik readiness check timed out"
       
       # Final verification
       update_status "VERIFYING"
@@ -159,8 +153,8 @@ write_files:
       log "Checking Helm version..."
       timeout 10 helm version >> "$LOG_FILE" 2>&1 || log "WARNING: helm version check failed"
       
-      log "Checking NGINX Ingress..."
-      timeout 60 kubectl get pods -n ingress-nginx >> "$LOG_FILE" 2>&1 || log "WARNING: NGINX Ingress check failed"
+      log "Checking Traefik Ingress..."
+      timeout 60 kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik >> "$LOG_FILE" 2>&1 || log "WARNING: Traefik Ingress check failed"
       
       log "Final verification completed (warnings are non-critical)"
       
@@ -182,11 +176,11 @@ write_files:
               --key=/tmp/domain.key \
               -n default 2>&1 | tee -a "$LOG_FILE" || log "Warning: Failed to create TLS secret"
           
-          # Also create in ingress-nginx namespace
+          # Also create in kube-system namespace for Traefik
           kubectl create secret tls "${DOMAIN}-tls" \
               --cert=/tmp/domain.crt \
               --key=/tmp/domain.key \
-              -n ingress-nginx 2>&1 | tee -a "$LOG_FILE" || log "Warning: Failed to create TLS secret in ingress-nginx namespace"
+              -n kube-system 2>&1 | tee -a "$LOG_FILE" || log "Warning: Failed to create TLS secret in kube-system namespace"
           
           # Clean up temporary certificate files
           rm -f /tmp/domain.crt /tmp/domain.key
@@ -203,7 +197,7 @@ write_files:
       Components installed and verified:
       - K3s: $(kubectl version --short --client 2>/dev/null | head -1 || echo "Ready")
       - Helm: $(helm version --short 2>/dev/null || echo "Ready")
-      - NGINX Ingress: $(kubectl get pods -n ingress-nginx --no-headers 2>/dev/null | wc -l || echo "Ready") pods
+      - Traefik Ingress: $(kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik --no-headers 2>/dev/null | wc -l || echo "Ready") pods
       
       Access Information:
       - SSH: ssh ubuntu@<server-ip> (OCI default user: ubuntu)
@@ -214,7 +208,7 @@ write_files:
       OCI-specific notes:
       - Default SSH user: ubuntu (not root)
       - Firewall configured for K3s ports
-      - NGINX Ingress replaces Traefik
+      - Traefik ingress controller enabled (K3s default)
       - Network configuration disabled in cloud-init
       EOF
       

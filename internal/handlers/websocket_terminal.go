@@ -170,9 +170,9 @@ func (h *WebSocketTerminalHandler) HandleTerminalCreate(c *gin.Context) {
 	}
 
 	// Always resolve SSH user from provider (ignore provided user to ensure correctness)
-	log.Printf("🔍 WebSocket Terminal Request - ServerID: %d, ProvidedUser: '%s', Host: %s", 
+	log.Printf("🔍 WebSocket Terminal Request - ServerID: %d, ProvidedUser: '%s', Host: %s",
 		req.ServerID, req.User, req.Host)
-	
+
 	log.Printf("🔧 Resolving SSH user from provider resolver...")
 	resolvedUser, err := h.providerResolver.ResolveSSHUser(token.(string), accountID.(string), req.ServerID)
 	if err != nil {
@@ -180,7 +180,7 @@ func (h *WebSocketTerminalHandler) HandleTerminalCreate(c *gin.Context) {
 		utils.JSONError(c, http.StatusInternalServerError, fmt.Sprintf("Failed to resolve SSH user: %v", err))
 		return
 	}
-	
+
 	user := resolvedUser
 	if req.User != "" && req.User != user {
 		log.Printf("⚠️ Frontend provided user '%s' but using resolved user '%s' from provider", req.User, user)
