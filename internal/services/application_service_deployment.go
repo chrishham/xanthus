@@ -463,7 +463,7 @@ func (s *SimpleApplicationService) copyFileToVPS(conn *SSHConnection, sshService
 	// Read file - use embedded FS if available
 	var content []byte
 	var err error
-	
+
 	if s.embedFS != nil {
 		content, err = fs.ReadFile(*s.embedFS, localPath)
 		if err != nil {

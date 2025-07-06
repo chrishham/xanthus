@@ -325,7 +325,7 @@ func (ads *ApplicationDeploymentService) copyFileToVPS(conn *SSHConnection, loca
 	// Read file - use embedded FS if available
 	var content []byte
 	var err error
-	
+
 	if ads.embedFS != nil {
 		content, err = fs.ReadFile(*ads.embedFS, localPath)
 		if err != nil {

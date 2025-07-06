@@ -29,12 +29,12 @@ func NewCacheService() *CacheService {
 func (cs *CacheService) Get(key string) (interface{}, bool) {
 	cs.mutex.RLock()
 	defer cs.mutex.RUnlock()
-	
+
 	entry, exists := cs.cache[key]
 	if !exists || time.Now().After(entry.Expiration) {
 		return nil, false
 	}
-	
+
 	return entry.Value, true
 }
 
@@ -42,7 +42,7 @@ func (cs *CacheService) Get(key string) (interface{}, bool) {
 func (cs *CacheService) Set(key string, value interface{}, duration time.Duration) {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	
+
 	cs.cache[key] = CacheEntry{
 		Value:      value,
 		Expiration: time.Now().Add(duration),
@@ -53,7 +53,7 @@ func (cs *CacheService) Set(key string, value interface{}, duration time.Duratio
 func (cs *CacheService) Delete(key string) {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	
+
 	delete(cs.cache, key)
 }
 
@@ -61,7 +61,7 @@ func (cs *CacheService) Delete(key string) {
 func (cs *CacheService) Clear() {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	
+
 	now := time.Now()
 	for key, entry := range cs.cache {
 		if now.After(entry.Expiration) {
@@ -84,7 +84,7 @@ func (cs *CacheService) GetAccountInfo(token string) (*AccountInfo, bool) {
 	if !exists {
 		return nil, false
 	}
-	
+
 	accountInfo, ok := value.(*AccountInfo)
 	return accountInfo, ok
 }
@@ -109,7 +109,7 @@ func hashToken(token string) string {
 func (cs *CacheService) ClearUserCache(accountID string) {
 	cs.mutex.Lock()
 	defer cs.mutex.Unlock()
-	
+
 	// Remove all cache entries for this account
 	for key := range cs.cache {
 		if strings.Contains(key, accountID) {
@@ -122,11 +122,11 @@ func (cs *CacheService) ClearUserCache(accountID string) {
 func (cs *CacheService) GetCacheStats() map[string]interface{} {
 	cs.mutex.RLock()
 	defer cs.mutex.RUnlock()
-	
+
 	active := 0
 	expired := 0
 	now := time.Now()
-	
+
 	for _, entry := range cs.cache {
 		if now.After(entry.Expiration) {
 			expired++
@@ -134,7 +134,7 @@ func (cs *CacheService) GetCacheStats() map[string]interface{} {
 			active++
 		}
 	}
-	
+
 	return map[string]interface{}{
 		"total_entries":   len(cs.cache),
 		"active_entries":  active,

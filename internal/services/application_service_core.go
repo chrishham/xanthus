@@ -15,7 +15,7 @@ import (
 )
 
 // SimpleApplicationService provides core CRUD operations for applications using existing services
-type SimpleApplicationService struct{
+type SimpleApplicationService struct {
 	embedFS *embed.FS
 }
 
@@ -40,7 +40,7 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 	// Get the Xanthus namespace ID (with caching)
 	cacheKey := "legacy_ns:" + accountID // Use accountID for user isolation
 	namespaceID, exists := kvService.namespaceIDCache[cacheKey]
-	
+
 	if !exists {
 		var err error
 		namespaceID, err = kvService.GetXanthusNamespaceID(token, accountID)
@@ -113,7 +113,7 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 		wg.Add(1)
 		go func(keyName string) {
 			defer wg.Done()
-			
+
 			// Acquire semaphore
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
@@ -123,7 +123,7 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 			if err := kvService.GetValue(token, accountID, keyName, &app); err == nil {
 				fmt.Printf("Successfully retrieved application: %s (ID: %s, Name: %s, VPSName: %s, AppType: %s, Status: %s, URL: %s)\n",
 					keyName, app.ID, app.Name, app.VPSName, app.AppType, app.Status, app.URL)
-				
+
 				// Update timestamp for cached status
 				app.UpdatedAt = time.Now().Format(time.RFC3339)
 
@@ -131,7 +131,7 @@ func (s *SimpleApplicationService) ListApplications(token, accountID string) ([]
 				mu.Lock()
 				appMap[keyName] = app
 				mu.Unlock()
-				
+
 				fmt.Printf("Added application to map: %s\n", app.ID)
 			} else {
 				fmt.Printf("Error retrieving application %s: %v\n", keyName, err)
@@ -759,7 +759,7 @@ func (s *SimpleApplicationService) getAllApplications(token, accountID string, k
 	// Get the Xanthus namespace ID (with caching)
 	cacheKey := "legacy_ns:" + accountID // Use accountID for user isolation
 	namespaceID, exists := kvService.namespaceIDCache[cacheKey]
-	
+
 	if !exists {
 		var err error
 		namespaceID, err = kvService.GetXanthusNamespaceID(token, accountID)
@@ -823,7 +823,7 @@ func (s *SimpleApplicationService) getAllApplications(token, accountID string, k
 		wg.Add(1)
 		go func(keyName string) {
 			defer wg.Done()
-			
+
 			// Acquire semaphore
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()

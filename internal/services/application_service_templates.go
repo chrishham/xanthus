@@ -27,7 +27,7 @@ func (s *SimpleApplicationService) generateFromTemplate(predefinedApp *models.Pr
 	// Read the template file - use embedded FS if available
 	var templateContent []byte
 	var err error
-	
+
 	if s.embedFS != nil {
 		templateContent, err = fs.ReadFile(*s.embedFS, templatePath)
 		if err != nil {

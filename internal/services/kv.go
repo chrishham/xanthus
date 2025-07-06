@@ -20,7 +20,7 @@ type KVService struct {
 // NewKVService creates a new KV service instance
 func NewKVService() *KVService {
 	return &KVService{
-		client: &http.Client{Timeout: 10 * time.Second}, // Reduced timeout
+		client:           &http.Client{Timeout: 10 * time.Second}, // Reduced timeout
 		namespaceIDCache: make(map[string]string),
 		cacheService:     NewCacheService(),
 	}
@@ -79,7 +79,7 @@ func (kvs *KVService) PutValue(token, accountID, key string, value interface{}) 
 	// Try to get cached namespace ID first - use accountID for isolation
 	cacheKey := "namespace_id:" + accountID
 	namespaceID := ""
-	
+
 	if cached, exists := kvs.cacheService.Get(cacheKey); exists {
 		namespaceID = cached.(string)
 	} else {
@@ -134,7 +134,7 @@ func (kvs *KVService) GetValue(token, accountID, key string, result interface{})
 	// Try to get cached namespace ID first - use accountID for isolation
 	cacheKey := "namespace_id:" + accountID
 	namespaceID := ""
-	
+
 	if cached, exists := kvs.cacheService.Get(cacheKey); exists {
 		namespaceID = cached.(string)
 	} else {
@@ -185,7 +185,7 @@ func (kvs *KVService) DeleteValue(token, accountID, key string) error {
 	// Get the Xanthus namespace ID (with caching)
 	cacheKey := "legacy_ns:" + accountID
 	namespaceID, exists := kvs.namespaceIDCache[cacheKey]
-	
+
 	if !exists {
 		var err error
 		namespaceID, err = kvs.GetXanthusNamespaceID(token, accountID)
@@ -240,7 +240,7 @@ func (kvs *KVService) ListDomainSSLConfigs(token, accountID string) (map[string]
 	// Get the Xanthus namespace ID (with caching)
 	cacheKey := "legacy_ns:" + accountID // Use first 10 chars of token as cache key
 	namespaceID, exists := kvs.namespaceIDCache[cacheKey]
-	
+
 	if !exists {
 		var err error
 		namespaceID, err = kvs.GetXanthusNamespaceID(token, accountID)
@@ -288,7 +288,7 @@ func (kvs *KVService) ListDomainSSLConfigs(token, accountID string) (map[string]
 		keyName string
 		domain  string
 	}
-	
+
 	var sslKeys []sslKeyInfo
 	for _, key := range keysResp.Result {
 		if len(key.Name) > 20 && key.Name[len(key.Name)-11:] == ":ssl_config" {
@@ -312,7 +312,7 @@ func (kvs *KVService) ListDomainSSLConfigs(token, accountID string) (map[string]
 		wg.Add(1)
 		go func(keyName, domain string) {
 			defer wg.Done()
-			
+
 			// Acquire semaphore
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
@@ -377,7 +377,7 @@ func (kvs *KVService) ListVPSConfigs(token, accountID string) (map[int]*VPSConfi
 	// Get the Xanthus namespace ID (with caching)
 	cacheKey := "legacy_ns:" + accountID // Use first 10 chars of token as cache key
 	namespaceID, exists := kvs.namespaceIDCache[cacheKey]
-	
+
 	if !exists {
 		var err error
 		namespaceID, err = kvs.GetXanthusNamespaceID(token, accountID)
@@ -441,7 +441,7 @@ func (kvs *KVService) ListVPSConfigs(token, accountID string) (map[int]*VPSConfi
 		wg.Add(1)
 		go func(keyName string) {
 			defer wg.Done()
-			
+
 			// Acquire semaphore
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
