@@ -468,6 +468,33 @@ func (vs *VPSService) setupOCIK3s(token, accountID string, vpsConfig *VPSConfig,
 		log.Printf("Warning: K3s readiness check timeout on OCI instance %s: %v", vpsConfig.Name, err)
 	}
 
+	// Set up KUBECONFIG environment variable for both ubuntu and root users
+	log.Printf("Setting up KUBECONFIG environment for OCI instance %s", vpsConfig.Name)
+	
+	// Set up for ubuntu user
+	kubeconfigSetupUbuntu := `echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> /home/ubuntu/.bashrc && 
+echo 'source <(kubectl completion bash)' >> /home/ubuntu/.bashrc && 
+echo 'alias k=kubectl' >> /home/ubuntu/.bashrc && 
+echo 'complete -F __start_kubectl k' >> /home/ubuntu/.bashrc`
+	if _, err := vs.ssh.ExecuteCommand(sshConn, kubeconfigSetupUbuntu); err != nil {
+		log.Printf("Warning: Failed to set up KUBECONFIG for ubuntu user on OCI instance %s: %v", vpsConfig.Name, err)
+	}
+	
+	// Set up for root user (for sudo operations)
+	kubeconfigSetupRoot := `sudo sh -c 'echo "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> /root/.bashrc && 
+echo "source <(kubectl completion bash)" >> /root/.bashrc && 
+echo "alias k=kubectl" >> /root/.bashrc && 
+echo "complete -F __start_kubectl k" >> /root/.bashrc'`
+	if _, err := vs.ssh.ExecuteCommand(sshConn, kubeconfigSetupRoot); err != nil {
+		log.Printf("Warning: Failed to set up KUBECONFIG for root user on OCI instance %s: %v", vpsConfig.Name, err)
+	}
+	
+	// Set up globally in environment
+	globalKubeconfigSetup := `sudo sh -c 'echo "KUBECONFIG=/etc/rancher/k3s/k3s.yaml" >> /etc/environment'`
+	if _, err := vs.ssh.ExecuteCommand(sshConn, globalKubeconfigSetup); err != nil {
+		log.Printf("Warning: Failed to set up global KUBECONFIG on OCI instance %s: %v", vpsConfig.Name, err)
+	}
+
 	// Install Helm
 	log.Printf("Installing Helm on OCI instance %s", vpsConfig.Name)
 	helmInstallCommand := "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
