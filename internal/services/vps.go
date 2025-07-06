@@ -308,15 +308,12 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 		return nil, fmt.Errorf("failed to get VPS configs from KV: %w", err)
 	}
 
-	// Get application counts for each VPS
-	// DISABLED: Application counting causes 8+ second delays
-	// TODO: Move to background job or async endpoint
-	// appCounts, err := vs.getApplicationCountsPerVPS(token, accountID)
-	// if err != nil {
-	// 	log.Printf("Warning: Could not get application counts: %v", err)
-	// 	appCounts = make(map[string]int)
-	// }
-	appCounts := make(map[string]int) // Empty map for now
+	// Get application counts for each VPS (re-enabled with performance optimization)
+	appCounts, err := vs.getApplicationCountsPerVPS(token, accountID)
+	if err != nil {
+		log.Printf("Warning: Could not get application counts: %v", err)
+		appCounts = make(map[string]int)
+	}
 
 	// Convert VPS configs to HetznerServer format for compatibility
 	servers := make([]HetznerServer, 0, len(vpsConfigsMap))
@@ -332,6 +329,9 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 		vpsIDStr := fmt.Sprintf("%d", vpsConfig.ServerID)
 		applicationCount := appCounts[vpsIDStr]
 
+		// Get resource specs based on provider and server type
+		resourceSpecs := vs.getResourceSpecs(vpsConfig.Provider, vpsConfig.ServerType)
+
 		// Create HetznerServer from VPS config for UI compatibility
 		server := HetznerServer{
 			ID:      vpsConfig.ServerID,
@@ -339,8 +339,12 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 			Status:  "unknown", // Status will be fetched from live Hetzner API
 			Created: vpsConfig.CreatedAt,
 			ServerType: HetznerServerTypeInfo{
-				Name: vpsConfig.ServerType,
-				// Add other fields as needed
+				Name:        vpsConfig.ServerType,
+				Description: resourceSpecs.Description,
+				Cores:       resourceSpecs.Cores,
+				Memory:      resourceSpecs.Memory,
+				Disk:        resourceSpecs.Disk,
+				CPUType:     resourceSpecs.CPUType,
 			},
 			Datacenter: HetznerDatacenterInfo{
 				Location: HetznerLocation{
@@ -353,12 +357,13 @@ func (vs *VPSService) GetServersFromKV(token, accountID string) ([]HetznerServer
 				},
 			},
 			Labels: map[string]string{
-				"managed_by":        "xanthus",
-				"accumulated_cost":  fmt.Sprintf("%.2f", accumulatedCost),
-				"monthly_cost":      fmt.Sprintf("%.2f", vpsConfig.MonthlyRate),
-				"hourly_cost":       fmt.Sprintf("%.4f", vpsConfig.HourlyRate),
-				"provider":          vpsConfig.Provider,
-				"application_count": fmt.Sprintf("%d", applicationCount),
+				"managed_by":           "xanthus",
+				"accumulated_cost":     fmt.Sprintf("%.2f", accumulatedCost),
+				"monthly_cost":         fmt.Sprintf("%.2f", vpsConfig.MonthlyRate),
+				"hourly_cost":          fmt.Sprintf("%.4f", vpsConfig.HourlyRate),
+				"provider":             vpsConfig.Provider,
+				"application_count":    fmt.Sprintf("%d", applicationCount),
+				"configured_timezone":  vpsConfig.Timezone,
 			},
 		}
 
@@ -500,20 +505,26 @@ func (vs *VPSService) CreateOCIVPSConfig(
 	name, publicIP, username, shape string,
 	serverID int, privateKey, publicKey string,
 ) (*VPSConfig, error) {
+	// Default to Frankfurt region for Oracle Cloud (most common for European users)
+	location := "eu-frankfurt-1"
+	
+	// Resolve timezone for Oracle Cloud
+	timezone := vs.provider.ResolveTimezone("Oracle Cloud Infrastructure (OCI)", location)
+
 	// Create VPS configuration for OCI
 	vpsConfig := &VPSConfig{
 		ServerID:    serverID,
 		Name:        name,
 		ServerType:  shape,
-		Location:    "oracle-cloud",
+		Location:    location,
 		PublicIPv4:  publicIP,
 		CreatedAt:   time.Now().Format(time.RFC3339),
 		SSHKeyName:  "xanthus-oci-key",
 		SSHUser:     username,
 		SSHPort:     22,
-		HourlyRate:  0.0,   // OCI instances are managed externally
-		MonthlyRate: 0.0,   // Cost tracking handled outside Xanthus
-		Timezone:    "UTC", // Default timezone, can be updated later
+		HourlyRate:  0.0, // OCI instances are managed externally
+		MonthlyRate: 0.0, // Cost tracking handled outside Xanthus
+		Timezone:    timezone,
 		Provider:    "Oracle Cloud Infrastructure (OCI)",
 	}
 
@@ -679,4 +690,182 @@ func (vs *VPSService) GetVPSConfig(token, accountID string, serverID int) (*VPSC
 // DeleteVPSConfig deletes a VPS configuration
 func (vs *VPSService) DeleteVPSConfig(token, accountID string, serverID int) error {
 	return vs.kv.DeleteVPSConfig(token, accountID, serverID)
+}
+
+// ResourceSpecs represents the resource specifications of a server type
+type ResourceSpecs struct {
+	Description string
+	Cores       int
+	Memory      float64 // in GB
+	Disk        int     // in GB
+	CPUType     string
+}
+
+// getResourceSpecs returns resource specifications for a given provider and server type
+func (vs *VPSService) getResourceSpecs(provider, serverType string) ResourceSpecs {
+	// Default specs for unknown configurations
+	defaultSpecs := ResourceSpecs{
+		Description: "Unknown Configuration",
+		Cores:       0,
+		Memory:      0,
+		Disk:        0,
+		CPUType:     "Unknown",
+	}
+
+	// Oracle Cloud Infrastructure (OCI) shapes
+	if strings.Contains(provider, "Oracle") || strings.Contains(provider, "OCI") {
+		return vs.getOCIResourceSpecs(serverType)
+	}
+
+	// Hetzner Cloud server types - could be expanded in the future
+	if strings.Contains(provider, "Hetzner") {
+		return vs.getHetznerResourceSpecs(serverType)
+	}
+
+	return defaultSpecs
+}
+
+// getOCIResourceSpecs returns resource specifications for Oracle Cloud shapes
+func (vs *VPSService) getOCIResourceSpecs(shape string) ResourceSpecs {
+	// Oracle Cloud Infrastructure shape mappings
+	ociShapes := map[string]ResourceSpecs{
+		"VM.Standard.A1.Flex": {
+			Description: "Ampere Altra ARM64 Flexible Shape",
+			Cores:       1,   // Always Free: 1 OCPU, can scale up to 4
+			Memory:      6.0, // Always Free: 6GB RAM, can scale up to 24GB
+			Disk:        47,  // Always Free: 47GB boot volume + block storage
+			CPUType:     "ARM64 Ampere Altra",
+		},
+		"VM.Standard2.1": {
+			Description: "Standard Intel Xeon E5-2690 v4",
+			Cores:       1,
+			Memory:      15.0,
+			Disk:        47,
+			CPUType:     "Intel Xeon E5-2690 v4",
+		},
+		"VM.Standard2.2": {
+			Description: "Standard Intel Xeon E5-2690 v4",
+			Cores:       2,
+			Memory:      30.0,
+			Disk:        47,
+			CPUType:     "Intel Xeon E5-2690 v4",
+		},
+		"VM.Standard2.4": {
+			Description: "Standard Intel Xeon E5-2690 v4",
+			Cores:       4,
+			Memory:      60.0,
+			Disk:        47,
+			CPUType:     "Intel Xeon E5-2690 v4",
+		},
+		"VM.Standard.E3.Flex": {
+			Description: "AMD EPYC 7742 Flexible Shape",
+			Cores:       1,    // Flexible, can scale from 1-64
+			Memory:      16.0, // Flexible, can scale from 1-1024GB
+			Disk:        47,
+			CPUType:     "AMD EPYC 7742",
+		},
+		"VM.Standard.E4.Flex": {
+			Description: "AMD EPYC 7J13 Flexible Shape",
+			Cores:       1,    // Flexible, can scale from 1-64
+			Memory:      16.0, // Flexible, can scale from 1-1024GB
+			Disk:        47,
+			CPUType:     "AMD EPYC 7J13",
+		},
+	}
+
+	if specs, exists := ociShapes[shape]; exists {
+		return specs
+	}
+
+	// Fallback for unknown OCI shapes
+	return ResourceSpecs{
+		Description: fmt.Sprintf("Oracle Cloud %s", shape),
+		Cores:       1,
+		Memory:      6.0,
+		Disk:        47,
+		CPUType:     "Oracle Cloud",
+	}
+}
+
+// UpdateOCIVPSLocation updates the location for Oracle Cloud VPS instances from "oracle-cloud" to actual region
+func (vs *VPSService) UpdateOCIVPSLocation(token, accountID string, serverID int, newLocation string) error {
+	// Get existing VPS configuration
+	vpsConfig, err := vs.kv.GetVPSConfig(token, accountID, serverID)
+	if err != nil {
+		return fmt.Errorf("failed to get VPS config: %w", err)
+	}
+
+	// Only update Oracle Cloud instances with generic "oracle-cloud" location
+	if !strings.Contains(vpsConfig.Provider, "Oracle") || vpsConfig.Location != "oracle-cloud" {
+		log.Printf("VPS %d is not an Oracle Cloud instance with generic location, skipping", serverID)
+		return nil
+	}
+
+	// Update location and timezone
+	vpsConfig.Location = newLocation
+	vpsConfig.Timezone = vs.provider.ResolveTimezone("Oracle Cloud Infrastructure (OCI)", newLocation)
+
+	// Store updated configuration
+	if err := vs.kv.StoreVPSConfig(token, accountID, vpsConfig); err != nil {
+		return fmt.Errorf("failed to update VPS location: %w", err)
+	}
+
+	log.Printf("✅ Updated VPS %d location from 'oracle-cloud' to '%s' with timezone '%s'", 
+		serverID, newLocation, vpsConfig.Timezone)
+	return nil
+}
+
+// getHetznerResourceSpecs returns resource specifications for Hetzner Cloud server types
+func (vs *VPSService) getHetznerResourceSpecs(serverType string) ResourceSpecs {
+	// Common Hetzner server types (this could be expanded or made dynamic)
+	hetznerTypes := map[string]ResourceSpecs{
+		"cx11": {
+			Description: "Intel/AMD, Dedicated vCPU",
+			Cores:       1,
+			Memory:      4.0,
+			Disk:        20,
+			CPUType:     "Intel/AMD x86",
+		},
+		"cx21": {
+			Description: "Intel/AMD, Dedicated vCPU",
+			Cores:       2,
+			Memory:      8.0,
+			Disk:        40,
+			CPUType:     "Intel/AMD x86",
+		},
+		"cx31": {
+			Description: "Intel/AMD, Dedicated vCPU",
+			Cores:       2,
+			Memory:      16.0,
+			Disk:        80,
+			CPUType:     "Intel/AMD x86",
+		},
+		"cx41": {
+			Description: "Intel/AMD, Dedicated vCPU",
+			Cores:       4,
+			Memory:      32.0,
+			Disk:        160,
+			CPUType:     "Intel/AMD x86",
+		},
+		"cx51": {
+			Description: "Intel/AMD, Dedicated vCPU",
+			Cores:       8,
+			Memory:      64.0,
+			Disk:        240,
+			CPUType:     "Intel/AMD x86",
+		},
+	}
+
+	if specs, exists := hetznerTypes[serverType]; exists {
+		return specs
+	}
+
+	// Fallback for unknown Hetzner server types
+	return ResourceSpecs{
+		Description: fmt.Sprintf("Hetzner %s", serverType),
+		Cores:       1,
+		Memory:      4.0,
+		Disk:        20,
+		CPUType:     "Intel/AMD x86",
+	}
 }

@@ -62,8 +62,8 @@ func (pr *ProviderResolver) GetProviderDefaults(provider string) *ProviderDefaul
 				"sa-saopaulo-1":  "America/Sao_Paulo",
 				"ca-toronto-1":   "America/Toronto",
 				"ca-montreal-1":  "America/Montreal",
-				"oracle-cloud":   "UTC",
-				"default":        "UTC",
+				"oracle-cloud":   "Europe/Athens", // Default for Greece-based usage
+				"default":        "Europe/Athens",
 			},
 		}
 	case "AWS":
