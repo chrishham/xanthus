@@ -29,13 +29,20 @@ This document outlines the implementation plan for automating Oracle Cloud Infra
 - **Network Resources**: VCN, subnet, security group, and public IP management
 - **SSH Key Management**: Key pair creation and registration
 
-**Required Environment Variables:**
+**Single Authentication Token:**
 ```bash
-OCI_TENANCY_OCID="ocid1.tenancy.oc1..xxx"
-OCI_USER_OCID="ocid1.user.oc1..xxx"
-OCI_REGION="us-phoenix-1"
-OCI_FINGERPRINT="aa:bb:cc:dd:ee:ff"
-OCI_PRIVATE_KEY_PATH="/path/to/oci_api_key.pem"
+OCI_AUTH_TOKEN="eyJ0ZW5hbmN5IjoiY2lkMS50ZW5hbmN5Lm9jMS4uYWFhYSIsInVzZXIiOiJvY2lkMS51c2VyLm9jMS4uYmJiYiIsInJlZ2lvbiI6InVzLXBob2VuaXgtMSIsImZpbmdlcnByaW50IjoiYWE6YmI6Y2M6ZGQ6ZWU6ZmYiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuTUlJRXZBSUJBREFOQmdrcWhraUc5dzBCQVFFRkFBU0NCS2t3Z2dTbEFnRUFBb0lCQVFDNklcbi4uLlxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIn0="
+```
+
+**Token Structure (Base64 encoded JSON):**
+```json
+{
+  "tenancy": "ocid1.tenancy.oc1..aaaa",
+  "user": "ocid1.user.oc1..bbbb", 
+  "region": "us-phoenix-1",
+  "fingerprint": "aa:bb:cc:dd:ee:ff",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC6I\n...\n-----END PRIVATE KEY-----\n"
+}
 ```
 
 ### 2. Service Architecture
@@ -150,44 +157,109 @@ runcmd:
 
 **Timeline:** 1-2 weeks
 
-### Phase 3: UI Enhancement (Low Priority)
+### Phase 3: UI Enhancement (Medium Priority)
 
 **Deliverables:**
-- Update VPS creation wizard to support OCI automation
-- Add OCI-specific configuration options (region, shape selection)
-- Real-time status monitoring
-- Cost estimation integration
-- Error handling improvements
+- **OCI Token Generator UI**: Built-in token generator in VPS creation wizard
+- **OCI Credentials Instructions**: Step-by-step guidance for OCI Console setup
+- **Token Validation**: OCI auth token validation similar to Hetzner API key
+- **Region/Shape Selection**: OCI-specific configuration options
+- **Error Handling**: User-friendly error messages and recovery instructions
 
-**Timeline:** 1 week
+**UI Components:**
+- Token generator form with validation
+- Instructions panel with OCI Console navigation
+- Region dropdown with Always Free tier regions
+- Shape selection with cost estimates
+- Progress indicators and loading states
+
+**Timeline:** 1-2 weeks
 
 ## User Experience
 
-### Simplest Approach: Environment Variables
+### Single OCI Auth Token Approach
 
 **Setup Process:**
-1. **OCI API Setup**: User creates API key in OCI console
-2. **Environment Configuration**: Set OCI credentials via environment variables
-3. **One-Click Creation**: Same VPS creation flow as Hetzner
-4. **Automatic Setup**: Cloud-init handles K3s, Helm, and SSL configuration
+1. **OCI Console Setup**: User creates API key in OCI console (Identity & Security → Users → API Keys)
+2. **Token Generation**: User enters OCI credentials in Xanthus UI token generator
+3. **Token Validation**: System validates OCI auth token like Hetzner API key
+4. **One-Click Creation**: Same VPS creation flow as Hetzner
+5. **Automatic Setup**: Cloud-init handles K3s, Helm, and SSL configuration
+
+**UI Implementation:**
+
+**Step 2: OCI Auth Token Configuration**
+- **Instructions Panel**: Clear guidance on where to get OCI credentials
+- **Built-in Token Generator**: 
+  - Form fields for Tenancy OCID, User OCID, Region, Fingerprint, OCI API Private Key
+  - Generate button creates single base64-encoded auth token
+  - No external tools or scripts needed
+- **Token Input**: Option to paste pre-generated token
+- **Validation**: Same validation flow as Hetzner API key
+
+**Where Users Get OCI Credentials:**
+1. **OCI Console** → Identity & Security → Users → [User] → API Keys
+2. **Generate OCI API Key Pair** (RSA key for OCI API authentication, not SSH)
+3. **Copy Configuration Info** from OCI Console after key upload
+4. **Use Xanthus Token Generator** to create single auth token
+
+**Note**: SSH access is handled automatically by Xanthus (same as Hetzner) - users only need OCI API credentials.
+
+**Token Generator Features:**
+```html
+<!-- Built into VPS creation wizard Step 2 -->
+<div class="token-generator">
+  <h4>🔧 Generate OCI Auth Token</h4>
+  <input placeholder="Tenancy OCID: ocid1.tenancy.oc1..aaaa..." />
+  <input placeholder="User OCID: ocid1.user.oc1..bbbb..." />
+  <select>Region selection</select>
+  <input placeholder="Key Fingerprint: aa:bb:cc:dd..." />
+  <textarea placeholder="OCI API Private Key content"></textarea>
+  <button onclick="generateToken()">Generate Auth Token</button>
+</div>
+```
 
 **Benefits:**
-- ✅ Consistent with Hetzner pattern (`HETZNER_TOKEN`)
-- ✅ Secure credential management
-- ✅ No UI complexity for initial implementation
-- ✅ Standard OCI authentication method
+- ✅ **Same UX as Hetzner**: Single token input and validation
+- ✅ **No File Management**: Everything handled in browser/memory
+- ✅ **Built-in Generator**: No external tools or scripts required
+- ✅ **Secure**: Token encrypted in Cloudflare KV like Hetzner key
+- ✅ **User-Friendly**: Step-by-step guidance with clear instructions
+- ✅ **Portable**: Generated token works across environments
 
-### Alternative Approaches
+**User Complexity:**
+- **First-time Setup**: ~10-15 minutes (same as Hetzner)
+- **Token Generation**: ~2 minutes using built-in generator
+- **Subsequent Usage**: Automatic (token stored in KV)
 
-**Configuration File:**
-- Support `~/.oci/config` standard OCI configuration
-- Automatic credential discovery
-- Multiple profile support
+### Implementation Components
 
-**In-App Configuration:**
-- Store OCI credentials in Cloudflare KV (encrypted)
-- Web-based credential management
-- Team sharing capabilities
+**Frontend (`internal/utils/oci.go`):**
+```go
+type OCICredentials struct {
+    Tenancy     string `json:"tenancy"`
+    User        string `json:"user"`
+    Region      string `json:"region"`
+    Fingerprint string `json:"fingerprint"`
+    PrivateKey  string `json:"private_key"`
+}
+
+func DecodeOCIAuthToken(token string) (*OCICredentials, error)
+func GetOCIAuthToken(token, accountID string) (string, error)
+```
+
+**Backend Handler:**
+```go
+func (h *BaseHandler) getOCIAuthToken(c *gin.Context, token, accountID string) (*OCICredentials, bool)
+func (h *BaseHandler) validateOCIToken() // Similar to validateHetznerKey()
+```
+
+**JavaScript (vps-creation-wizard.js):**
+```javascript
+generateOCIToken()     // Creates base64 token from form inputs
+validateOCIToken()     // Validates token via API like Hetzner
+isOCICredsComplete()   // Form validation
+```
 
 ## Technical Considerations
 
@@ -244,7 +316,8 @@ runcmd:
 - **Error Recovery**: < 10% manual intervention required
 
 ### User Experience Metrics
-- **Setup Time**: < 15 minutes for initial OCI configuration
+- **Setup Time**: < 15 minutes for initial OCI configuration (same as Hetzner)
+- **Token Generation**: < 2 minutes using built-in generator
 - **Learning Curve**: Same UI/UX as Hetzner integration
 - **Support Tickets**: < 5% increase in support volume
 - **User Satisfaction**: > 90% positive feedback
@@ -281,4 +354,13 @@ runcmd:
 
 This implementation plan provides a comprehensive approach to automating OCI deployment in Xanthus, leveraging the proven patterns from the Hetzner integration while addressing OCI-specific requirements. The phased approach ensures minimal disruption to existing functionality while delivering immediate value to users.
 
-The focus on the Always Free tier and environment variable configuration provides the simplest possible user experience while maintaining the security and reliability standards established by the existing Hetzner automation.
+**Key Innovation - Single Auth Token Approach:**
+The plan addresses the complexity of OCI's multi-credential authentication by implementing a single `OCI_AUTH_TOKEN` similar to Hetzner's `HETZNER_TOKEN`. This provides users with the exact same experience across both providers while handling OCI's complexity behind the scenes.
+
+**Built-in Token Generator:**
+Users can generate their OCI auth token directly in the Xanthus UI without external tools or scripts. The token generator guides users through collecting OCI credentials from the Oracle Console and creates a single base64-encoded token for authentication.
+
+**No File Management:**
+Unlike traditional OCI CLI tools that require config files, Xanthus handles everything in memory and encrypted KV storage, maintaining the security and simplicity that users expect from cloud automation tools.
+
+The focus on the Always Free tier, built-in token generation, and consistent UX provides the simplest possible user experience while maintaining the security and reliability standards established by the existing Hetzner automation.
