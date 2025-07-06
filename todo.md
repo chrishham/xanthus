@@ -64,3 +64,5 @@ buy domain, point nameservers to cloudfare, wait for the domain to be active, cr
  The current codebase is well-structured with good separation of concerns. The
   applications-management.js file could be refactored into smaller modules, but that's a
   refactoring issue, not an architecture problem.
+
+basically, assuming 24/7 operation for the full month, you can have a single 4-core / 24GB RAM system
