@@ -569,32 +569,69 @@ MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC...
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-gray-50 p-4 rounded-lg">
                         <h4 class="font-medium text-gray-900 mb-3">Instance Configuration</h4>
-                        <dl class="space-y-2 text-sm">
-                            <div class="flex justify-between">
+                        <div class="space-y-4">
+                            <!-- Shape Selection -->
+                            <div class="flex justify-between text-sm">
                                 <dt class="text-gray-500">Shape:</dt>
                                 <dd class="font-medium">VM.Standard.A1.Flex</dd>
                             </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">OCPU:</dt>
-                                <dd class="font-medium">1 ARM64 vCPU</dd>
+                            
+                            <!-- OCPU Configuration -->
+                            <div>
+                                <label for="oci-ocpu" class="block text-sm font-medium text-gray-700 mb-1">
+                                    OCPU Count
+                                    <span class="text-xs text-gray-500">(1-4 for Always Free)</span>
+                                </label>
+                                <input type="number" 
+                                       id="oci-ocpu" 
+                                       x-model.number="ociConfig.ocpu"
+                                       min="1" 
+                                       max="4" 
+                                       step="1"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                       :class="ociConfig.ocpu > 4 ? 'border-red-300' : 'border-gray-300'">
+                                <div class="mt-1 text-xs text-gray-500">
+                                    <span x-text="ociConfig.ocpu"></span> ARM64 vCPU
+                                    <span x-show="ociConfig.ocpu > 4" class="text-red-500 ml-1">⚠️ Exceeds Always Free limit</span>
+                                </div>
                             </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">Memory:</dt>
-                                <dd class="font-medium">6 GB RAM</dd>
+                            
+                            <!-- Memory Configuration -->
+                            <div>
+                                <label for="oci-memory" class="block text-sm font-medium text-gray-700 mb-1">
+                                    Memory (GB)
+                                    <span class="text-xs text-gray-500">(1-24 for Always Free)</span>
+                                </label>
+                                <input type="number" 
+                                       id="oci-memory" 
+                                       x-model.number="ociConfig.memory"
+                                       min="1" 
+                                       max="24" 
+                                       step="1"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                       :class="ociConfig.memory > 24 ? 'border-red-300' : 'border-gray-300'">
+                                <div class="mt-1 text-xs text-gray-500">
+                                    <span x-text="ociConfig.memory"></span> GB RAM
+                                    <span x-show="ociConfig.memory > 24" class="text-red-500 ml-1">⚠️ Exceeds Always Free limit</span>
+                                </div>
                             </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">Storage:</dt>
-                                <dd class="font-medium">50 GB Boot Volume</dd>
+                            
+                            <!-- Static Configuration -->
+                            <div class="space-y-1 text-sm pt-2 border-t border-gray-200">
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Storage:</dt>
+                                    <dd class="font-medium">50 GB Boot Volume</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">OS:</dt>
+                                    <dd class="font-medium">Ubuntu 24.04 LTS ARM64</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Region:</dt>
+                                    <dd class="font-medium" x-text="ociCredentials.region"></dd>
+                                </div>
                             </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">OS:</dt>
-                                <dd class="font-medium">Ubuntu 24.04 LTS ARM64</dd>
-                            </div>
-                            <div class="flex justify-between">
-                                <dt class="text-gray-500">Region:</dt>
-                                <dd class="font-medium" x-text="ociCredentials.region"></dd>
-                            </div>
-                        </dl>
+                        </div>
                     </div>
                     
                     <div class="bg-gray-50 p-4 rounded-lg">
@@ -634,24 +671,36 @@ MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC...
                     </div>
                 </div>
                 
-                <div class="bg-green-50 border border-green-200 p-4 rounded-lg">
-                    <h4 class="font-medium text-green-900 mb-2">💰 Always Free Tier</h4>
+                <div class="p-4 rounded-lg" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'">
+                    <h4 class="font-medium mb-2" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">
+                        <span x-show="ociConfig.ocpu <= 4 && ociConfig.memory <= 24">💰 Always Free Tier</span>
+                        <span x-show="ociConfig.ocpu > 4 || ociConfig.memory > 24">⚠️ Paid Tier Configuration</span>
+                    </h4>
                     <div class="space-y-1 text-sm">
                         <div class="flex justify-between">
-                            <span class="text-green-700">Instance Cost:</span>
-                            <span class="font-medium text-green-900">FREE (Always Free)</span>
+                            <span :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-700' : 'text-yellow-700'">Instance Cost:</span>
+                            <span class="font-medium" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">
+                                <span x-show="ociConfig.ocpu <= 4 && ociConfig.memory <= 24">FREE (Always Free)</span>
+                                <span x-show="ociConfig.ocpu > 4 || ociConfig.memory > 24">PAID (Exceeds Always Free)</span>
+                            </span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-green-700">Network Resources:</span>
-                            <span class="font-medium text-green-900">FREE (Always Free)</span>
+                            <span :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-700' : 'text-yellow-700'">Network Resources:</span>
+                            <span class="font-medium" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">FREE (Always Free)</span>
                         </div>
-                        <div class="border-t border-green-200 pt-1 mt-2 flex justify-between font-medium">
-                            <span class="text-green-900">Total Monthly:</span>
-                            <span class="text-green-900">$0.00 USD</span>
+                        <div class="border-t pt-1 mt-2 flex justify-between font-medium" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'border-green-200' : 'border-yellow-200'">
+                            <span :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">Total Monthly:</span>
+                            <span :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">
+                                <span x-show="ociConfig.ocpu <= 4 && ociConfig.memory <= 24">$0.00 USD</span>
+                                <span x-show="ociConfig.ocpu > 4 || ociConfig.memory > 24">Variable (Contact Oracle)</span>
+                            </span>
                         </div>
-                        <div class="mt-2 pt-1 border-t border-green-200">
-                            <p class="text-xs text-green-600">💡 <strong>Always Free:</strong> This configuration uses OCI Always Free tier resources</p>
-                            <p class="text-xs text-green-600 mt-1">⏱️ <strong>Setup Time:</strong> Instance provisioning typically takes 3-5 minutes</p>
+                        <div class="mt-2 pt-1 border-t" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'border-green-200' : 'border-yellow-200'">
+                            <p class="text-xs" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-600' : 'text-yellow-600'">
+                                <span x-show="ociConfig.ocpu <= 4 && ociConfig.memory <= 24">💡 <strong>Always Free:</strong> This configuration uses OCI Always Free tier resources</span>
+                                <span x-show="ociConfig.ocpu > 4 || ociConfig.memory > 24">⚠️ <strong>Paid Tier:</strong> This configuration exceeds Always Free limits and will incur costs</span>
+                            </p>
+                            <p class="text-xs mt-1" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-600' : 'text-yellow-600'">⏱️ <strong>Setup Time:</strong> Instance provisioning typically takes 3-5 minutes</p>
                         </div>
                     </div>
                 </div>

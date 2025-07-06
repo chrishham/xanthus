@@ -38,6 +38,7 @@ func (vs *VPSService) CreateOCIVPSWithConfig(
 	name, shape, region,
 	sshPublicKey, timezone string,
 	hourlyRate, monthlyRate float64,
+	ocpu, memory float32,
 ) (*OCIInstance, *VPSConfig, error) {
 	// Create OCI service
 	ociService, err := NewOCIService(ociAuthToken)
@@ -46,7 +47,7 @@ func (vs *VPSService) CreateOCIVPSWithConfig(
 	}
 
 	// Create VPS instance
-	instance, err := ociService.CreateVPSWithK3s(context.Background(), name, shape, sshPublicKey, timezone)
+	instance, err := ociService.CreateVPSWithK3s(context.Background(), name, shape, sshPublicKey, timezone, ocpu, memory)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create OCI instance: %w", err)
 	}

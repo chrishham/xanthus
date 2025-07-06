@@ -355,16 +355,46 @@ func (h *VPSLifecycleHandler) HandleOCICreate(c *gin.Context) {
 
 	// Parse request data
 	var req struct {
-		Name     string `json:"name" binding:"required"`
-		Shape    string `json:"shape" binding:"required"`
-		Region   string `json:"region"`
-		Timezone string `json:"timezone"`
-		OCIToken string `json:"oci_token"` // Optional - for first-time setup
+		Name     string  `json:"name" binding:"required"`
+		Shape    string  `json:"shape" binding:"required"`
+		Region   string  `json:"region"`
+		Timezone string  `json:"timezone"`
+		OCPU     float32 `json:"ocpu"`   // OCPU count for flexible shapes
+		Memory   float32 `json:"memory"` // Memory in GB for flexible shapes
+		OCIToken string  `json:"oci_token"` // Optional - for first-time setup
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.JSONBadRequest(c, "Invalid request data: "+err.Error())
 		return
+	}
+
+	// Set defaults for OCPU and Memory if not provided
+	if req.OCPU == 0 {
+		req.OCPU = 1.0 // Default to 1 OCPU
+	}
+	if req.Memory == 0 {
+		req.Memory = 6.0 // Default to 6GB
+	}
+
+	// Validate Always Free tier limits for VM.Standard.A1.Flex
+	if req.Shape == "VM.Standard.A1.Flex" {
+		if req.OCPU > 4 {
+			utils.JSONBadRequest(c, "OCPU count cannot exceed 4 for Always Free tier (VM.Standard.A1.Flex)")
+			return
+		}
+		if req.Memory > 24 {
+			utils.JSONBadRequest(c, "Memory cannot exceed 24GB for Always Free tier (VM.Standard.A1.Flex)")
+			return
+		}
+		if req.OCPU < 1 {
+			utils.JSONBadRequest(c, "OCPU count must be at least 1")
+			return
+		}
+		if req.Memory < 1 {
+			utils.JSONBadRequest(c, "Memory must be at least 1GB")
+			return
+		}
 	}
 
 	// Get or store OCI auth token
@@ -437,8 +467,8 @@ func (h *VPSLifecycleHandler) HandleOCICreate(c *gin.Context) {
 	}
 
 	// Create VPS with K3s using OCI service
-	log.Printf("Creating OCI instance: %s with shape %s", req.Name, req.Shape)
-	ociInstance, err := ociService.CreateVPSWithK3s(ctx, req.Name, req.Shape, sshPublicKey, timezone)
+	log.Printf("Creating OCI instance: %s with shape %s (%v OCPU, %v GB RAM)", req.Name, req.Shape, req.OCPU, req.Memory)
+	ociInstance, err := ociService.CreateVPSWithK3s(ctx, req.Name, req.Shape, sshPublicKey, timezone, req.OCPU, req.Memory)
 	if err != nil {
 		log.Printf("Error creating OCI instance: %v", err)
 		utils.JSONInternalServerError(c, fmt.Sprintf("Failed to create OCI instance: %v", err))

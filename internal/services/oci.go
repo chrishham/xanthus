@@ -412,7 +412,7 @@ func (o *OCIService) ListComputeShapes(ctx context.Context) ([]OCIShape, error) 
 }
 
 // CreateInstance creates a new OCI compute instance with cloud-init
-func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, imageID, availabilityDomain, subnetID, sshPublicKey, cloudInitScript, timezone string) (*OCIInstance, error) {
+func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, imageID, availabilityDomain, subnetID, sshPublicKey, cloudInitScript, timezone string, ocpu, memory float32) (*OCIInstance, error) {
 	// Encode cloud-init script
 	userData := cloudInitScript
 	if userData != "" {
@@ -457,9 +457,17 @@ func (o *OCIService) CreateInstance(ctx context.Context, displayName, shape, ima
 
 	// Configure shape for flexible shapes
 	if strings.Contains(shape, "Flex") {
+		// Set defaults if not provided
+		if ocpu == 0 {
+			ocpu = 1.0 // Default to 1 OCPU
+		}
+		if memory == 0 {
+			memory = 6.0 // Default to 6GB
+		}
+		
 		launchInstanceDetails.ShapeConfig = &core.LaunchInstanceShapeConfigDetails{
-			Ocpus:       common.Float32(1.0), // 1 OCPU for Always Free (A1.Flex supports up to 4)
-			MemoryInGBs: common.Float32(6.0), // 6GB RAM for Always Free (A1.Flex supports up to 24GB)
+			Ocpus:       common.Float32(ocpu),   // Dynamic OCPU count
+			MemoryInGBs: common.Float32(memory), // Dynamic memory in GB
 		}
 	}
 
@@ -562,7 +570,7 @@ func (o *OCIService) GetInstanceConsoleConnection(ctx context.Context, instanceI
 }
 
 // CreateVPSWithK3s creates a complete VPS instance with network setup and K3s installation
-func (o *OCIService) CreateVPSWithK3s(ctx context.Context, displayName, shape, sshPublicKey, timezone string) (*OCIInstance, error) {
+func (o *OCIService) CreateVPSWithK3s(ctx context.Context, displayName, shape, sshPublicKey, timezone string, ocpu, memory float32) (*OCIInstance, error) {
 	// Get the first availability domain
 	availabilityDomains, err := o.ListAvailabilityDomains(ctx)
 	if err != nil {
@@ -594,7 +602,7 @@ func (o *OCIService) CreateVPSWithK3s(ctx context.Context, displayName, shape, s
 	}
 
 	// Create the instance with cloud-init
-	return o.CreateInstance(ctx, displayName, shape, imageID, availabilityDomain, subnetID, sshPublicKey, ociCloudInitScript, timezone)
+	return o.CreateInstance(ctx, displayName, shape, imageID, availabilityDomain, subnetID, sshPublicKey, ociCloudInitScript, timezone, ocpu, memory)
 }
 
 // DeleteVPSWithCleanup terminates an instance and optionally cleans up network resources

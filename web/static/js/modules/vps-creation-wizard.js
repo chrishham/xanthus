@@ -20,6 +20,10 @@ export function vpsCreationWizard() {
         ociPublicIP: '',
         ociUsername: 'ubuntu',
         ociShape: 'VM.Standard.A1.Flex',
+        ociConfig: {
+            ocpu: 1,
+            memory: 6
+        },
         
         // Hetzner: Location and Server Type
         locations: [],
@@ -558,7 +562,9 @@ export function vpsCreationWizard() {
                     name: this.serverName,
                     shape: 'VM.Standard.A1.Flex', // Always Free tier ARM64
                     region: this.ociCredentials.region,
-                    timezone: 'UTC'
+                    timezone: 'UTC',
+                    ocpu: this.ociConfig.ocpu,
+                    memory: this.ociConfig.memory
                 };
 
                 // Include OCI token if available (for first-time setup or token override)
