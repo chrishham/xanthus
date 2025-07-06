@@ -322,7 +322,16 @@ export function vpsManagement() {
         async deleteServer(serverId, serverName) {
             this.setLoadingState('Deleting VPS', `Deleting VPS "${serverName}"...`);
             try {
-                const response = await fetch('/vps/delete', {
+                // Get server object to determine provider
+                const server = this.servers.find(s => s.id === serverId);
+                const provider = server?.labels?.provider?.toLowerCase();
+                
+                // Determine the correct endpoint based on provider
+                const deleteEndpoint = (provider && (provider.includes('oracle') || provider.includes('oci'))) 
+                    ? '/vps/oci/delete' 
+                    : '/vps/delete';
+                
+                const response = await fetch(deleteEndpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded',
