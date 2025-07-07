@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -22,7 +24,13 @@ func main() {
 	// Set port to 8081
 	port := "8081"
 
-	fmt.Printf("🚀 Xanthus v2.0 (with shared ConfigMap support) is starting on http://localhost:%s\n", port)
+	// Get version info for startup logging
+	version := getVersion()
+	goVersion := runtime.Version()
+	platform := runtime.GOOS + "/" + runtime.GOARCH
+
+	fmt.Printf("🚀 Xanthus %s is starting on http://localhost:%s\n", version, port)
+	fmt.Printf("📊 Platform: %s | Go: %s\n", platform, goVersion)
 
 	// Initialize Gin
 	gin.SetMode(gin.ReleaseMode)
@@ -120,4 +128,12 @@ func setupTemplates(r *gin.Engine) {
 	tmpl = template.Must(tmpl.ParseFS(HTMLTemplates, "web/templates/partials/*/*.html"))
 	r.SetHTMLTemplate(tmpl)
 	log.Println("✅ Templates pre-compiled successfully from embedded files")
+}
+
+// getVersion returns the current version from environment or default
+func getVersion() string {
+	if version := os.Getenv("XANTHUS_VERSION"); version != "" {
+		return "v" + version
+	}
+	return "v2.0-dev"
 }

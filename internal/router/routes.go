@@ -171,6 +171,9 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		version.GET("/status", config.VersionHandler.GetUpdateStatus)
 		version.POST("/rollback", config.VersionHandler.RollbackVersion)
 	}
+
+	// About route
+	protected.GET("/about", config.VersionHandler.GetAboutInfo)
 }
 
 // setupAPIRoutes configures API routes with appropriate middleware

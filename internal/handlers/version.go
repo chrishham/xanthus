@@ -77,6 +77,17 @@ func (h *VersionHandler) GetCurrentVersion(c *gin.Context) {
 	})
 }
 
+// GetAboutInfo returns about information including version and platform details
+func (h *VersionHandler) GetAboutInfo(c *gin.Context) {
+	_, _, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	aboutInfo := h.versionService.GetAboutInfo()
+	c.JSON(http.StatusOK, aboutInfo)
+}
+
 // GetAvailableVersions returns available versions from GitHub releases
 func (h *VersionHandler) GetAvailableVersions(c *gin.Context) {
 	_, _, valid := h.validateTokenAndAccount(c)

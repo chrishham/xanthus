@@ -319,3 +319,21 @@ func getBuildTime() string {
 	// This would typically be set during build time
 	return "unknown"
 }
+
+// AboutInfo represents information about the application
+type AboutInfo struct {
+	Version   string `json:"version"`
+	BuildDate string `json:"build_date"`
+	GoVersion string `json:"go_version"`
+	Platform  string `json:"platform"`
+}
+
+// GetAboutInfo returns about information for the application
+func (s *SelfUpdateService) GetAboutInfo() *AboutInfo {
+	return &AboutInfo{
+		Version:   s.GetCurrentVersion(),
+		BuildDate: getBuildTime(),
+		GoVersion: runtime.Version(),
+		Platform:  runtime.GOOS + "/" + runtime.GOARCH,
+	}
+}
