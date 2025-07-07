@@ -4,6 +4,7 @@ export interface UIState {
 	loading: boolean;
 	loadingTitle: string;
 	loadingMessage: string;
+	currentPage: string;
 	modals: {
 		[key: string]: boolean;
 	};
@@ -13,6 +14,7 @@ const initialState: UIState = {
 	loading: false,
 	loadingTitle: 'Processing...',
 	loadingMessage: 'Please wait while the operation completes.',
+	currentPage: '',
 	modals: {}
 };
 
@@ -61,5 +63,12 @@ export const toggleModal = (modalKey: string) => {
 			...state.modals,
 			[modalKey]: !state.modals[modalKey]
 		}
+	}));
+};
+
+export const setCurrentPage = (page: string) => {
+	uiStore.update(state => ({
+		...state,
+		currentPage: page
 	}));
 };
