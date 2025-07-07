@@ -11,10 +11,14 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 COPY tailwind.config.js ./
-COPY web/static/css/ ./web/static/css/
 
-# Install npm dependencies
-RUN npm ci --only=production
+# Copy web assets needed for TailwindCSS compilation
+COPY web/static/css/ ./web/static/css/
+COPY web/static/js/ ./web/static/js/
+COPY web/templates/ ./web/templates/
+
+# Install npm dependencies (including devDependencies for build tools)
+RUN npm ci
 
 # Build CSS and JS assets
 RUN npm run build-assets
