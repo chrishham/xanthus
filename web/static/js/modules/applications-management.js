@@ -607,8 +607,6 @@ export function applicationsManagement() {
                                     <option value="latest">latest (Automatic)</option>
                                     ${options}
                                 </select>
-                                <div class="text-xs text-gray-500 mt-1">Or enter custom version below:</div>
-                                <input id="custom-version" class="swal2-input m-0 w-full mt-1" placeholder="Custom version (optional)">
                             `;
                         }
                     }
@@ -617,9 +615,16 @@ export function applicationsManagement() {
                 }
             }
 
-            // Fallback to manual input if versions not available
+            // Only show modal if versions are available
             if (!versionsHtml) {
-                versionsHtml = `<input id="new-version" class="swal2-input m-0 w-full" placeholder="Enter new version" value="latest">`;
+                Swal.fire({
+                    title: 'Version Change Not Available',
+                    text: 'Version selection is only available for applications that support automatic version detection.',
+                    icon: 'info',
+                    confirmButtonText: 'OK',
+                    confirmButtonColor: '#2563eb'
+                });
+                return;
             }
 
             const { value: newVersion } = await Swal.fire({
@@ -641,18 +646,8 @@ export function applicationsManagement() {
                 confirmButtonText: 'Change Version',
                 confirmButtonColor: '#2563eb',
                 preConfirm: () => {
-                    // Check if we have version dropdown or manual input
                     const versionSelect = document.getElementById('version-select');
-                    const customVersionInput = document.getElementById('custom-version');
-                    const manualVersionInput = document.getElementById('new-version');
-                    
-                    let version;
-                    if (versionSelect) {
-                        const customVersion = customVersionInput?.value?.trim();
-                        version = customVersion || versionSelect.value;
-                    } else {
-                        version = manualVersionInput?.value?.trim();
-                    }
+                    const version = versionSelect?.value;
                     
                     if (!version) {
                         Swal.showValidationMessage('Version is required');

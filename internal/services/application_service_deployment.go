@@ -438,7 +438,7 @@ func (s *SimpleApplicationService) copyLocalChartToVPS(conn *SSHConnection, sshS
 
 	// Copy all template files (dynamically read from templates directory)
 	templatesDir := fmt.Sprintf("%s/templates", localChartPath)
-	
+
 	var templateFiles []string
 	if s.embedFS != nil {
 		// Read from embedded FS

@@ -62,7 +62,7 @@ func (s *SimpleApplicationService) generateFromTemplate(predefinedApp *models.Pr
 		"Subdomain": subdomain,
 		"Domain":    domain,
 	}
-	
+
 	for key, templateValue := range predefinedApp.HelmChart.Placeholders {
 		// Resolve Go template syntax in the placeholder value
 		resolvedValue := templateValue

@@ -27,7 +27,6 @@ type ApplicationConfig struct {
 	Metadata      ApplicationMetadata         `yaml:"metadata,omitempty"`
 }
 
-
 // HelmChartConfigYAML represents Helm configuration in YAML
 type HelmChartConfigYAML struct {
 	Repository     string            `yaml:"repository" validate:"required,url"`

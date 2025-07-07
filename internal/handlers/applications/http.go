@@ -303,7 +303,7 @@ func (h *Handler) HandleApplicationVersions(c *gin.Context) {
 	}
 
 	githubService := services.NewGitHubService()
-	
+
 	// Parse owner/repo from the version source
 	sourceRepo := predefinedApp.VersionSource.Source // e.g., "chrishham/xanthus" or "coder/code-server"
 	var owner, repo string
@@ -313,7 +313,7 @@ func (h *Handler) HandleApplicationVersions(c *gin.Context) {
 			owner, repo = parts[0], parts[1]
 		}
 	}
-	
+
 	if owner == "" || repo == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
