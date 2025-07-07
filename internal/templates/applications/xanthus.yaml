@@ -1,0 +1,143 @@
+image:
+  repository: ghcr.io/chrishham/xanthus
+  tag: "{{APPLICATION_VERSION}}"
+  pullPolicy: IfNotPresent
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8081
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: "{{SUBDOMAIN}}.{{DOMAIN}}"
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: "xanthus-tls"
+      hosts:
+        - "{{SUBDOMAIN}}.{{DOMAIN}}"
+
+# Resource configuration
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# Persistence configuration
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  annotations: {}
+
+# Environment variables
+env:
+  - name: GIN_MODE
+    value: "release"
+  - name: PORT
+    value: "8081"
+  - name: DATA_DIR
+    value: "/app/data"
+
+# Configuration data
+configMap:
+  data:
+    # Add any configuration files here
+    app.yaml: |
+      server:
+        port: 8081
+        host: "{{SUBDOMAIN}}.{{DOMAIN}}"
+      storage:
+        data_dir: "/app/data"
+      features:
+        self_update: true
+        version_management: true
+
+# Security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+podSecurityContext:
+  fsGroup: 1000
+
+# Health checks
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 10
+  failureThreshold: 30
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8081"
+  prometheus.io/path: "/metrics"
+
+# Horizontal Pod Autoscaling (disabled by default for stateful app)
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Network policy (optional)
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: []

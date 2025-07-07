@@ -1,4 +1,4 @@
-.PHONY: dev build test test-unit test-integration test-e2e test-e2e-live test-e2e-coverage test-e2e-vps test-e2e-ssl test-e2e-apps test-e2e-ui test-e2e-perf test-e2e-security test-e2e-dr test-coverage test-all test-everything lint css css-watch clean help-testing
+.PHONY: dev build test test-unit test-integration test-e2e test-e2e-live test-e2e-coverage test-e2e-vps test-e2e-ssl test-e2e-apps test-e2e-ui test-e2e-perf test-e2e-security test-e2e-dr test-coverage test-all test-everything lint css css-watch clean help-testing docker-build docker-push docker-tag docker-multi help-docker
 
 # Development mode
 dev: css
@@ -11,6 +11,27 @@ build: assets
 # Build for Windows 64-bit
 build-windows: assets
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o bin/xanthus.exe .
+
+# Build for Linux ARM64
+build-linux-arm64: assets
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bin/xanthus-linux-arm64 .
+
+# Build for macOS Intel
+build-macos-intel: assets
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o bin/xanthus-macos-intel .
+
+# Build for macOS Apple Silicon
+build-macos-arm64: assets
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o bin/xanthus-macos-arm64 .
+
+# Build all platforms
+build-all: assets
+	@echo "Building for all platforms..."
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/xanthus-linux-amd64 .
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o bin/xanthus-linux-arm64 .
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o bin/xanthus-windows-amd64.exe .
+	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o bin/xanthus-macos-intel .
+	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -o bin/xanthus-macos-arm64 .
 
 # Build all assets (CSS + JS)
 assets:
@@ -112,6 +133,59 @@ clean:
 	rm -rf web/static/js/vendor/
 	rm -f coverage.out coverage.html
 	rm -f e2e-coverage.out e2e-coverage.html
+
+# Docker build targets
+DOCKER_REGISTRY ?= ghcr.io/chrishham
+DOCKER_IMAGE ?= xanthus
+DOCKER_TAG ?= latest
+DOCKER_PLATFORMS ?= linux/amd64,linux/arm64
+
+# Build Docker image locally
+docker-build:
+	docker build -t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):$(DOCKER_TAG) .
+
+# Push Docker image to registry
+docker-push:
+	docker push $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):$(DOCKER_TAG)
+
+# Tag Docker image with version
+docker-tag:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required. Usage: make docker-tag VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	docker tag $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):$(DOCKER_TAG) $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):$(VERSION)
+
+# Build multi-architecture Docker image
+docker-multi:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required. Usage: make docker-multi VERSION=v1.0.0"; \
+		exit 1; \
+	fi
+	docker buildx build --platform $(DOCKER_PLATFORMS) \
+		-t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):$(VERSION) \
+		-t $(DOCKER_REGISTRY)/$(DOCKER_IMAGE):latest \
+		--push .
+
+# Display Docker commands
+help-docker:
+	@echo "Docker commands:"
+	@echo ""
+	@echo "  make docker-build     - Build Docker image locally"
+	@echo "  make docker-push      - Push image to registry"
+	@echo "  make docker-tag       - Tag image with version (requires VERSION=)"
+	@echo "  make docker-multi     - Build and push multi-arch image (requires VERSION=)"
+	@echo ""
+	@echo "Environment variables:"
+	@echo "  DOCKER_REGISTRY=ghcr.io/chrishham (default)"
+	@echo "  DOCKER_IMAGE=xanthus (default)"
+	@echo "  DOCKER_TAG=latest (default)"
+	@echo "  DOCKER_PLATFORMS=linux/amd64,linux/arm64 (default)"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make docker-build"
+	@echo "  make docker-tag VERSION=v1.0.0"
+	@echo "  make docker-multi VERSION=v1.0.0"
 
 # Display available test commands
 help-testing:
