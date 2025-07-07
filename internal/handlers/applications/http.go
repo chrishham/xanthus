@@ -28,27 +28,9 @@ type HelmChartVersion struct {
 	Digest     string    `yaml:"digest"`
 }
 
-// HandleApplicationsPage renders the applications management page
+// HandleApplicationsPage redirects to Svelte applications page
 func (h *Handler) HandleApplicationsPage(c *gin.Context) {
-	token := c.GetString("cf_token")
-	accountID := c.GetString("account_id")
-
-	// Get applications list using service
-	appService := h.GetApplicationService()
-	applications, err := appService.ListApplications(token, accountID)
-	if err != nil {
-		log.Printf("Error getting applications: %v", err)
-		applications = []models.Application{}
-	}
-
-	// Get predefined applications catalog
-	predefinedApps := h.catalog.GetApplications()
-
-	c.HTML(http.StatusOK, "applications.html", gin.H{
-		"Applications":   applications,
-		"PredefinedApps": predefinedApps,
-		"ActivePage":     "applications",
-	})
+	c.Redirect(http.StatusTemporaryRedirect, "/app/applications")
 }
 
 // HandleApplicationsList returns a JSON list of applications

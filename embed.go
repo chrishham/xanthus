@@ -8,16 +8,12 @@ import (
 
 //go:embed web/templates/*.html
 //go:embed web/templates/partials/common/*.html
-//go:embed web/templates/partials/applications/*.html
-//go:embed web/templates/partials/vps/*.html
-//go:embed web/templates/partials/wizard/*.html
 var HTMLTemplates embed.FS
 
 //go:embed web/static/css/*.css
 //go:embed web/static/js/vendor/*.js
 //go:embed web/static/js/modules/*.js
 //go:embed web/static/js/modules/common/*.js
-//go:embed web/static/js/*.js
 //go:embed web/static/icons/*.png
 //go:embed web/static/icons/*.ico
 //go:embed web/static/*.webmanifest

@@ -44,47 +44,9 @@ type CloudflareDomainsResponse struct {
 	} `json:"errors"`
 }
 
-// HandleDNSConfigPage renders the DNS configuration page
+// HandleDNSConfigPage redirects to Svelte DNS page
 func (h *DNSHandler) HandleDNSConfigPage(c *gin.Context) {
-	token, err := c.Cookie("cf_token")
-	if err != nil || !utils.VerifyCloudflareToken(token) {
-		c.Redirect(http.StatusTemporaryRedirect, "/login")
-		return
-	}
-
-	// Get account ID
-	_, accountID, err := utils.CheckKVNamespaceExists(token)
-	if err != nil {
-		c.Data(http.StatusOK, "text/html", []byte("❌ Error accessing account"))
-		return
-	}
-
-	// Fetch domains from Cloudflare
-	domains, err := h.fetchCloudflareDomains(token)
-	if err != nil {
-		log.Printf("Error fetching domains: %v", err)
-		c.Data(http.StatusOK, "text/html", []byte("❌ Error fetching domains"))
-		return
-	}
-
-	// Check which domains are managed by Xanthus (exist in KV)
-	kvService := services.NewKVService()
-	managedDomains, err := kvService.ListDomainSSLConfigs(token, accountID)
-	if err != nil {
-		log.Printf("Error fetching managed domains: %v", err)
-		// Continue without marking domains as managed
-	} else {
-		for i := range domains {
-			if _, exists := managedDomains[domains[i].Name]; exists {
-				domains[i].Managed = true
-			}
-		}
-	}
-
-	c.HTML(http.StatusOK, "dns-config.html", gin.H{
-		"Domains":    domains,
-		"ActivePage": "dns",
-	})
+	c.Redirect(http.StatusTemporaryRedirect, "/app/dns")
 }
 
 // HandleDNSList returns a JSON list of domains

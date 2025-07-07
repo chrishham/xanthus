@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -35,9 +34,9 @@ func TestHandleRoot(t *testing.T) {
 		expectedHeader string
 	}{
 		{
-			name:           "should redirect to login page",
+			name:           "should redirect to app page",
 			expectedStatus: http.StatusTemporaryRedirect,
-			expectedHeader: "/login",
+			expectedHeader: "/app",
 		},
 	}
 
@@ -61,12 +60,10 @@ func TestHandleRoot(t *testing.T) {
 }
 
 func TestHandleLoginPage(t *testing.T) {
-	t.Run("should call HTML method with correct parameters", func(t *testing.T) {
+	t.Run("should redirect to app login page", func(t *testing.T) {
 		router := setupTestRouter()
 		authHandler := handlers.NewAuthHandler(createTestJWTService())
 
-		// Set up a simple template to avoid nil pointer panic
-		router.SetHTMLTemplate(template.Must(template.New("login.html").Parse("<html>Login Page</html>")))
 		router.GET("/login", authHandler.HandleLoginPage)
 
 		req, err := http.NewRequest("GET", "/login", nil)
@@ -75,9 +72,9 @@ func TestHandleLoginPage(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 
-		// Should return 200 with our simple template
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Body.String(), "Login Page")
+		// Should return 307 redirect to Svelte login page
+		assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
+		assert.Equal(t, "/app/login", w.Header().Get("Location"))
 	})
 }
 
@@ -157,7 +154,7 @@ func TestHandleLogout(t *testing.T) {
 		{
 			name:           "should clear cookie and redirect to login",
 			expectedStatus: http.StatusTemporaryRedirect,
-			expectedHeader: "/login",
+			expectedHeader: "/app/login",
 			checkCookie:    true,
 		},
 	}

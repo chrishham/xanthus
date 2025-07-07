@@ -29,11 +29,4 @@ audio, canvas, embed, iframe, img, object, svg, video {
 }
 
 /* Custom styles for Xanthus */
-.htmx-indicator {
-    display: none;
-    pointer-events: none;
-}
-.htmx-request .htmx-indicator {
-    display: flex;
-    pointer-events: auto;
-}
+/* HTMX styles removed - migrated to Svelte SPA */

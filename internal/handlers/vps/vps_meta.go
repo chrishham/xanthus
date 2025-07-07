@@ -3,6 +3,7 @@ package vps
 import (
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/chrishham/xanthus/internal/models"
 	"github.com/chrishham/xanthus/internal/services"
@@ -24,37 +25,14 @@ func NewVPSMetaHandler() *VPSMetaHandler {
 	}
 }
 
-// HandleVPSManagePage renders the VPS management page
+// HandleVPSManagePage redirects to Svelte VPS page
 func (h *VPSMetaHandler) HandleVPSManagePage(c *gin.Context) {
-	token, accountID, valid := h.validateTokenAndAccountHTML(c)
-	if !valid {
-		return
-	}
-
-	// Get VPS servers from KV store instead of Hetzner API
-	servers, err := h.vpsService.GetServersFromKV(token, accountID)
-	if err != nil {
-		log.Printf("Error getting servers from KV: %v", err)
-		// Continue with empty servers list instead of failing
-		servers = []services.HetznerServer{}
-	}
-
-	c.HTML(200, "vps-manage.html", gin.H{ // http.StatusOK
-		"Servers":    servers,
-		"ActivePage": "vps",
-	})
+	c.Redirect(http.StatusTemporaryRedirect, "/app/vps")
 }
 
-// HandleVPSCreatePage renders the VPS creation page
+// HandleVPSCreatePage redirects to Svelte VPS page  
 func (h *VPSMetaHandler) HandleVPSCreatePage(c *gin.Context) {
-	_, _, valid := h.validateTokenAndAccountHTML(c)
-	if !valid {
-		return
-	}
-
-	c.HTML(200, "vps-create.html", gin.H{ // http.StatusOK
-		"ActivePage": "vps",
-	})
+	c.Redirect(http.StatusTemporaryRedirect, "/app/vps")
 }
 
 // HandleVPSServerOptions fetches available server types and locations with filtering/sorting

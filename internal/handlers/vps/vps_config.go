@@ -207,8 +207,7 @@ func (h *VPSConfigHandler) HandleSetupHetzner(c *gin.Context) {
 		if existingKey, err := utils.GetHetznerAPIKey(token, accountID); err == nil && existingKey != "" {
 			// Use existing key - proceed to next step
 			log.Println("✅ Using existing Hetzner API key")
-			c.Header("HX-Redirect", "/setup/server")
-			c.Status(http.StatusOK)
+			c.Redirect(http.StatusTemporaryRedirect, "/app/setup")
 			return
 		} else {
 			c.Data(http.StatusBadRequest, "text/html", []byte("❌ Hetzner API key is required"))
@@ -238,8 +237,7 @@ func (h *VPSConfigHandler) HandleSetupHetzner(c *gin.Context) {
 	}
 
 	log.Println("✅ Hetzner API key stored successfully")
-	c.Header("HX-Redirect", "/setup/server")
-	c.Status(http.StatusOK)
+	c.Redirect(http.StatusTemporaryRedirect, "/app/setup")
 }
 
 // HandleVPSGetTimezone retrieves the current timezone for a VPS
