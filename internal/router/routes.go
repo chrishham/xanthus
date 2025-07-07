@@ -208,5 +208,20 @@ func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 	user := protectedAPI.Group("/user")
 	user.GET("/profile", config.AuthHandler.HandleAPIAuthStatus)
 
+	// Applications API endpoints
+	apps := protectedAPI.Group("/applications")
+	apps.GET("", config.AppsHandler.HandleApplicationsList)
+	apps.GET("/prerequisites", config.AppsHandler.HandleApplicationsPrerequisites)
+	apps.POST("", config.AppsHandler.HandleApplicationsCreate)
+	apps.GET("/versions/:app_type", config.AppsHandler.HandleApplicationVersions)
+	apps.POST("/:id/upgrade", config.AppsHandler.HandleApplicationUpgrade)
+	apps.GET("/:id/password", config.AppsHandler.HandleApplicationPasswordGet)
+	apps.POST("/:id/password", config.AppsHandler.HandleApplicationPasswordChange)
+	apps.GET("/:id/token", config.AppsHandler.HandleApplicationToken)
+	apps.GET("/:id/port-forwards", config.AppsHandler.HandlePortForwardsList)
+	apps.POST("/:id/port-forwards", config.AppsHandler.HandlePortForwardsCreate)
+	apps.DELETE("/:id/port-forwards/:port_id", config.AppsHandler.HandlePortForwardsDelete)
+	apps.DELETE("/:id", config.AppsHandler.HandleApplicationDelete)
+
 	// Additional protected API routes will be added here in later phases
 }

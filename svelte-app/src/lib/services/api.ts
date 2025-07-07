@@ -1,4 +1,5 @@
 import { errorHandler } from './errorHandler';
+import { authenticatedFetch } from '../stores/auth';
 
 export class ApiError extends Error {
 	constructor(
@@ -16,7 +17,7 @@ export class ApiClient {
 
 	async get<T>(endpoint: string, context = 'API', showErrors = true): Promise<T> {
 		try {
-			const response = await fetch(`${this.baseUrl}${endpoint}`, {
+			const response = await authenticatedFetch(`${this.baseUrl}${endpoint}`, {
 				method: 'GET',
 				headers: {
 					'Content-Type': 'application/json'
@@ -34,7 +35,7 @@ export class ApiClient {
 
 	async post<T>(endpoint: string, data?: unknown, context = 'API', showErrors = true): Promise<T> {
 		try {
-			const response = await fetch(`${this.baseUrl}${endpoint}`, {
+			const response = await authenticatedFetch(`${this.baseUrl}${endpoint}`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'
@@ -52,7 +53,7 @@ export class ApiClient {
 	}
 
 	async put<T>(endpoint: string, data?: unknown): Promise<T> {
-		const response = await fetch(`${this.baseUrl}${endpoint}`, {
+		const response = await authenticatedFetch(`${this.baseUrl}${endpoint}`, {
 			method: 'PUT',
 			headers: {
 				'Content-Type': 'application/json'
@@ -64,7 +65,7 @@ export class ApiClient {
 	}
 
 	async delete<T>(endpoint: string): Promise<T> {
-		const response = await fetch(`${this.baseUrl}${endpoint}`, {
+		const response = await authenticatedFetch(`${this.baseUrl}${endpoint}`, {
 			method: 'DELETE',
 			headers: {
 				'Content-Type': 'application/json'

@@ -52,7 +52,7 @@
 		}));
 		
 		try {
-			const data = await api.get('/applications/list');
+			const data = await api.get('/applications');
 			const validApps = (data.applications || []).filter(isValidApplication);
 			const uniqueApps = deduplicateById(validApps);
 			
@@ -124,7 +124,7 @@
 	function startAutoRefresh() {
 		const refreshFn = async () => {
 			try {
-				const data = await api.get('/applications/list');
+				const data = await api.get('/applications');
 				const validApps = (data.applications || []).filter(isValidApplication);
 				const uniqueApps = deduplicateById(validApps);
 				
