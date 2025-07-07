@@ -1,0 +1,180 @@
+{
+  "servers": {
+    "list_servers": {
+      "servers": [
+        {
+          "id": 12345,
+          "name": "test-vps-e2e-001",
+          "status": "running",
+          "public_net": {
+            "ipv4": {
+              "ip": "192.168.1.100"
+            }
+          },
+          "server_type": {
+            "name": "cx11",
+            "prices": [
+              {
+                "location": "nbg1",
+                "price_hourly": {
+                  "net": "0.0040",
+                  "gross": "0.0048"
+                },
+                "price_monthly": {
+                  "net": "2.9100",
+                  "gross": "3.4600"
+                }
+              }
+            ]
+          },
+          "datacenter": {
+            "location": {
+              "name": "nbg1",
+              "description": "Nuremberg DC Park 1"
+            }
+          },
+          "created": "2025-01-01T10:00:00+00:00"
+        }
+      ]
+    },
+    "create_server": {
+      "server": {
+        "id": 12346,
+        "name": "test-vps-e2e-002",
+        "status": "initializing",
+        "public_net": {
+          "ipv4": {
+            "ip": "192.168.1.101"
+          }
+        },
+        "server_type": {
+          "name": "cx11"
+        },
+        "datacenter": {
+          "location": {
+            "name": "nbg1"
+          }
+        },
+        "created": "2025-01-01T10:05:00+00:00"
+      },
+      "action": {
+        "id": 54321,
+        "command": "create_server",
+        "status": "running",
+        "progress": 0,
+        "started": "2025-01-01T10:05:00+00:00"
+      }
+    },
+    "server_actions": {
+      "power_on": {
+        "action": {
+          "id": 54322,
+          "command": "start_server",
+          "status": "success",
+          "progress": 100,
+          "started": "2025-01-01T10:10:00+00:00",
+          "finished": "2025-01-01T10:10:30+00:00"
+        }
+      },
+      "power_off": {
+        "action": {
+          "id": 54323,
+          "command": "shutdown_server",
+          "status": "success",
+          "progress": 100,
+          "started": "2025-01-01T10:15:00+00:00",
+          "finished": "2025-01-01T10:15:45+00:00"
+        }
+      },
+      "reboot": {
+        "action": {
+          "id": 54324,
+          "command": "reboot_server",
+          "status": "success",
+          "progress": 100,
+          "started": "2025-01-01T10:20:00+00:00",
+          "finished": "2025-01-01T10:21:30+00:00"
+        }
+      }
+    },
+    "ssh_keys": {
+      "list_ssh_keys": {
+        "ssh_keys": [
+          {
+            "id": 98765,
+            "name": "xanthus-e2e-test",
+            "fingerprint": "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99",
+            "public_key": "ssh-rsa AAAAB3NzaC1yc2EAAAA... xanthus-e2e-test",
+            "labels": {
+              "purpose": "e2e-testing"
+            }
+          }
+        ]
+      },
+      "create_ssh_key": {
+        "ssh_key": {
+          "id": 98766,
+          "name": "xanthus-e2e-test-new",
+          "fingerprint": "ff:ee:dd:cc:bb:aa:99:88:77:66:55:44:33:22:11:00",
+          "public_key": "ssh-rsa AAAAB3NzaC1yc2EAAAA... xanthus-e2e-test-new",
+          "labels": {
+            "purpose": "e2e-testing"
+          }
+        }
+      }
+    },
+    "locations": {
+      "list_locations": {
+        "locations": [
+          {
+            "id": 1,
+            "name": "nbg1",
+            "description": "Nuremberg DC Park 1",
+            "country": "DE",
+            "city": "Nuremberg",
+            "latitude": 49.452102,
+            "longitude": 11.076665
+          },
+          {
+            "id": 2,
+            "name": "fsn1", 
+            "description": "Falkenstein DC Park 1",
+            "country": "DE",
+            "city": "Falkenstein",
+            "latitude": 50.47612,
+            "longitude": 12.370071
+          }
+        ]
+      }
+    },
+    "server_types": {
+      "list_server_types": {
+        "server_types": [
+          {
+            "id": 1,
+            "name": "cx11",
+            "description": "CX11",
+            "cores": 1,
+            "memory": 4.0,
+            "disk": 20,
+            "prices": [
+              {
+                "location": "nbg1",
+                "price_hourly": {
+                  "net": "0.0040",
+                  "gross": "0.0048"
+                },
+                "price_monthly": {
+                  "net": "2.9100",
+                  "gross": "3.4600"
+                }
+              }
+            ],
+            "storage_type": "local",
+            "cpu_type": "shared"
+          }
+        ]
+      }
+    }
+  }
+}

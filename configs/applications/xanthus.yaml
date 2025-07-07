@@ -1,0 +1,111 @@
+id: xanthus
+name: Xanthus Platform
+description: Self-hosted infrastructure management platform for deploying applications on cloud VPS instances with automated DNS/SSL management
+icon: 🚀
+category: DevOps
+
+version_source:
+  type: github
+  source: chrishham/xanthus
+  pattern: "v*"
+
+helm_chart:
+  repository: local
+  chart: xanthus-platform
+  version: 1.0.0
+  namespace: xanthus-platform
+  values_template: xanthus.yaml
+  placeholders:
+    APPLICATION_VERSION: "{{.Version}}"
+    DOMAIN: "{{.Domain}}"
+    SUBDOMAIN: "{{.Subdomain}}"
+
+default_port: 8081
+
+# Update strategy configuration
+update_policy:
+  strategy: manual              # User chooses version (like code-server)
+  auto_patch: false            # Don't auto-update patch versions
+  auto_minor: false            # Don't auto-update minor versions
+  auto_major: false            # Never auto-update major versions
+  rollback_enabled: true       # Enable rollback functionality
+  
+ui_features:
+  show_release_notes: true     # Display changelog for selected version
+  allow_downgrade: true        # Let users downgrade if needed
+  require_confirmation: true   # Confirm before updates
+  show_current_version: true   # Display currently running version
+
+requirements:
+  min_cpu: 0.5
+  min_memory_gb: 1
+  min_disk_gb: 5
+
+features:
+  - Infrastructure management
+  - VPS provisioning (Hetzner Cloud & Oracle Cloud)
+  - DNS/SSL automation (Cloudflare integration)
+  - Application deployment via Helm charts
+  - K3s orchestration on VPS instances
+  - User-controlled version selection
+  - Self-updating capabilities with rollback
+  - HTMX + Alpine.js dynamic UI
+  - Configuration-driven deployment
+
+ports:
+  - name: http
+    port: 8081
+    protocol: TCP
+    description: "Web interface and API"
+
+volumes:
+  - name: data
+    mount_path: /app/data
+    description: "Application data and configuration storage"
+    size: 10Gi
+
+environment_variables:
+  - name: GIN_MODE
+    value: release
+    description: "Gin web framework mode"
+  - name: PORT
+    value: "8081"
+    description: "HTTP server port"
+  - name: DATA_DIR
+    value: "/app/data"
+    description: "Data directory for persistent storage"
+
+health_checks:
+  readiness_probe:
+    path: /health
+    port: 8081
+    initial_delay_seconds: 10
+    period_seconds: 10
+  liveness_probe:
+    path: /health
+    port: 8081
+    initial_delay_seconds: 30
+    period_seconds: 30
+  startup_probe:
+    path: /health
+    port: 8081
+    initial_delay_seconds: 5
+    period_seconds: 5
+    failure_threshold: 30
+
+security:
+  run_as_non_root: true
+  run_as_user: 1000
+  fs_group: 1000
+  read_only_root_filesystem: true
+  allow_privilege_escalation: false
+
+tags:
+  - infrastructure
+  - kubernetes
+  - vps
+  - deployment
+  - devops
+  - self-hosted
+  - automation
+  - cloud-management

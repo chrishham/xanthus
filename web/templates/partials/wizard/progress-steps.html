@@ -1,0 +1,63 @@
+<!-- Progress Steps -->
+<div class="mb-8">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <!-- Step 1: Domain Check -->
+            <div class="flex items-center" :class="currentStep >= 1 ? 'text-blue-600' : 'text-gray-400'">
+                <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                     :class="currentStep >= 1 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                    <span x-show="currentStep > 1" class="text-sm">✓</span>
+                    <span x-show="currentStep <= 1" class="text-sm">1</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Domain</span>
+            </div>
+            
+            <div class="flex-1 h-0.5" :class="currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+            
+            <!-- Step 2: Hetzner Key -->
+            <div class="flex items-center" :class="currentStep >= 2 ? 'text-blue-600' : 'text-gray-400'">
+                <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                     :class="currentStep >= 2 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                    <span x-show="currentStep > 2" class="text-sm">✓</span>
+                    <span x-show="currentStep <= 2" class="text-sm">2</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Hetzner API</span>
+            </div>
+            
+            <div class="flex-1 h-0.5" :class="currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+            
+            <!-- Step 3: Location -->
+            <div class="flex items-center" :class="currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'">
+                <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                     :class="currentStep >= 3 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                    <span x-show="currentStep > 3" class="text-sm">✓</span>
+                    <span x-show="currentStep <= 3" class="text-sm">3</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Location</span>
+            </div>
+            
+            <div class="flex-1 h-0.5" :class="currentStep >= 4 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+            
+            <!-- Step 4: Server Type -->
+            <div class="flex items-center" :class="currentStep >= 4 ? 'text-blue-600' : 'text-gray-400'">
+                <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                     :class="currentStep >= 4 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                    <span x-show="currentStep > 4" class="text-sm">✓</span>
+                    <span x-show="currentStep <= 4" class="text-sm">4</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Server Type</span>
+            </div>
+            
+            <div class="flex-1 h-0.5" :class="currentStep >= 5 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+            
+            <!-- Step 5: Review -->
+            <div class="flex items-center" :class="currentStep >= 5 ? 'text-blue-600' : 'text-gray-400'">
+                <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                     :class="currentStep >= 5 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                    <span class="text-sm">5</span>
+                </div>
+                <span class="ml-2 text-sm font-medium">Review</span>
+            </div>
+        </div>
+    </div>
+</div>

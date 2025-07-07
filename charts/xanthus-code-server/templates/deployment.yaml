@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "xanthus-code-server.fullname" . }}
+  labels:
+    {{- include "xanthus-code-server.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "xanthus-code-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "xanthus-code-server.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: code-server
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: PASSWORD
+          value: "{{ .Values.password }}"
+        {{- if .Values.setupScript.enabled }}
+        - name: SETUP_SCRIPT_AVAILABLE
+          value: "true"
+        {{- end }}
+        {{- if .Values.timezone }}
+        - name: TZ
+          value: "{{ .Values.timezone }}"
+        {{- end }}
+        volumeMounts:
+        # Mount entire home directory to persistent volume
+        - name: home-data
+          mountPath: /home/coder
+        {{- if .Values.setupScript.enabled }}
+        # Mount setup script (will overlay the persistent volume)
+        - name: setup-script
+          mountPath: {{ .Values.setupScript.mountPath }}
+          subPath: setup-dev-environment.sh
+          readOnly: true
+        {{- end }}
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+      initContainers:
+      - name: setup-home
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          # Create VS Code settings directory if it doesn't exist
+          mkdir -p /home/coder/.local/share/code-server/User
+          
+          # Copy VS Code settings if they don't exist
+          if [ ! -f /home/coder/.local/share/code-server/User/settings.json ]; then
+            cp /tmp/vscode-settings/settings.json /home/coder/.local/share/code-server/User/settings.json
+          fi
+          
+          # Ensure correct ownership
+          chown -R coder:coder /home/coder
+        env:
+        {{- if .Values.timezone }}
+        - name: TZ
+          value: "{{ .Values.timezone }}"
+        {{- end }}
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: home-data
+          mountPath: /home/coder
+        {{- if .Values.vscodeSettings.enabled }}
+        - name: vscode-settings
+          mountPath: /tmp/vscode-settings
+          readOnly: true
+        {{- end }}
+      volumes:
+      # Persistent volume for entire home directory
+      {{- if .Values.persistence.enabled }}
+      - name: home-data
+        persistentVolumeClaim:
+          claimName: {{ include "xanthus-code-server.fullname" . }}-home
+      {{- else }}
+      - name: home-data
+        emptyDir: {}
+      {{- end }}
+      {{- if .Values.setupScript.enabled }}
+      - name: setup-script
+        configMap:
+          name: {{ include "xanthus-code-server.fullname" . }}-setup-script
+          defaultMode: 0755
+      {{- end }}
+      {{- if .Values.vscodeSettings.enabled }}
+      - name: vscode-settings
+        configMap:
+          name: {{ include "xanthus-code-server.fullname" . }}-vscode-settings
+      {{- end }}

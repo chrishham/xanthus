@@ -1,0 +1,248 @@
+# Headlamp Helm Values Template
+# This template supports placeholder substitution for dynamic deployment
+
+# Image configuration
+image:
+  registry: ghcr.io
+  repository: headlamp-k8s/headlamp
+  tag: "v0.32.0"
+  pullPolicy: IfNotPresent
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 4466
+
+# Ingress configuration with Traefik
+ingress:
+  enabled: true
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - host: "{{SUBDOMAIN}}.{{DOMAIN}}"
+      paths:
+        - path: /
+          type: Prefix
+  tls:
+    - secretName: "{{DOMAIN}}-tls"
+      hosts:
+        - "{{SUBDOMAIN}}.{{DOMAIN}}"
+  ingressClassName: ""
+
+# Resource configuration
+resources:
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+
+# Security context
+securityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
+  fsGroup: 0
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC configuration
+rbac:
+  create: true
+  # ClusterRole permissions for full cluster control
+  rules:
+    # Core resources - full control
+    - apiGroups: [""]
+      resources: ["*"]
+      verbs: ["*"]
+    # Apps resources - full control
+    - apiGroups: ["apps"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Extensions resources - full control
+    - apiGroups: ["extensions"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Networking resources - full control
+    - apiGroups: ["networking.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # RBAC resources - full control
+    - apiGroups: ["rbac.authorization.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Batch resources - full control
+    - apiGroups: ["batch"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Autoscaling resources - full control
+    - apiGroups: ["autoscaling"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Policy resources - full control
+    - apiGroups: ["policy"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Storage resources - full control
+    - apiGroups: ["storage.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Metrics resources - full control
+    - apiGroups: ["metrics.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # CRDs and API extensions - full control
+    - apiGroups: ["apiextensions.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Coordination resources - full control
+    - apiGroups: ["coordination.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Events - full control
+    - apiGroups: ["events.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Admission controllers - full control
+    - apiGroups: ["admissionregistration.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Certificates - full control
+    - apiGroups: ["certificates.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Discovery - full control
+    - apiGroups: ["discovery.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Scheduling - full control
+    - apiGroups: ["scheduling.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Node - full control
+    - apiGroups: ["node.k8s.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Traefik CRDs (if using Traefik)
+    - apiGroups: ["traefik.containo.us"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Helm/chart resources
+    - apiGroups: ["helm.cattle.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # Rancher/K3s specific resources
+    - apiGroups: ["k3s.cattle.io"]
+      resources: ["*"]
+      verbs: ["*"]
+    # All other API groups
+    - apiGroups: ["*"]
+      resources: ["*"]
+      verbs: ["*"]
+
+# Configuration for Headlamp
+config:
+  # Base URL for the application (must start with / or be empty)
+  baseURL: ""
+  
+  # Plugin configuration
+  pluginsDir: "/headlamp/plugins"
+  watchPlugins: true
+  
+  # Cluster configuration
+  clusters:
+    - name: "local"
+      server: "https://kubernetes.default.svc"
+      
+# Environment variables
+env:
+  - name: HEADLAMP_BASE_URL
+    value: ""
+  - name: TZ
+    value: "Europe/Athens"
+
+# Persistence for plugins (optional)
+persistence:
+  enabled: true
+  size: 1Gi
+  accessMode: ReadWriteOnce
+  storageClass: ""
+  mountPath: /headlamp/plugins
+
+# Replica count
+replicaCount: 1
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Pod annotations
+podAnnotations: {}
+
+# Priority class name
+priorityClassName: ""
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Full name override
+fullnameOverride: ""
+
+# Name override
+nameOverride: ""
+
+# Liveness probe
+livenessProbe:
+  httpGet:
+    path: /
+    port: 4466
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Readiness probe
+readinessProbe:
+  httpGet:
+    path: /
+    port: 4466
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Additional volumes
+extraVolumes: []
+
+# Additional volume mounts
+extraVolumeMounts: []
+
+# Additional environment variables
+extraEnvVars: []
+
+# Additional arguments
+extraArgs: []
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecarContainers: []

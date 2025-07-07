@@ -1,0 +1,43 @@
+id: code-server
+name: Code Server
+description: VS Code in your browser - a full development environment accessible from anywhere
+icon: 💻
+category: Development
+
+version_source:
+  type: github
+  source: coder/code-server
+  pattern: "v*"
+
+helm_chart:
+  repository: local
+  chart: xanthus-code-server
+  version: 1.0.0
+  namespace: code-server
+  values_template: code-server.yaml
+  placeholders:
+    APPLICATION_VERSION: "{{.Version}}"
+
+default_port: 8080
+
+requirements:
+  min_cpu: 0.5
+  min_memory_gb: 1
+  min_disk_gb: 10
+
+features:
+  - Full VS Code experience in browser
+  - Git integration
+  - Terminal access
+  - Extension support
+  - Docker integration
+  - Persistent workspace (10GB)
+  - On-demand development environment setup
+  - Pre-configured VS Code settings
+
+documentation: https://coder.com/docs/code-server
+
+metadata:
+  maintainer: Coder
+  support: https://github.com/coder/code-server/issues
+  license: MIT

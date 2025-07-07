@@ -1,0 +1,20 @@
+apiVersion: v2
+name: xanthus-platform
+description: A Helm chart for Xanthus Infrastructure Management Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/chrishham/xanthus
+sources:
+  - https://github.com/chrishham/xanthus
+maintainers:
+  - name: Chris Ham
+    email: chrishham@users.noreply.github.com
+keywords:
+  - infrastructure
+  - kubernetes
+  - vps
+  - deployment
+  - devops
+annotations:
+  category: DevOps

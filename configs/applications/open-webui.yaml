@@ -1,0 +1,44 @@
+id: open-webui
+name: Open WebUI
+description: User-friendly web interface for LLMs - chat with AI models like ChatGPT, Claude, and Ollama
+icon: 🤖
+category: AI/ML
+
+version_source:
+  type: github
+  source: open-webui/open-webui
+  pattern: "v*"
+
+helm_chart:
+  repository: https://helm.openwebui.com/
+  chart: open-webui
+  version: 6.22.0
+  namespace: open-webui
+  values_template: open-webui.yaml
+  placeholders:
+    APPLICATION_VERSION: "{{.Version}}"
+
+default_port: 8080
+
+requirements:
+  min_cpu: 0.5
+  min_memory_gb: 2
+  min_disk_gb: 5
+
+features:
+  - Chat with multiple AI models
+  - Support for OpenAI, Anthropic, Ollama, and more
+  - Document upload and RAG capabilities
+  - Model management interface
+  - User authentication and multi-user support
+  - Customizable themes and interface
+  - Plugin system for extensions
+  - Persistent chat history
+  - API integration capabilities
+
+documentation: https://github.com/open-webui/open-webui
+
+metadata:
+  maintainer: Open WebUI Team
+  support: https://github.com/open-webui/open-webui/issues
+  license: MIT

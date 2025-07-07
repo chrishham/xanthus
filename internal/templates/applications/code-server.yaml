@@ -1,0 +1,158 @@
+# Code Server Helm Values Template
+# This template supports placeholder substitution for dynamic deployment
+
+# Image configuration
+image:
+  repository: codercom/code-server
+  tag: "{{VERSION}}"
+  pullPolicy: Always
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+
+# Ingress configuration with Traefik
+ingress:
+  enabled: true
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - host: "{{SUBDOMAIN}}.{{DOMAIN}}"
+      paths:
+        - /
+  tls:
+    - secretName: "{{DOMAIN}}-tls"
+      hosts:
+        - "{{SUBDOMAIN}}.{{DOMAIN}}"
+
+# Persistence configuration
+persistence:
+  enabled: true
+  size: 10Gi
+  accessMode: ReadWriteOnce
+
+# Resource configuration
+resources:
+  limits:
+    cpu: "2"
+    memory: "4Gi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+# Security context
+securityContext:
+  enabled: true
+  fsGroup: 1000
+  runAsUser: 1000
+
+# Volume permissions
+volumePermissions:
+  enabled: true
+  securityContext:
+    runAsUser: 0
+
+# Setup script configuration
+setupScript:
+  enabled: true
+  mountPath: /home/coder/setup-dev-environment.sh
+  
+# VS Code settings configuration  
+vscodeSettings:
+  enabled: true
+  mountPath: /home/coder/.local/share/code-server/User/settings.json
+
+# Init container to setup basic user environment
+extraInitContainers: |
+  - name: setup-environment
+    image: ubuntu:22.04
+    imagePullPolicy: IfNotPresent
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        echo "🚀 Starting basic code-server environment setup..."
+        
+        # Create user if it doesn't exist and setup home directory
+        if ! id -u coder > /dev/null 2>&1; then
+          useradd -m -u 1000 -s /bin/bash coder
+        fi
+        
+        # Setup basic environment in bashrc
+        cat >> /home/coder/.bashrc << 'BASHRC_EOF'
+        # Xanthus Code-Server Environment
+        echo "🎉 Welcome to your Xanthus Code-Server environment!"
+        echo "📝 To install additional development tools, run:"
+        echo "    ./setup-dev-environment.sh"
+        echo ""
+        BASHRC_EOF
+        
+        # Create basic directories
+        mkdir -p /home/coder/workspace /home/coder/.local/share/code-server/User
+        
+        # Fix all permissions
+        echo "🔒 Fixing permissions..."
+        chown -R 1000:1000 /home/coder
+        
+        echo "🎉 Basic environment setup complete!"
+        echo "📝 Development tools can be installed by running: ./setup-dev-environment.sh"
+    securityContext:
+      runAsUser: 0
+    volumeMounts:
+      - name: home-data
+        mountPath: /home/coder
+
+# Pod annotations
+podAnnotations: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Replica count
+replicaCount: 1
+
+# Timezone configuration (inherits from VPS if set)
+timezone: "{{TIMEZONE}}"
+
+# Extra environment variables
+extraVars: []
+
+# Extra arguments
+extraArgs: []
+
+# Extra ports
+extraPorts: []
+
+# Priority class name
+priorityClassName: ""
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Full name override
+fullnameOverride: ""
+
+# Name override
+nameOverride: ""
+
+# Hostname override
+hostnameOverride: ""
+
+# Lifecycle hooks
+lifecycle:
+  enabled: false

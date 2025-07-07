@@ -1,0 +1,221 @@
+#cloud-config
+# Update system packages
+package_update: true
+package_upgrade: true
+
+# Set timezone
+timezone: ${TIMEZONE}
+
+packages:
+  - curl
+  - wget
+  - git
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - jq
+  - iptables-persistent
+
+# Configure firewall for OCI
+bootcmd:
+  # OCI uses iptables for security groups, but we need to configure local firewall
+  - iptables -I INPUT 1 -p tcp --dport 22 -j ACCEPT
+  - iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
+  - iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
+  - iptables -I INPUT 1 -p tcp --dport 6443 -j ACCEPT
+  - iptables-save > /etc/iptables/rules.v4
+
+write_files:
+  - path: /opt/xanthus/info.txt
+    content: |
+      Xanthus managed K3s server (OCI)
+      Created: $(date)
+      Status: Initializing...
+    permissions: '0644'
+    owner: root:root
+  - path: /etc/environment
+    content: |
+      KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    append: true
+  - path: /opt/xanthus/setup.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      
+      LOG_FILE="/opt/xanthus/setup.log"
+      STATUS_FILE="/opt/xanthus/status"
+      
+      log() {
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+      }
+      
+      update_status() {
+          echo "$1" > "$STATUS_FILE"
+          log "Status: $1"
+      }
+      
+      # Start setup
+      mkdir -p /opt/xanthus
+      update_status "INSTALLING"
+      log "Starting Xanthus K3s setup on Oracle Cloud Infrastructure..."
+      
+      # OCI-specific: Configure firewall
+      log "Configuring OCI-specific firewall rules..."
+      
+      # Allow K3s ports through local firewall
+      iptables -I INPUT 1 -p tcp --dport 22 -j ACCEPT
+      iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
+      iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
+      iptables -I INPUT 1 -p tcp --dport 6443 -j ACCEPT
+      iptables -I INPUT 1 -p tcp --dport 2379:2380 -j ACCEPT
+      iptables -I INPUT 1 -p tcp --dport 10250 -j ACCEPT
+      iptables -I INPUT 1 -p tcp --dport 10251 -j ACCEPT
+      iptables -I INPUT 1 -p tcp --dport 10252 -j ACCEPT
+      iptables -I INPUT 1 -p udp --dport 8472 -j ACCEPT
+      
+      # Save iptables rules
+      iptables-save > /etc/iptables/rules.v4
+      log "OCI firewall configuration completed"
+      
+      # Set timezone if provided
+      if [ -n "${TIMEZONE}" ]; then
+          log "Setting timezone to ${TIMEZONE}..."
+          timedatectl set-timezone "${TIMEZONE}"
+          log "Timezone set to $(timedatectl show --property=Timezone --value)"
+      else
+          log "No timezone specified, keeping default (UTC)"
+      fi
+      
+      # OCI-specific: Disable cloud-init network configuration
+      echo 'network: {config: disabled}' > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+      
+      # Ensure SSH service is enabled and running
+      systemctl enable ssh
+      systemctl start ssh
+      log "SSH service verified and enabled"
+      
+      # Install K3s with OCI-specific configuration
+      update_status "INSTALLING_K3S"
+      log "Installing K3s with OCI configuration..."
+      
+      # K3s installation with OCI-friendly settings (keeping Traefik enabled)
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode=644" sh -
+      systemctl enable k3s
+      systemctl start k3s
+      
+      # Wait for K3s to be ready
+      update_status "WAITING_K3S"
+      log "Waiting for K3s to be ready..."
+      timeout 300 bash -c 'until systemctl is-active k3s >/dev/null 2>&1 && kubectl get nodes --no-headers 2>/dev/null | grep -q "Ready"; do sleep 5; done'
+      
+      # Set proper permissions for kubeconfig
+      chmod 644 /etc/rancher/k3s/k3s.yaml
+      
+      # Set up environment for ubuntu user (OCI default)
+      echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> /home/ubuntu/.bashrc
+      echo 'source <(kubectl completion bash)' >> /home/ubuntu/.bashrc
+      echo 'alias k=kubectl' >> /home/ubuntu/.bashrc
+      echo 'complete -F __start_kubectl k' >> /home/ubuntu/.bashrc
+      chown ubuntu:ubuntu /home/ubuntu/.bashrc
+      
+      # Set up environment for root
+      echo 'export KUBECONFIG=/etc/rancher/k3s/k3s.yaml' >> /root/.bashrc
+      echo 'source <(kubectl completion bash)' >> /root/.bashrc
+      echo 'alias k=kubectl' >> /root/.bashrc
+      echo 'complete -F __start_kubectl k' >> /root/.bashrc
+      
+      # Install Helm
+      update_status "INSTALLING_HELM"
+      log "Installing Helm..."
+      curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      
+      # Verify Helm installation
+      helm version --short >> "$LOG_FILE"
+      
+      # Wait for Traefik to be ready
+      update_status "WAITING_TRAEFIK"
+      log "Waiting for Traefik ingress controller to be ready..."
+      timeout 300 bash -c 'until kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik --no-headers 2>/dev/null | grep -q "Running"; do sleep 5; done' || log "WARNING: Traefik readiness check timed out"
+      
+      # Final verification
+      update_status "VERIFYING"
+      log "Performing final verification..."
+      
+      # Verify all components are working with timeouts
+      log "Checking K3s nodes..."
+      timeout 30 kubectl get nodes >> "$LOG_FILE" 2>&1 || log "WARNING: kubectl get nodes timed out or failed"
+      
+      log "Checking K3s pods..."
+      timeout 30 kubectl get pods -A >> "$LOG_FILE" 2>&1 || log "WARNING: kubectl get pods timed out or failed"
+      
+      log "Checking Helm version..."
+      timeout 10 helm version >> "$LOG_FILE" 2>&1 || log "WARNING: helm version check failed"
+      
+      log "Checking Traefik Ingress..."
+      timeout 60 kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik >> "$LOG_FILE" 2>&1 || log "WARNING: Traefik Ingress check failed"
+      
+      log "Final verification completed (warnings are non-critical)"
+      
+      # Create TLS secrets if domain configuration is provided
+      if [ -n "${DOMAIN}" ] && [ -n "${DOMAIN_CERT}" ] && [ -n "${DOMAIN_KEY}" ]; then
+          update_status "CONFIGURING_TLS"
+          log "Configuring TLS secrets for domain: ${DOMAIN}"
+          
+          # Create TLS secret for the domain
+          log "Creating TLS secret for ${DOMAIN}..."
+          
+          # Decode certificates to temporary files
+          echo "${DOMAIN_CERT}" | base64 -d > /tmp/domain.crt
+          echo "${DOMAIN_KEY}" | base64 -d > /tmp/domain.key
+          
+          # Create TLS secret in default namespace
+          kubectl create secret tls "${DOMAIN}-tls" \
+              --cert=/tmp/domain.crt \
+              --key=/tmp/domain.key \
+              -n default 2>&1 | tee -a "$LOG_FILE" || log "Warning: Failed to create TLS secret"
+          
+          # Also create in kube-system namespace for Traefik
+          kubectl create secret tls "${DOMAIN}-tls" \
+              --cert=/tmp/domain.crt \
+              --key=/tmp/domain.key \
+              -n kube-system 2>&1 | tee -a "$LOG_FILE" || log "Warning: Failed to create TLS secret in kube-system namespace"
+          
+          # Clean up temporary certificate files
+          rm -f /tmp/domain.crt /tmp/domain.key
+      else
+          log "Domain configuration not provided, skipping TLS setup"
+      fi
+      
+      # Generate final info file
+      cat > /opt/xanthus/info.txt << EOF
+      Xanthus managed K3s server (Oracle Cloud Infrastructure)
+      Created: $(date)
+      Status: Ready
+      
+      Components installed and verified:
+      - K3s: $(kubectl version --short --client 2>/dev/null | head -1 || echo "Ready")
+      - Helm: $(helm version --short 2>/dev/null || echo "Ready")
+      - Traefik Ingress: $(kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik --no-headers 2>/dev/null | wc -l || echo "Ready") pods
+      
+      Access Information:
+      - SSH: ssh ubuntu@<server-ip> (OCI default user: ubuntu)
+      - Kubeconfig: /etc/rancher/k3s/k3s.yaml
+      - Setup log: /opt/xanthus/setup.log
+      - Status: /opt/xanthus/status
+      
+      OCI-specific notes:
+      - Default SSH user: ubuntu (not root)
+      - Firewall configured for K3s ports
+      - Traefik ingress controller enabled (K3s default)
+      - Network configuration disabled in cloud-init
+      EOF
+      
+      # Final status update
+      update_status "READY"
+      log "OCI setup completed successfully!"
+      log "K3s cluster is ready and all components are running"
+
+runcmd:
+  - /opt/xanthus/setup.sh

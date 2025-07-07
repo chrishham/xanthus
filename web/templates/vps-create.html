@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xanthus - Add VPS</title>
+    <link rel="icon" type="image/x-icon" href="/static/icons/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/icons/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="/static/css/output.css?v={{cacheBuster}}">
+    <link rel="stylesheet" href="/static/css/sweetalert2.min.css?v={{cacheBuster}}">
+    <script src="/static/js/vendor/htmx.min.js?v={{cacheBuster}}"></script>
+    <script src="/static/js/vendor/sweetalert2.min.js?v={{cacheBuster}}"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    {{template "navbar.html" .}}
+
+    <div x-data="vpsCreationWizard()" class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-3xl font-bold text-gray-900 mb-2">Add VPS</h2>
+                    <p class="text-gray-600">Add a new VPS from Hetzner Cloud or Oracle Cloud Infrastructure with automated provisioning</p>
+                </div>
+                <a href="/vps" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                    </svg>
+                    Back to VPS Management
+                </a>
+            </div>
+        </div>
+
+        <!-- Progress Steps -->
+        <div class="mb-8">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <!-- Step 1: Provider Selection -->
+                    <div class="flex items-center" :class="currentStep >= 1 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 1 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span x-show="currentStep > 1" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 1" class="text-sm">1</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Provider</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 2 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+                    
+                    <!-- Step 2: Configuration -->
+                    <div class="flex items-center" :class="currentStep >= 2 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 2 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span x-show="currentStep > 2" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 2" class="text-sm">2</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium" x-text="selectedProvider === 'hetzner' ? 'API Key' : 'Setup'">Configuration</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 3 ? 'bg-blue-600' : 'bg-gray-300'"></div>
+                    
+                    <!-- Step 3: Server Configuration (Hetzner: Location, OCI: Instance) -->
+                    <div class="flex items-center" :class="currentStep >= 3 ? 'text-blue-600' : 'text-gray-400'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 3 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span x-show="currentStep > 3" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 3" class="text-sm">3</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium" x-text="selectedProvider === 'hetzner' ? 'Location' : 'Instance'">Configuration</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 4 ? 'bg-blue-600' : 'bg-gray-300'" x-show="selectedProvider === 'hetzner'"></div>
+                    
+                    <!-- Step 4: Server Type (Hetzner only) -->
+                    <div class="flex items-center" :class="currentStep >= 4 ? 'text-blue-600' : 'text-gray-400'" x-show="selectedProvider === 'hetzner'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 4 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span x-show="currentStep > 4" class="text-sm">✓</span>
+                            <span x-show="currentStep <= 4" class="text-sm">4</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Server Type</span>
+                    </div>
+                    
+                    <div class="flex-1 h-0.5" :class="currentStep >= 5 ? 'bg-blue-600' : 'bg-gray-300'" x-show="selectedProvider === 'hetzner'"></div>
+                    
+                    <!-- Step 5: Review (Hetzner only, OCI goes directly to creation) -->
+                    <div class="flex items-center" :class="currentStep >= 5 ? 'text-blue-600' : 'text-gray-400'" x-show="selectedProvider === 'hetzner'">
+                        <div class="flex items-center justify-center w-8 h-8 rounded-full border-2" 
+                             :class="currentStep >= 5 ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-300'">
+                            <span class="text-sm">5</span>
+                        </div>
+                        <span class="ml-2 text-sm font-medium">Review</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Modal -->
+        <div x-show="loading" x-transition.opacity class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl p-8 max-w-md mx-4">
+                <div class="text-center">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-2">Processing...</h3>
+                    <p class="text-gray-600" x-text="loadingMessage">Please wait while the operation completes.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 1: Provider Selection -->
+        <div x-show="currentStep === 1 && !loading" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 1: Select Provider</h3>
+            <p class="text-gray-600 mb-6">Choose your cloud provider. Both Hetzner Cloud and Oracle Cloud Infrastructure support automated provisioning with K3s.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Hetzner Provider -->
+                <div @click="selectProvider('hetzner')" 
+                     class="border-2 rounded-lg p-6 cursor-pointer transition-colors relative"
+                     :class="selectedProvider === 'hetzner' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mr-4">
+                                <svg class="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2L2 7v10c0 5.55 3.84 9.739 9 11 5.16-1.261 9-5.45 9-11V7l-10-5z"/>
+                                </svg>
+                            </div>
+                            <h4 class="text-lg font-semibold text-gray-900">Hetzner Cloud</h4>
+                        </div>
+                        <div x-show="selectedProvider === 'hetzner'" class="text-blue-500">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Automatic provisioning
+                        </div>
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Full lifecycle management
+                        </div>
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            K3s auto-installation
+                        </div>
+                    </div>
+                    <div class="mt-4 text-xs text-gray-500">
+                        Requires Hetzner Cloud API key
+                    </div>
+                </div>
+                
+                <!-- OCI Provider -->
+                <div @click="selectProvider('oci')" 
+                     class="border-2 rounded-lg p-6 cursor-pointer transition-colors relative"
+                     :class="selectedProvider === 'oci' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center">
+                            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mr-4">
+                                <svg class="w-6 h-6 text-orange-600" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                </svg>
+                            </div>
+                            <h4 class="text-lg font-semibold text-gray-900">Oracle Cloud (OCI)</h4>
+                        </div>
+                        <div x-show="selectedProvider === 'oci'" class="text-blue-500">
+                            <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Automatic provisioning
+                        </div>
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            Always Free tier support
+                        </div>
+                        <div class="flex items-center text-sm text-green-600">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            K3s auto-installation
+                        </div>
+                    </div>
+                    <div class="mt-4 text-xs text-gray-500">
+                        Requires OCI API credentials
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <div></div>
+                <button @click="nextStep()" 
+                        :disabled="!selectedProvider"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Continue
+                </button>
+            </div>
+        </div>
+        
+        <!-- Step 2: Hetzner API Key (only for Hetzner) -->
+        <div x-show="currentStep === 2 && !loading && selectedProvider === 'hetzner'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: Hetzner Cloud API Key</h3>
+            
+            <div x-show="!existingKey" class="space-y-4">
+                <p class="text-gray-600">Enter your Hetzner Cloud API key to manage VPS instances. You can create one in your Hetzner Cloud Console under "Security" → "API Tokens".</p>
+                
+                <div>
+                    <label for="hetzner-key" class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                    <input type="password" 
+                           id="hetzner-key" 
+                           x-model="hetznerKey"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Enter your Hetzner Cloud API key">
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="validateHetznerKey()" 
+                            :disabled="!hetznerKey || validatingKey"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                        <span x-show="!validatingKey">Validate & Continue</span>
+                        <span x-show="validatingKey">Validating...</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div x-show="existingKey" class="space-y-4">
+                <div class="p-4 bg-green-50 border border-green-200 rounded-md">
+                    <div class="flex items-center">
+                        <svg class="h-5 w-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span class="text-green-800 font-medium">Existing Hetzner API key found</span>
+                    </div>
+                    <p class="text-green-700 text-sm mt-1" x-text="'Key ending in: ' + existingKey"></p>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="useExistingKey()" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Use Existing Key
+                    </button>
+                    <button @click="showNewKeyInput()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Use Different Key
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: OCI Auth Token Configuration -->
+        <div x-show="currentStep === 2 && !loading && selectedProvider === 'oci'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 2: OCI API Credentials</h3>
+            <p class="text-gray-600 mb-6">Configure your Oracle Cloud Infrastructure API credentials for automated instance provisioning.</p>
+            
+            <!-- Instructions Panel -->
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h4 class="text-md font-medium text-blue-900 mb-2">📋 Getting Your OCI API Credentials</h4>
+                <ol class="list-decimal list-inside space-y-1 text-sm text-blue-800">
+                    <li>Log in to your <a href="https://cloud.oracle.com" target="_blank" class="text-blue-600 hover:underline">Oracle Cloud Console</a></li>
+                    <li>Navigate to <strong>Identity & Security → Users</strong></li>
+                    <li>Click on your username, then <strong>API Keys</strong></li>
+                    <li>Click <strong>Add API Key</strong> and generate a new key pair</li>
+                    <li>Copy the configuration details and paste them below</li>
+                </ol>
+            </div>
+
+            <!-- Existing OCI Token Found -->
+            <div x-show="existingOCIToken" class="space-y-4">
+                <div class="p-4 bg-green-50 border border-green-200 rounded-md">
+                    <div class="flex items-center">
+                        <svg class="h-5 w-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span class="text-green-800 font-medium">Existing OCI auth token found</span>
+                    </div>
+                    <p class="text-green-700 text-sm mt-1">You can use your existing OCI credentials or provide new ones.</p>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="useExistingOCIToken()" 
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Use Existing Token
+                    </button>
+                    <button @click="showNewOCITokenInput()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Use Different Token
+                    </button>
+                </div>
+            </div>
+
+            <!-- Token Generator -->
+            <div x-show="!showTokenGenerator && !existingOCIToken" class="space-y-4">
+                <div>
+                    <label for="oci-token" class="block text-sm font-medium text-gray-700 mb-1">OCI Auth Token</label>
+                    <input type="password" 
+                           id="oci-token" 
+                           x-model="ociToken"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Paste your OCI auth token or generate one below">
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="validateOCIToken()" 
+                            :disabled="!ociToken || validatingOCIToken"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                        <span x-show="!validatingOCIToken">Validate & Continue</span>
+                        <span x-show="validatingOCIToken">Validating...</span>
+                    </button>
+                    <button @click="showOCITokenGenerator()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        🔧 Generate Token
+                    </button>
+                </div>
+            </div>
+
+            <!-- Built-in Token Generator -->
+            <div x-show="showTokenGenerator" class="space-y-4">
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h4 class="text-md font-medium text-yellow-900 mb-2">🔧 OCI Auth Token Generator</h4>
+                    <p class="text-sm text-yellow-800">Fill in your OCI API credentials to generate a single auth token.</p>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tenancy OCID</label>
+                        <input type="text" 
+                               x-model="ociCredentials.tenancy"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="ocid1.tenancy.oc1..aaaa...">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">User OCID</label>
+                        <input type="text" 
+                               x-model="ociCredentials.user"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="ocid1.user.oc1..bbbb...">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                        <select x-model="ociCredentials.region" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">Select Region</option>
+                            <option value="us-phoenix-1">US West (Phoenix)</option>
+                            <option value="us-ashburn-1">US East (Ashburn)</option>
+                            <option value="eu-frankfurt-1">EU Central (Frankfurt)</option>
+                            <option value="eu-zurich-1">EU (Zurich)</option>
+                            <option value="uk-london-1">UK South (London)</option>
+                            <option value="ap-mumbai-1">Asia Pacific (Mumbai)</option>
+                            <option value="ap-seoul-1">Asia Pacific (Seoul)</option>
+                            <option value="ap-sydney-1">Asia Pacific (Sydney)</option>
+                            <option value="ap-tokyo-1">Asia Pacific (Tokyo)</option>
+                            <option value="sa-saopaulo-1">South America (São Paulo)</option>
+                            <option value="ca-toronto-1">Canada Central (Toronto)</option>
+                            <option value="ca-montreal-1">Canada East (Montreal)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key Fingerprint</label>
+                        <input type="text" 
+                               x-model="ociCredentials.fingerprint"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="aa:bb:cc:dd:ee:ff...">
+                    </div>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">API Private Key</label>
+                    <textarea 
+                        x-model="ociCredentials.privateKey"
+                        class="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="-----BEGIN PRIVATE KEY-----
+MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQC...
+-----END PRIVATE KEY-----">
+                    </textarea>
+                </div>
+                
+                <div class="flex space-x-3">
+                    <button @click="generateOCIToken()" 
+                            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500">
+                        Generate Auth Token
+                    </button>
+                    <button @click="copyOCIToken()" 
+                            :disabled="!ociToken"
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">
+                        📋 Copy Token
+                    </button>
+                    <button @click="hideOCITokenGenerator()" 
+                            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Hide Generator
+                    </button>
+                </div>
+                
+                <div x-show="ociToken" class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Generated Token:</label>
+                    <textarea 
+                        x-model="ociToken" 
+                        readonly 
+                        class="w-full h-20 p-2 text-xs font-mono bg-white border border-gray-300 rounded resize-none focus:outline-none"
+                        placeholder="Generated token will appear here...">
+                    </textarea>
+                </div>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="validateOCIToken()" 
+                        :disabled="!ociToken || validatingOCIToken"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    <span x-show="!validatingOCIToken">Validate & Continue</span>
+                    <span x-show="validatingOCIToken">Validating...</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Step 3: Location Selection (Hetzner only) -->
+        <div x-show="currentStep === 3 && !loading && selectedProvider === 'hetzner'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Select Location</h3>
+            <p class="text-gray-600 mb-6">Choose the datacenter location for your VPS. Select based on your target audience location for optimal performance.</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <template x-for="location in locations" :key="location.name">
+                    <div @click="selectLocation(location)" 
+                         class="border-2 rounded-lg p-4 cursor-pointer transition-colors"
+                         :class="selectedLocation?.name === location.name ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-medium text-gray-900" x-text="location.description"></h4>
+                            <div x-show="selectedLocation?.name === location.name" class="text-blue-500">
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-500" x-text="location.city + ', ' + location.country"></p>
+                        <p class="text-xs text-gray-400" x-text="location.name"></p>
+                    </div>
+                </template>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="nextStep()" 
+                        :disabled="!selectedLocation"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Continue
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 4: Server Type Selection (Hetzner only) -->
+        <div x-show="currentStep === 4 && !loading && selectedProvider === 'hetzner'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 4: Choose Server Type</h3>
+            <p class="text-gray-600 mb-4">Select the server configuration based on your needs. All servers are shared vCPU instances for cost efficiency.</p>
+            
+            <!-- Filter and Sort Controls -->
+            <div class="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Filter by Architecture</label>
+                    <select x-model="architectureFilter" @change="applyFilters()" 
+                            class="px-3 py-1 border border-gray-300 rounded-md text-sm">
+                        <option value="">All Architectures</option>
+                        <option value="x86">x86</option>
+                        <option value="arm">ARM</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Sort by</label>
+                    <select x-model="sortBy" @change="applySort()" 
+                            class="px-3 py-1 border border-gray-300 rounded-md text-sm">
+                        <option value="price_asc">Price (Low to High)</option>
+                        <option value="price_desc">Price (High to Low)</option>
+                        <option value="cpu_asc">CPU (Low to High)</option>
+                        <option value="cpu_desc">CPU (High to Low)</option>
+                        <option value="memory_asc">RAM (Low to High)</option>
+                        <option value="memory_desc">RAM (High to Low)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                <template x-for="serverType in filteredServerTypes" :key="serverType.name">
+                    <div @click="selectServerType(serverType)" 
+                         class="border-2 rounded-lg p-4 cursor-pointer transition-colors"
+                         :class="selectedServerType?.name === serverType.name ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="font-medium text-gray-900" x-text="serverType.name"></h4>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-lg font-bold text-green-600" x-text="'€' + serverType.monthlyPrice + '/mo'"></span>
+                                        <div x-show="selectedServerType?.name === serverType.name" class="text-blue-500">
+                                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                    <div>
+                                        <span class="text-gray-500">CPU:</span>
+                                        <span class="font-medium ml-1" x-text="serverType.cores + ' vCPU'"></span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-500">RAM:</span>
+                                        <span class="font-medium ml-1" x-text="serverType.memory + ' GB'"></span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-500">Storage:</span>
+                                        <span class="font-medium ml-1" x-text="serverType.disk + ' GB ' + serverType.storage_type.toUpperCase()"></span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-500">Arch:</span>
+                                        <span class="font-medium ml-1" x-text="serverType.architecture"></span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 text-xs text-gray-500" x-text="serverType.description"></div>
+                                <div x-show="!serverType.available" class="mt-2 text-xs text-red-600">
+                                    ⚠️ Not available in selected location
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="nextStep()" 
+                        :disabled="!selectedServerType || !selectedServerType.available"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50">
+                    Continue
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 3: OCI Instance Configuration -->
+        <div x-show="currentStep === 3 && !loading && selectedProvider === 'oci'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 3: Create OCI Instance</h3>
+            <p class="text-gray-600 mb-6">Configure your Oracle Cloud Infrastructure instance for automated provisioning with K3s.</p>
+            
+            <div class="space-y-6">
+                <div>
+                    <label for="oci-server-name" class="block text-sm font-medium text-gray-700 mb-1">Instance Name</label>
+                    <input type="text" 
+                           id="oci-server-name" 
+                           x-model="serverName"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                           :placeholder="'xanthus-oci-' + Date.now()">
+                </div>
+                
+                <div>
+                    <label for="oci-region" class="block text-sm font-medium text-gray-700 mb-1">Region</label>
+                    <select id="oci-region" 
+                            x-model="ociLocation"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Select Region</option>
+                        <option value="us-phoenix-1">US West (Phoenix)</option>
+                        <option value="us-ashburn-1">US East (Ashburn)</option>
+                        <option value="eu-frankfurt-1">EU Central (Frankfurt)</option>
+                        <option value="eu-zurich-1">EU (Zurich)</option>
+                        <option value="uk-london-1">UK South (London)</option>
+                        <option value="ap-mumbai-1">Asia Pacific (Mumbai)</option>
+                        <option value="ap-seoul-1">Asia Pacific (Seoul)</option>
+                        <option value="ap-sydney-1">Asia Pacific (Sydney)</option>
+                        <option value="ap-tokyo-1">Asia Pacific (Tokyo)</option>
+                        <option value="sa-saopaulo-1">South America (São Paulo)</option>
+                        <option value="ca-toronto-1">Canada Central (Toronto)</option>
+                        <option value="ca-montreal-1">Canada East (Montreal)</option>
+                    </select>
+                    <div class="mt-1 text-sm text-gray-500">
+                        <span x-show="ociLocation">
+                            <span x-text="ociLocation"></span> (automatically detected from your tenancy home region)
+                        </span>
+                        <span x-show="!ociLocation">
+                            Your tenancy home region will be automatically detected
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-900 mb-3">Instance Configuration</h4>
+                        <div class="space-y-4">
+                            <!-- Shape Selection -->
+                            <div class="flex justify-between text-sm">
+                                <dt class="text-gray-500">Shape:</dt>
+                                <dd class="font-medium">VM.Standard.A1.Flex</dd>
+                            </div>
+                            
+                            <!-- OCPU Configuration -->
+                            <div>
+                                <label for="oci-ocpu" class="block text-sm font-medium text-gray-700 mb-1">
+                                    OCPU Count
+                                    <span class="text-xs text-gray-500">(1-4 for Always Free)</span>
+                                </label>
+                                <input type="number" 
+                                       id="oci-ocpu" 
+                                       x-model.number="ociConfig.ocpu"
+                                       min="1" 
+                                       max="4" 
+                                       step="1"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                       :class="ociConfig.ocpu > 4 ? 'border-red-300' : 'border-gray-300'">
+                                <div class="mt-1 text-xs text-gray-500">
+                                    <span x-text="ociConfig.ocpu"></span> ARM64 vCPU
+                                    <span x-show="ociConfig.ocpu > 4" class="text-red-500 ml-1">⚠️ Exceeds Always Free limit</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Memory Configuration -->
+                            <div>
+                                <label for="oci-memory" class="block text-sm font-medium text-gray-700 mb-1">
+                                    Memory (GB)
+                                    <span class="text-xs text-gray-500">(1-24 for Always Free)</span>
+                                </label>
+                                <input type="number" 
+                                       id="oci-memory" 
+                                       x-model.number="ociConfig.memory"
+                                       min="1" 
+                                       max="24" 
+                                       step="1"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                       :class="ociConfig.memory > 24 ? 'border-red-300' : 'border-gray-300'">
+                                <div class="mt-1 text-xs text-gray-500">
+                                    <span x-text="ociConfig.memory"></span> GB RAM
+                                    <span x-show="ociConfig.memory > 24" class="text-red-500 ml-1">⚠️ Exceeds Always Free limit</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Static Configuration -->
+                            <div class="space-y-1 text-sm pt-2 border-t border-gray-200">
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Storage:</dt>
+                                    <dd class="font-medium">50 GB Boot Volume</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">OS:</dt>
+                                    <dd class="font-medium">Ubuntu 24.04 LTS ARM64</dd>
+                                </div>
+                                <div class="flex justify-between">
+                                    <dt class="text-gray-500">Region:</dt>
+                                    <dd class="font-medium" x-text="ociLocation"></dd>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-900 mb-3">Included Features</h4>
+                        <ul class="space-y-2 text-sm">
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Ubuntu 24.04 LTS
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                K3s Kubernetes Cluster
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Helm Package Manager
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Network & Security Setup
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                SSH Key Authentication
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="p-4 rounded-lg" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'">
+                    <h4 class="font-medium mb-2" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">
+                        <span x-show="ociConfig.ocpu <= 4 && ociConfig.memory <= 24">💰 Always Free Tier</span>
+                        <span x-show="ociConfig.ocpu > 4 || ociConfig.memory > 24">⚠️ Paid Tier Configuration</span>
+                    </h4>
+                    <div class="space-y-1 text-sm">
+                        <div class="flex justify-between">
+                            <span :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-700' : 'text-yellow-700'">Instance Cost:</span>
+                            <span class="font-medium" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">
+                                <span x-show="ociConfig.ocpu <= 4 && ociConfig.memory <= 24">FREE (Always Free)</span>
+                                <span x-show="ociConfig.ocpu > 4 || ociConfig.memory > 24">PAID (Exceeds Always Free)</span>
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-700' : 'text-yellow-700'">Network Resources:</span>
+                            <span class="font-medium" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">FREE (Always Free)</span>
+                        </div>
+                        <div class="border-t pt-1 mt-2 flex justify-between font-medium" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'border-green-200' : 'border-yellow-200'">
+                            <span :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">Total Monthly:</span>
+                            <span :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-900' : 'text-yellow-900'">
+                                <span x-show="ociConfig.ocpu <= 4 && ociConfig.memory <= 24">$0.00 USD</span>
+                                <span x-show="ociConfig.ocpu > 4 || ociConfig.memory > 24">Variable (Contact Oracle)</span>
+                            </span>
+                        </div>
+                        <div class="mt-2 pt-1 border-t" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'border-green-200' : 'border-yellow-200'">
+                            <p class="text-xs" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-600' : 'text-yellow-600'">
+                                <span x-show="ociConfig.ocpu <= 4 && ociConfig.memory <= 24">💡 <strong>Always Free:</strong> This configuration uses OCI Always Free tier resources</span>
+                                <span x-show="ociConfig.ocpu > 4 || ociConfig.memory > 24">⚠️ <strong>Paid Tier:</strong> This configuration exceeds Always Free limits and will incur costs</span>
+                            </p>
+                            <p class="text-xs mt-1" :class="ociConfig.ocpu <= 4 && ociConfig.memory <= 24 ? 'text-green-600' : 'text-yellow-600'">⏱️ <strong>Setup Time:</strong> Instance provisioning typically takes 3-5 minutes</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                    <h4 class="font-medium text-blue-900 mb-2">🔧 Automated Setup Process</h4>
+                    <ul class="space-y-1 text-sm text-blue-800">
+                        <li>• Create VCN and network resources if needed</li>
+                        <li>• Launch compute instance with Ubuntu 24.04</li>
+                        <li>• Configure security groups for K3s ports</li>
+                        <li>• Install and configure K3s Kubernetes cluster</li>
+                        <li>• Set up Helm and prepare for application deployment</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="flex justify-between mt-6">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="createOCIInstance()" 
+                        :disabled="!serverName || creating"
+                        class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
+                    <span x-show="!creating">Create OCI Instance</span>
+                    <span x-show="creating">Creating...</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Step 5: Hetzner Review and Create -->
+        <div x-show="currentStep === 5 && !loading && selectedProvider === 'hetzner'" class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Step 5: Review Configuration</h3>
+            <p class="text-gray-600 mb-6">Review your VPS configuration before creation. The server will be automatically configured with K3s. DNS records will be configured when applications are deployed.</p>
+            
+            <div class="space-y-4 mb-6">
+                <div>
+                    <label for="server-name" class="block text-sm font-medium text-gray-700 mb-1">Server Name</label>
+                    <div class="relative">
+                        <input type="text" 
+                               id="server-name" 
+                               x-model="serverName"
+                               @input="debounceValidateName()"
+                               class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                               :class="nameValidationState === 'checking' ? 'border-yellow-300' : nameValidationState === 'valid' ? 'border-green-300' : nameValidationState === 'invalid' ? 'border-red-300' : 'border-gray-300'"
+                               :placeholder="'xanthus-k3s-' + Date.now()">
+                        
+                        <!-- Validation indicator -->
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+                            <div x-show="nameValidationState === 'checking'" class="animate-spin h-4 w-4 border-2 border-yellow-300 border-t-transparent rounded-full"></div>
+                            <svg x-show="nameValidationState === 'valid'" class="h-4 w-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            <svg x-show="nameValidationState === 'invalid'" class="h-4 w-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                    </div>
+                    
+                    <!-- Validation message -->
+                    <div x-show="nameValidationMessage" class="mt-3 text-sm" :class="nameValidationState === 'valid' ? 'text-green-600' : nameValidationState === 'invalid' ? 'text-red-600' : 'text-gray-600'">
+                        <span x-text="nameValidationMessage"></span>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-900 mb-3">Configuration Summary</h4>
+                        <dl class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Location:</dt>
+                                <dd class="font-medium" x-text="selectedLocation?.description"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Server Type:</dt>
+                                <dd class="font-medium" x-text="selectedServerType?.name"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">CPU:</dt>
+                                <dd class="font-medium" x-text="selectedServerType?.cores + ' vCPU'"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">RAM:</dt>
+                                <dd class="font-medium" x-text="selectedServerType?.memory + ' GB'"></dd>
+                            </div>
+                            <div class="flex justify-between">
+                                <dt class="text-gray-500">Storage:</dt>
+                                <dd class="font-medium" x-text="selectedServerType?.disk + ' GB SSD'"></dd>
+                            </div>
+                        </dl>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <h4 class="font-medium text-gray-900 mb-3">Included Features</h4>
+                        <ul class="space-y-2 text-sm">
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Ubuntu 24.04 LTS
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                K3s Kubernetes Cluster
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Helm Package Manager
+                            </li>
+                            <li class="flex items-center">
+                                <svg class="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                SSH Key Authentication
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                    <h4 class="font-medium text-blue-900 mb-2">💰 Cost Breakdown</h4>
+                    <div class="space-y-1 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-blue-700">Server Cost:</span>
+                            <span class="font-medium text-blue-900" x-text="'€' + selectedServerType?.monthlyPrice + '/month'"></span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-blue-700">IPv4 Address:</span>
+                            <span class="font-medium text-blue-900">€0.50/month</span>
+                        </div>
+                        <div class="border-t border-blue-200 pt-1 mt-2 flex justify-between font-medium">
+                            <span class="text-blue-900">Total Monthly:</span>
+                            <span class="text-blue-900" x-text="'€' + (parseFloat(selectedServerType?.monthlyPrice || 0) + 0.5).toFixed(2) + '/month'"></span>
+                        </div>
+                        <div class="mt-2 pt-1 border-t border-blue-200">
+                            <p class="text-xs text-blue-600" x-text="'* Prices include ' + (selectedServerType?.vatPercentage || '0') + '% VAT'"></p>
+                            <p class="text-xs text-blue-600 mt-1">💡 <strong>Billing:</strong> If deleted before month-end, you pay hourly rate for actual usage only</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-between">
+                <button @click="previousStep()" 
+                        class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    Previous
+                </button>
+                <button @click="createVPS()" 
+                        :disabled="!serverName || creating || nameValidationState !== 'valid'"
+                        class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50">
+                    <span x-show="!creating">Create VPS</span>
+                    <span x-show="creating">Creating...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Wait for the module to load before starting Alpine.js
+        async function initializeAlpine() {
+            try {
+                const { vpsCreationWizard } = await import('/static/js/modules/vps-creation-wizard.js?v={{cacheBuster}}');
+                // Make the component available globally
+                window.vpsCreationWizard = vpsCreationWizard;
+                
+                // Now load and initialize Alpine.js
+                if (!window.Alpine) {
+                    const script = document.createElement('script');
+                    script.src = '/static/js/vendor/alpine.min.js?v={{cacheBuster}}';
+                    script.defer = true;
+                    document.head.appendChild(script);
+                }
+            } catch (error) {
+                console.error('Failed to load VPS creation wizard module:', error);
+            }
+        }
+        
+        // Start the initialization when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeAlpine);
+        } else {
+            initializeAlpine();
+        }
+    </script>
+</body>
+</html>

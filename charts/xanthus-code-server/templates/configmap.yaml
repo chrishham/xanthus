@@ -1,0 +1,122 @@
+{{- if .Values.setupScript.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "xanthus-code-server.fullname" . }}-setup-script
+  labels:
+    {{- include "xanthus-code-server.labels" . | nindent 4 }}
+data:
+  setup-dev-environment.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "🚀 Setting up development environment..."
+    echo "📁 Your home directory is persistent - all changes will be saved!"
+    echo "Run with: bash ~/setup-dev-environment.sh"
+    echo ""
+    
+    # Check if already installed
+    if [ -f ~/.dev-environment-setup ]; then
+        echo "✅ Development environment already set up!"
+        echo "📝 To reinstall, delete ~/.dev-environment-setup and run again"
+        exit 0
+    fi
+    
+    # Update package lists
+    echo "📦 Updating package lists..."
+    sudo apt-get update -qq
+    
+    # Install Node.js and npm
+    echo "📦 Installing Node.js and npm..."
+    sudo apt-get install -y nodejs npm
+    
+    # Install Python3 and pip
+    echo "📦 Installing Python3 and pip..."
+    sudo apt-get install -y python3 python3-pip
+    
+    # Install Go
+    echo "📦 Installing Go..."
+    sudo apt-get install -y golang-go
+    
+    # Install Docker
+    echo "📦 Installing Docker..."
+    sudo apt-get install -y docker.io
+    sudo usermod -aG docker coder
+    
+    # Install kubectl
+    echo "📦 Installing kubectl..."
+    curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    rm kubectl
+    
+    # Install Helm
+    echo "📦 Installing Helm..."
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    
+    # Install common development tools
+    echo "📦 Installing development tools..."
+    sudo apt-get install -y \
+        git curl wget vim nano \
+        htop tree jq yq \
+        build-essential
+    
+    # Install global npm packages (in user home - persistent!)
+    echo "📦 Installing global npm packages..."
+    npm install -g typescript @angular/cli @vue/cli create-react-app
+    
+    # Install Python packages (in user home - persistent!)
+    echo "📦 Installing Python packages..."
+    pip3 install --user \
+        requests beautifulsoup4 \
+        pandas numpy matplotlib \
+        flask fastapi uvicorn
+    
+    # Setup Git configuration
+    echo "📝 Setting up Git configuration..."
+    git config --global user.name "Coder"
+    git config --global user.email "coder@example.com"
+    git config --global init.defaultBranch main
+    
+    # Create common directories
+    echo "📁 Creating project directories..."
+    mkdir -p ~/projects ~/workspace ~/scripts
+    
+    # Create setup completion marker
+    echo "$(date): Development environment setup completed" > ~/.dev-environment-setup
+    
+    # Clean up
+    echo "🧹 Cleaning up..."
+    sudo apt-get autoremove -y
+    sudo apt-get autoclean
+    
+    echo "✅ Development environment setup complete!"
+    echo "📁 Everything is saved in your persistent home directory"
+    echo "📝 Note: You may need to restart your terminal for some changes to take effect"
+    echo "🐳 Note: Docker requires logout/login to use without sudo"
+    echo "📂 Your projects directory: ~/projects"
+    echo "📂 Your workspace directory: ~/workspace"
+{{- end }}
+---
+{{- if .Values.vscodeSettings.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "xanthus-code-server.fullname" . }}-vscode-settings
+  labels:
+    {{- include "xanthus-code-server.labels" . | nindent 4 }}
+data:
+  settings.json: |
+    {
+      "workbench.colorTheme": "Default Dark+",
+      "editor.fontSize": 14,
+      "editor.tabSize": 2,
+      "editor.insertSpaces": true,
+      "files.autoSave": "afterDelay",
+      "files.autoSaveDelay": 1000,
+      "terminal.integrated.fontSize": 14,
+      "extensions.autoUpdate": false,
+      "extensions.autoCheckUpdates": false,
+      "telemetry.enableTelemetry": false,
+      "update.mode": "none"
+    }
+{{- end }}

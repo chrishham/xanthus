@@ -1,0 +1,21 @@
+{
+    "name": "Xanthus - K3s Deployment Tool",
+    "short_name": "Xanthus",
+    "description": "Deploy applications to K3s clusters on Hetzner VPS instances",
+    "icons": [
+        {
+            "src": "/static/icons/android-chrome-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/static/icons/android-chrome-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ],
+    "theme_color": "#2563eb",
+    "background_color": "#f3f4f6",
+    "display": "standalone",
+    "start_url": "/"
+}

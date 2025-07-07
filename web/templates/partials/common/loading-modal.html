@@ -1,0 +1,10 @@
+<!-- Loading Modal -->
+<div x-show="loading" x-transition.opacity class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-xl p-8 max-w-md mx-4">
+        <div class="text-center">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 {{.SpinnerColor | default "border-blue-600"}} mb-4"></div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2" x-text="loadingTitle">Processing...</h3>
+            <p class="text-gray-600" x-text="loadingMessage">Please wait while the operation completes.</p>
+        </div>
+    </div>
+</div>

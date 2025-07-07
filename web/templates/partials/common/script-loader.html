@@ -1,0 +1,4 @@
+<script type="module">
+    import { {{.ModuleName}} } from '/static/js/modules/{{.ModuleFile}}.js?v={{cacheBuster}}';
+    window.{{.ModuleName}} = {{.ModuleName}};
+</script>

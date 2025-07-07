@@ -1,0 +1,99 @@
+{
+  "test_environments": {
+    "mock": {
+      "description": "Mock environment for fast testing without external dependencies",
+      "hetzner_api_key": "mock-hetzner-key",
+      "cloudflare_token": "mock-cloudflare-token",
+      "test_domain": "test.xanthus.local",
+      "base_url": "http://localhost:8080",
+      "resource_limits": {
+        "max_vps_instances": 5,
+        "max_ssl_domains": 10,
+        "max_cost_eur": 0.0,
+        "max_test_duration_minutes": 30
+      }
+    },
+    "staging": {
+      "description": "Staging environment with real but limited resources",
+      "test_domain": "staging.xanthus-test.com",
+      "base_url": "https://staging.xanthus.dev",
+      "resource_limits": {
+        "max_vps_instances": 2,
+        "max_ssl_domains": 3,
+        "max_cost_eur": 5.0,
+        "max_test_duration_minutes": 45
+      }
+    },
+    "live": {
+      "description": "Live environment with real external services",
+      "test_domain": "e2e.xanthus-test.com",
+      "base_url": "https://app.xanthus.dev",
+      "resource_limits": {
+        "max_vps_instances": 3,
+        "max_ssl_domains": 5,
+        "max_cost_eur": 10.0,
+        "max_test_duration_minutes": 60
+      }
+    }
+  },
+  "test_scenarios": {
+    "vps_lifecycle": {
+      "priority": "high",
+      "estimated_duration_minutes": 15,
+      "resource_requirements": ["hetzner_api", "cloudflare_api"],
+      "cost_estimate_eur": 2.0
+    },
+    "ssl_management": {
+      "priority": "high", 
+      "estimated_duration_minutes": 10,
+      "resource_requirements": ["cloudflare_api", "test_domain"],
+      "cost_estimate_eur": 0.5
+    },
+    "application_deployment": {
+      "priority": "medium",
+      "estimated_duration_minutes": 8,
+      "resource_requirements": ["k3s_cluster", "helm"],
+      "cost_estimate_eur": 1.0
+    },
+    "ui_integration": {
+      "priority": "medium",
+      "estimated_duration_minutes": 12,
+      "resource_requirements": ["web_ui", "browser_automation"],
+      "cost_estimate_eur": 0.0
+    },
+    "performance_load": {
+      "priority": "low",
+      "estimated_duration_minutes": 20,
+      "resource_requirements": ["load_testing_tools"],
+      "cost_estimate_eur": 3.0
+    },
+    "security": {
+      "priority": "high",
+      "estimated_duration_minutes": 15,
+      "resource_requirements": ["security_tools"],
+      "cost_estimate_eur": 0.5
+    },
+    "disaster_recovery": {
+      "priority": "medium",
+      "estimated_duration_minutes": 25,
+      "resource_requirements": ["backup_infrastructure"],
+      "cost_estimate_eur": 2.5
+    }
+  },
+  "hetzner_test_config": {
+    "default_server_type": "cx11",
+    "default_location": "nbg1",
+    "test_image": "ubuntu-22.04",
+    "test_ssh_key_name": "xanthus-e2e-test"
+  },
+  "cloudflare_test_config": {
+    "ssl_mode": "strict",
+    "always_https": true,
+    "test_zone_name": "xanthus-test.com"
+  },
+  "k3s_test_config": {
+    "version": "latest",
+    "install_options": "--disable=traefik",
+    "test_namespace": "e2e-test"
+  }
+}

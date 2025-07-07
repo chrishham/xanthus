@@ -1,0 +1,30 @@
+{
+  "name": "xanthus",
+  "version": "1.0.0",
+  "description": "K3s Deployment Tool",
+  "scripts": {
+    "build-css": "tailwindcss -i ./web/static/css/input.css -o ./web/static/css/output.css --watch",
+    "build-css-prod": "tailwindcss -i ./web/static/css/input.css -o ./web/static/css/output.css --minify",
+    "build-js": "npm run build-js-vendor && npm run build-js-custom",
+    "build-js-vendor": "mkdir -p web/static/js/vendor && cp node_modules/htmx.org/dist/htmx.min.js web/static/js/vendor/ && cp node_modules/alpinejs/dist/cdn.min.js web/static/js/vendor/alpine.min.js && cp node_modules/sweetalert2/dist/sweetalert2.min.js web/static/js/vendor/ && cp node_modules/@xterm/xterm/lib/xterm.js web/static/js/vendor/ && cp node_modules/@xterm/xterm/css/xterm.css web/static/css/ && cp node_modules/@xterm/addon-fit/lib/addon-fit.js web/static/js/vendor/ && cp node_modules/@xterm/addon-web-links/lib/addon-web-links.js web/static/js/vendor/",
+    "build-js-custom": "echo 'No custom JS files to build currently'",
+    "build-assets": "npm run build-css-prod && npm run build-js"
+  },
+  "dependencies": {
+    "alpinejs": "^3.13.0",
+    "htmx.org": "^1.9.10",
+    "sweetalert2": "^11.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "terser": "^5.43.1"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ]
+}
