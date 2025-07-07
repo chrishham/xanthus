@@ -8,6 +8,12 @@ import (
 	"github.com/chrishham/xanthus/internal/models"
 )
 
+// VersionService interface defines methods for application version management
+type VersionService interface {
+	GetLatestVersion(appID string) (string, error)
+	RefreshVersion(appID string) error
+}
+
 // EnhancedVersionService interface extends VersionService with additional capabilities
 type EnhancedVersionService interface {
 	VersionService
@@ -30,7 +36,7 @@ type EnhancedDefaultVersionService struct {
 }
 
 // NewEnhancedDefaultVersionService creates a new enhanced version service
-func NewEnhancedDefaultVersionService(configLoader models.ConfigLoader) EnhancedVersionService {
+func NewEnhancedDefaultVersionService(configLoader models.ConfigLoader) *EnhancedDefaultVersionService {
 	config := NewDefaultVersionCacheConfig()
 	cache := NewInMemoryVersionCache(config.CleanupInterval)
 	factory := NewVersionSourceFactory()
@@ -222,4 +228,9 @@ func (s *EnhancedDefaultVersionService) createVersionSourceFromConfig(appID stri
 
 	log.Printf("Created version source for %s from configuration: %s", appID, source.GetSourceType())
 	return nil
+}
+
+// NewDefaultVersionService creates a default version service (alias for enhanced version service)
+func NewDefaultVersionService() VersionService {
+	return NewEnhancedDefaultVersionService(nil)
 }

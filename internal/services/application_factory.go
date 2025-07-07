@@ -9,7 +9,7 @@ import (
 // ApplicationServiceFactory provides a factory for creating application-related services
 type ApplicationServiceFactory struct {
 	versionService         VersionService
-	enhancedVersionService EnhancedVersionService
+	enhancedVersionService *EnhancedDefaultVersionService
 	configLoader           models.ConfigLoader
 	registry               ApplicationRegistry
 	enhancedValidator      *EnhancedApplicationValidator
@@ -100,7 +100,7 @@ func (f *ApplicationServiceFactory) GetVersionService() VersionService {
 }
 
 // GetEnhancedVersionService returns the enhanced version service instance
-func (f *ApplicationServiceFactory) GetEnhancedVersionService() EnhancedVersionService {
+func (f *ApplicationServiceFactory) GetEnhancedVersionService() *EnhancedDefaultVersionService {
 	return f.enhancedVersionService
 }
 

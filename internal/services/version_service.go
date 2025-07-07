@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// VersionService handles version management operations
-type VersionService struct {
+// SelfUpdateService handles version management operations for self-updating
+type SelfUpdateService struct {
 	currentVersion  string
 	previousVersion string
 	updateStatus    *UpdateStatus
@@ -28,9 +28,9 @@ type UpdateStatus struct {
 	EndTime    *time.Time `json:"end_time,omitempty"`
 }
 
-// NewVersionService creates a new version service instance
-func NewVersionService() *VersionService {
-	return &VersionService{
+// NewSelfUpdateService creates a new self-update service instance
+func NewSelfUpdateService() *SelfUpdateService {
+	return &SelfUpdateService{
 		currentVersion: getVersionFromEnv(),
 		updateStatus: &UpdateStatus{
 			InProgress: false,
@@ -40,7 +40,7 @@ func NewVersionService() *VersionService {
 }
 
 // GetCurrentVersion returns the current running version
-func (s *VersionService) GetCurrentVersion() string {
+func (s *SelfUpdateService) GetCurrentVersion() string {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
 	
@@ -51,7 +51,7 @@ func (s *VersionService) GetCurrentVersion() string {
 }
 
 // GetPreviousVersion returns the previous version (for rollback)
-func (s *VersionService) GetPreviousVersion() string {
+func (s *SelfUpdateService) GetPreviousVersion() string {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
 	
@@ -59,7 +59,7 @@ func (s *VersionService) GetPreviousVersion() string {
 }
 
 // IsUpdateInProgress checks if an update is currently in progress
-func (s *VersionService) IsUpdateInProgress() bool {
+func (s *SelfUpdateService) IsUpdateInProgress() bool {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
 	
@@ -67,7 +67,7 @@ func (s *VersionService) IsUpdateInProgress() bool {
 }
 
 // CanRollback checks if rollback is possible
-func (s *VersionService) CanRollback() bool {
+func (s *SelfUpdateService) CanRollback() bool {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
 	
@@ -75,7 +75,7 @@ func (s *VersionService) CanRollback() bool {
 }
 
 // GetUpdateStatus returns the current update status
-func (s *VersionService) GetUpdateStatus() *UpdateStatus {
+func (s *SelfUpdateService) GetUpdateStatus() *UpdateStatus {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
 	
@@ -85,7 +85,7 @@ func (s *VersionService) GetUpdateStatus() *UpdateStatus {
 }
 
 // StartUpdate starts the update process to a specific version
-func (s *VersionService) StartUpdate(token, accountID, version, releaseNotes string) {
+func (s *SelfUpdateService) StartUpdate(token, accountID, version, releaseNotes string) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 	
@@ -111,7 +111,7 @@ func (s *VersionService) StartUpdate(token, accountID, version, releaseNotes str
 }
 
 // StartRollback starts the rollback process to the previous version
-func (s *VersionService) StartRollback(token, accountID, version string) {
+func (s *SelfUpdateService) StartRollback(token, accountID, version string) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 	
@@ -134,7 +134,7 @@ func (s *VersionService) StartRollback(token, accountID, version string) {
 }
 
 // performUpdate performs the actual update process
-func (s *VersionService) performUpdate(token, accountID, version, releaseNotes string) {
+func (s *SelfUpdateService) performUpdate(token, accountID, version, releaseNotes string) {
 	steps := []struct {
 		name     string
 		progress int
@@ -178,7 +178,7 @@ func (s *VersionService) performUpdate(token, accountID, version, releaseNotes s
 }
 
 // performRollback performs the actual rollback process
-func (s *VersionService) performRollback(token, accountID, version string) {
+func (s *SelfUpdateService) performRollback(token, accountID, version string) {
 	steps := []struct {
 		name     string
 		progress int
@@ -220,7 +220,7 @@ func (s *VersionService) performRollback(token, accountID, version string) {
 }
 
 // updateStatusProgress updates the progress of the current operation
-func (s *VersionService) updateStatusProgress(progress int, message string) {
+func (s *SelfUpdateService) updateStatusProgress(progress int, message string) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 	
@@ -230,7 +230,7 @@ func (s *VersionService) updateStatusProgress(progress int, message string) {
 }
 
 // updateStatusError updates the status with an error
-func (s *VersionService) updateStatusError(errorMsg string) {
+func (s *SelfUpdateService) updateStatusError(errorMsg string) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 	
@@ -242,42 +242,42 @@ func (s *VersionService) updateStatusError(errorMsg string) {
 }
 
 // Placeholder implementations for update steps
-func (s *VersionService) validateSystem() error {
+func (s *SelfUpdateService) validateSystem() error {
 	// Check system requirements, disk space, etc.
 	return nil
 }
 
-func (s *VersionService) createBackup() error {
+func (s *SelfUpdateService) createBackup() error {
 	// Create backup of current data
 	return nil
 }
 
-func (s *VersionService) downloadVersion(version string) error {
+func (s *SelfUpdateService) downloadVersion(version string) error {
 	// Download the new version from GitHub releases
 	return nil
 }
 
-func (s *VersionService) validateDownload() error {
+func (s *SelfUpdateService) validateDownload() error {
 	// Validate the downloaded file
 	return nil
 }
 
-func (s *VersionService) stopCurrentInstance() error {
+func (s *SelfUpdateService) stopCurrentInstance() error {
 	// Stop the current instance gracefully
 	return nil
 }
 
-func (s *VersionService) installVersion(version string) error {
+func (s *SelfUpdateService) installVersion(version string) error {
 	// Install the new version
 	return nil
 }
 
-func (s *VersionService) startNewInstance() error {
+func (s *SelfUpdateService) startNewInstance() error {
 	// Start the new instance
 	return nil
 }
 
-func (s *VersionService) validateDeployment() error {
+func (s *SelfUpdateService) validateDeployment() error {
 	// Validate that the new deployment is working
 	return nil
 }
@@ -305,7 +305,7 @@ func getBuildVersion() string {
 }
 
 // GetBuildInfo returns build information
-func (s *VersionService) GetBuildInfo() map[string]string {
+func (s *SelfUpdateService) GetBuildInfo() map[string]string {
 	return map[string]string{
 		"version":   s.GetCurrentVersion(),
 		"goVersion": runtime.Version(),

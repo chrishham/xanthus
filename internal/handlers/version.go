@@ -17,14 +17,14 @@ import (
 // VersionHandler handles version management operations
 type VersionHandler struct {
 	*BaseHandler
-	versionService *services.VersionService
+	versionService *services.SelfUpdateService
 }
 
 // NewVersionHandler creates a new version handler instance
 func NewVersionHandler() *VersionHandler {
 	return &VersionHandler{
 		BaseHandler:    NewBaseHandler(),
-		versionService: services.NewVersionService(),
+		versionService: services.NewSelfUpdateService(),
 	}
 }
 
@@ -79,7 +79,7 @@ func (h *VersionHandler) GetCurrentVersion(c *gin.Context) {
 
 // GetAvailableVersions returns available versions from GitHub releases
 func (h *VersionHandler) GetAvailableVersions(c *gin.Context) {
-	token, _, valid := h.validateTokenAndAccount(c)
+	_, _, valid := h.validateTokenAndAccount(c)
 	if !valid {
 		return
 	}
@@ -171,7 +171,7 @@ func (h *VersionHandler) TriggerUpdate(c *gin.Context) {
 
 // GetUpdateStatus returns the current update status
 func (h *VersionHandler) GetUpdateStatus(c *gin.Context) {
-	token, _, valid := h.validateTokenAndAccount(c)
+	_, _, valid := h.validateTokenAndAccount(c)
 	if !valid {
 		return
 	}
