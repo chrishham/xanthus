@@ -33,9 +33,39 @@ func (h *SvelteHandler) HandleSPAFallback(c *gin.Context) {
 		}
 	}
 
-	// If the path starts with /_app (SvelteKit assets), let the static file handler deal with it
+	// If the path starts with /_app (SvelteKit assets), serve the static file directly
 	if strings.HasPrefix(path, "/_app") {
-		c.Next()
+		// Remove leading slash for filesystem access
+		filePath := strings.TrimPrefix(path, "/")
+		
+		// Try to open the file
+		file, err := h.svelteFS.Open(filePath)
+		if err != nil {
+			c.String(http.StatusNotFound, "File not found")
+			return
+		}
+		defer file.Close()
+
+		// Read the file content
+		data, err := fs.ReadFile(h.svelteFS, filePath)
+		if err != nil {
+			c.String(http.StatusInternalServerError, "Failed to read file")
+			return
+		}
+
+		// Set appropriate content type based on file extension
+		contentType := "text/plain"
+		if strings.HasSuffix(filePath, ".js") {
+			contentType = "application/javascript"
+		} else if strings.HasSuffix(filePath, ".css") {
+			contentType = "text/css"
+		} else if strings.HasSuffix(filePath, ".json") {
+			contentType = "application/json"
+		}
+
+		c.Header("Content-Type", contentType)
+		c.Header("Cache-Control", "public, max-age=31536000") // Cache for 1 year
+		c.Data(http.StatusOK, contentType, data)
 		return
 	}
 

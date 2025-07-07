@@ -1,8 +1,16 @@
-.PHONY: dev build test test-unit test-integration test-e2e test-e2e-live test-e2e-coverage test-e2e-vps test-e2e-ssl test-e2e-apps test-e2e-ui test-e2e-perf test-e2e-security test-e2e-dr test-coverage test-all test-everything lint css css-watch clean help-testing docker-build docker-push docker-tag docker-multi help-docker release re-release
+.PHONY: dev dev-full build-svelte build test test-unit test-integration test-e2e test-e2e-live test-e2e-coverage test-e2e-vps test-e2e-ssl test-e2e-apps test-e2e-ui test-e2e-perf test-e2e-security test-e2e-dr test-coverage test-all test-everything lint css css-watch clean help-testing docker-build docker-push docker-tag docker-multi help-docker release re-release
 
 # Development mode
 dev: css
 	go run *.go
+
+# Build Svelte app and copy to deployment directory
+build-svelte:
+	cd svelte-app && npm run build
+	cp -r svelte-app/build/* web/svelte-app/
+
+# Full development build including Svelte
+dev-full: build-svelte dev
 
 # Build for production
 build: assets
