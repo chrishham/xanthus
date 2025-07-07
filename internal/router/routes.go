@@ -191,7 +191,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 	// Public API routes (no authentication required)
 	publicAPI := r.Group("/api")
-	
+
 	// Authentication endpoints
 	auth := publicAPI.Group("/auth")
 	auth.POST("/login", config.AuthHandler.HandleAPILogin)
@@ -203,10 +203,10 @@ func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 	if config.JWTService != nil {
 		protectedAPI.Use(middleware.JWTAuthMiddleware(config.JWTService))
 	}
-	
+
 	// User endpoints
 	user := protectedAPI.Group("/user")
 	user.GET("/profile", config.AuthHandler.HandleAPIAuthStatus)
-	
+
 	// Additional protected API routes will be added here in later phases
 }

@@ -51,7 +51,7 @@ func JWTAuthMiddlewareHTML(jwtService *services.JWTService) gin.HandlerFunc {
 		// Try to get token from Authorization header first
 		authHeader := c.GetHeader("Authorization")
 		var tokenString string
-		
+
 		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
 			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
 		} else {

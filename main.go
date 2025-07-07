@@ -58,7 +58,7 @@ func main() {
 
 	// Initialize shared services
 	wsTerminalService := services.NewWebSocketTerminalService()
-	
+
 	// Initialize JWT service with 32-byte secret key
 	jwtSecretKey, err := services.GenerateSecretKey()
 	if err != nil {

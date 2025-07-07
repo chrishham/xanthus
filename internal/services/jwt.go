@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	ErrInvalidToken = errors.New("invalid token")
-	ErrExpiredToken = errors.New("token has expired")
+	ErrInvalidToken  = errors.New("invalid token")
+	ErrExpiredToken  = errors.New("token has expired")
 	ErrTokenNotFound = errors.New("token not found")
 )
 
