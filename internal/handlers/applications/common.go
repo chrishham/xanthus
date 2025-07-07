@@ -116,6 +116,7 @@ func (v *ValidationHelper) ValidateApplicationData(data interface{}) error {
 		Subdomain   string `json:"subdomain"`
 		Domain      string `json:"domain"`
 		VPS         string `json:"vps"`
+		Version     string `json:"version"`
 	})
 	if !ok {
 		return fmt.Errorf("invalid application data structure")

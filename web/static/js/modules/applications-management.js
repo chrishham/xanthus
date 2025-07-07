@@ -279,6 +279,27 @@ export function applicationsManagement() {
                 `<option value="${d.name}">${d.name}</option>`
             ).join('');
 
+            // Fetch available versions for this app
+            let versionOptions = '';
+            try {
+                const versionsResponse = await fetch(`/applications/versions/${predefinedApp.id}`);
+                if (versionsResponse.ok) {
+                    const versionsData = await versionsResponse.json();
+                    if (versionsData.success && versionsData.versions && versionsData.versions.length > 0) {
+                        versionOptions = versionsData.versions.map(v => 
+                            `<option value="${v.version}" ${v.version === predefinedApp.version ? 'selected' : ''}>${v.version}${v.is_latest ? ' (Latest)' : ''}${!v.is_stable ? ' (Pre-release)' : ''}</option>`
+                        ).join('');
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to fetch versions for', predefinedApp.id, ':', error);
+            }
+
+            // Fallback if no versions available
+            if (!versionOptions) {
+                versionOptions = `<option value="${predefinedApp.version}" selected>${predefinedApp.version} (Default)</option>`;
+            }
+
             const { value: formValues } = await Swal.fire({
                 title: `Deploy ${predefinedApp.name}`,
                 html: `
@@ -343,9 +364,25 @@ export function applicationsManagement() {
                                 <input id="app-description" class="swal2-input m-0 w-full" placeholder="My ${predefinedApp.name} instance">
                             </div>
                             
+                            <!-- Version Selection -->
+                            <div class="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                <label class="block text-sm font-medium text-purple-900 mb-2">
+                                    <span class="flex items-center">
+                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a2 2 0 012-2z"></path>
+                                        </svg>
+                                        Version
+                                    </span>
+                                </label>
+                                <select id="app-version" class="swal2-select m-0 w-full border-purple-300 focus:border-purple-500 focus:ring-purple-500" style="border: 2px solid #c4b5fd;">
+                                    ${versionOptions}
+                                </select>
+                                <p class="text-xs text-purple-700 mt-1">Select the version to deploy</p>
+                            </div>
+                            
                             <div class="p-3 bg-green-50 border border-green-200 rounded-md text-sm">
                                 <strong>What will be deployed:</strong><br>
-                                • ${predefinedApp.name} v${predefinedApp.version}<br>
+                                • ${predefinedApp.name} (version will be selected above)<br>
                                 • Automatic HTTPS with SSL certificates<br>
                                 • Persistent storage and configuration<br>
                                 • Ready to use after deployment
@@ -364,6 +401,7 @@ export function applicationsManagement() {
                     const subdomain = document.getElementById('app-subdomain').value.trim();
                     const domain = document.getElementById('app-domain').value;
                     const description = document.getElementById('app-description').value.trim();
+                    const version = document.getElementById('app-version').value;
                     
                     // Clear previous validation styling
                     document.getElementById('app-vps').style.borderColor = '';
@@ -389,6 +427,10 @@ export function applicationsManagement() {
                         Swal.showValidationMessage('Domain is required');
                         return false;
                     }
+                    if (!version) {
+                        Swal.showValidationMessage('Version is required');
+                        return false;
+                    }
                     
                     return { 
                         name, 
@@ -396,6 +438,7 @@ export function applicationsManagement() {
                         subdomain, 
                         domain, 
                         description,
+                        version,
                         app_type: predefinedApp.id
                     };
                 }

@@ -120,6 +120,7 @@ func (h *Handler) HandleApplicationsCreate(c *gin.Context) {
 		Subdomain   string `json:"subdomain"`
 		Domain      string `json:"domain"`
 		VPS         string `json:"vps"`
+		Version     string `json:"version"`
 	}
 
 	if err := c.ShouldBindJSON(&appData); err != nil {
@@ -127,14 +128,30 @@ func (h *Handler) HandleApplicationsCreate(c *gin.Context) {
 		return
 	}
 
-	// Validate application data
-	validator := NewValidationHelper()
-	if err := validator.ValidateApplicationData(appData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// Validate application data - simple validation since struct parsing already validates structure
+	if appData.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "application name is required"})
+		return
+	}
+	if appData.AppType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "application type is required"})
+		return
+	}
+	if appData.Subdomain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "subdomain is required"})
+		return
+	}
+	if appData.Domain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain is required"})
+		return
+	}
+	if appData.VPS == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "VPS selection is required"})
 		return
 	}
 
 	// Check if subdomain is already taken
+	validator := NewValidationHelper()
 	if err := validator.ValidateSubdomainAvailability(token, accountID, appData.Subdomain, appData.Domain); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -154,6 +171,11 @@ func (h *Handler) HandleApplicationsCreate(c *gin.Context) {
 		log.Printf("Failed to get VPS config for ID %s: %v", appData.VPS, err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid VPS selection"})
 		return
+	}
+
+	// Override predefined app version if user specified one
+	if appData.Version != "" {
+		predefinedApp.Version = appData.Version
 	}
 
 	// Convert struct to map for service compatibility
