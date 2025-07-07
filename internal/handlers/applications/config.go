@@ -103,12 +103,13 @@ type ApplicationType string
 const (
 	TypeCodeServer ApplicationType = "code-server"
 	TypeArgoCD     ApplicationType = "argocd"
+	TypeXanthus    ApplicationType = "xanthus"
 )
 
 // IsValidType checks if the application type is supported
 func (at ApplicationType) IsValid() bool {
 	switch at {
-	case TypeCodeServer, TypeArgoCD:
+	case TypeCodeServer, TypeArgoCD, TypeXanthus:
 		return true
 	default:
 		return false

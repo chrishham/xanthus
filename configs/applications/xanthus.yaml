@@ -10,10 +10,10 @@ version_source:
   pattern: "v*"
 
 helm_chart:
-  repository: local
-  chart: xanthus-platform
+  repository: https://github.com/chrishham/xanthus.git
+  chart: charts/xanthus-platform
   version: 1.0.0
-  namespace: xanthus-platform
+  namespace: xanthus
   values_template: xanthus.yaml
   placeholders:
     APPLICATION_VERSION: "{{.Version}}"

@@ -1,5 +1,13 @@
 package models
 
+// VersionSourceConfig defines how to fetch version information
+type VersionSourceConfig struct {
+	Type    string `json:"type" yaml:"type"`
+	Source  string `json:"source" yaml:"source"`
+	Pattern string `json:"pattern" yaml:"pattern"`
+	Chart   string `json:"chart" yaml:"chart"` // For helm type
+}
+
 // PredefinedApplication represents a curated application available for deployment
 type PredefinedApplication struct {
 	ID            string                  `json:"id"`
@@ -8,6 +16,7 @@ type PredefinedApplication struct {
 	Icon          string                  `json:"icon"`
 	Category      string                  `json:"category"`
 	Version       string                  `json:"version"`
+	VersionSource VersionSourceConfig     `json:"version_source"`
 	HelmChart     HelmChartConfig         `json:"helm_chart"`
 	DefaultPort   int                     `json:"default_port"`
 	Requirements  ApplicationRequirements `json:"requirements"`

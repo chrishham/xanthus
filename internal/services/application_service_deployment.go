@@ -70,10 +70,10 @@ func (s *SimpleApplicationService) deployApplication(token, accountID string, ap
 	// Handle different chart repository types based on HelmChart configuration
 	helmConfig := predefinedApp.HelmChart
 
-	if predefinedApp.ID == "code-server" && helmConfig.Repository == "local" {
-		// Use local chart for code-server
-		chartPath := "/tmp/xanthus-code-server"
-		if err := s.copyLocalChartToVPS(conn, sshService, chartPath); err != nil {
+	if helmConfig.Repository == "local" {
+		// Use local chart for applications that have local charts
+		chartPath := fmt.Sprintf("/tmp/%s", helmConfig.Chart)
+		if err := s.copyLocalChartToVPS(conn, sshService, chartPath, helmConfig.Chart); err != nil {
 			return fmt.Errorf("failed to copy local chart to VPS: %v", err)
 		}
 		chartName = chartPath
@@ -411,8 +411,8 @@ func (s *SimpleApplicationService) storeEncryptedPassword(token, accountID, appI
 }
 
 // copyLocalChartToVPS copies the local Helm chart to the VPS
-func (s *SimpleApplicationService) copyLocalChartToVPS(conn *SSHConnection, sshService *SSHService, remotePath string) error {
-	localChartPath := "charts/xanthus-code-server"
+func (s *SimpleApplicationService) copyLocalChartToVPS(conn *SSHConnection, sshService *SSHService, remotePath string, chartName string) error {
+	localChartPath := fmt.Sprintf("charts/%s", chartName)
 
 	// Create remote directory
 	_, err := sshService.ExecuteCommand(conn, fmt.Sprintf("mkdir -p %s", remotePath))
@@ -436,15 +436,32 @@ func (s *SimpleApplicationService) copyLocalChartToVPS(conn *SSHConnection, sshS
 		return fmt.Errorf("failed to create templates directory: %v", err)
 	}
 
-	// Copy all template files
-	templateFiles := []string{
-		"_helpers.tpl",
-		"deployment.yaml",
-		"service.yaml",
-		"pvc.yaml",
-		"configmap.yaml",
-		"ingress.yaml",
-		"secret.yaml",
+	// Copy all template files (dynamically read from templates directory)
+	templatesDir := fmt.Sprintf("%s/templates", localChartPath)
+	
+	var templateFiles []string
+	if s.embedFS != nil {
+		// Read from embedded FS
+		entries, err := fs.ReadDir(*s.embedFS, templatesDir)
+		if err != nil {
+			return fmt.Errorf("failed to read templates directory from embedded FS: %v", err)
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				templateFiles = append(templateFiles, entry.Name())
+			}
+		}
+	} else {
+		// Read from filesystem
+		entries, err := os.ReadDir(templatesDir)
+		if err != nil {
+			return fmt.Errorf("failed to read templates directory: %v", err)
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				templateFiles = append(templateFiles, entry.Name())
+			}
+		}
 	}
 
 	for _, file := range templateFiles {

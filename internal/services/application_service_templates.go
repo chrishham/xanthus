@@ -56,8 +56,20 @@ func (s *SimpleApplicationService) generateFromTemplate(predefinedApp *models.Pr
 	}
 
 	// Add any additional placeholders from the configuration
-	for key, value := range predefinedApp.HelmChart.Placeholders {
-		placeholders[key] = value
+	// These placeholders can contain Go template syntax like {{.Version}} that needs to be resolved
+	templateData := map[string]string{
+		"Version":   predefinedApp.Version,
+		"Subdomain": subdomain,
+		"Domain":    domain,
+	}
+	
+	for key, templateValue := range predefinedApp.HelmChart.Placeholders {
+		// Resolve Go template syntax in the placeholder value
+		resolvedValue := templateValue
+		for templateKey, actualValue := range templateData {
+			resolvedValue = strings.ReplaceAll(resolvedValue, fmt.Sprintf("{{.%s}}", templateKey), actualValue)
+		}
+		placeholders[key] = resolvedValue
 	}
 
 	// Replace placeholders in the template

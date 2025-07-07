@@ -27,13 +27,6 @@ type ApplicationConfig struct {
 	Metadata      ApplicationMetadata         `yaml:"metadata,omitempty"`
 }
 
-// VersionSourceConfig defines how to fetch version information
-type VersionSourceConfig struct {
-	Type    string `yaml:"type" validate:"required,oneof=github dockerhub helm static"`
-	Source  string `yaml:"source" validate:"required"`
-	Pattern string `yaml:"pattern,omitempty"`
-	Chart   string `yaml:"chart,omitempty"` // For helm type
-}
 
 // HelmChartConfigYAML represents Helm configuration in YAML
 type HelmChartConfigYAML struct {
@@ -307,6 +300,12 @@ func (l *YAMLConfigLoader) convertToPredefinedApplication(config ApplicationConf
 		Icon:        config.Icon,
 		Category:    config.Category,
 		Version:     "dynamic", // Will be resolved by version service
+		VersionSource: VersionSourceConfig{
+			Type:    config.VersionSource.Type,
+			Source:  config.VersionSource.Source,
+			Pattern: config.VersionSource.Pattern,
+			Chart:   config.VersionSource.Chart,
+		},
 		HelmChart: HelmChartConfig{
 			Repository:     config.HelmChart.Repository,
 			Chart:          config.HelmChart.Chart,

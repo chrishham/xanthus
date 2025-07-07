@@ -261,19 +261,48 @@ func (h *Handler) HandleApplicationUpgrade(c *gin.Context) {
 func (h *Handler) HandleApplicationVersions(c *gin.Context) {
 	appType := c.Param("app_type")
 
-	// Currently only supporting code-server version lookup
-	if appType != string(TypeCodeServer) {
+	// Get application configuration from catalog to determine version source
+	predefinedApp, exists := h.catalog.GetApplicationByID(appType)
+	if !exists {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"error":   "Version lookup only supported for code-server applications",
+			"error":   "Invalid application type",
+		})
+		return
+	}
+
+	// Check if the application has GitHub version source configured
+	if predefinedApp.VersionSource.Type != "github" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Version lookup not supported for this application type",
 		})
 		return
 	}
 
 	githubService := services.NewGitHubService()
-	releases, err := githubService.GetCodeServerVersions(20) // Get last 20 releases
+	
+	// Parse owner/repo from the version source
+	sourceRepo := predefinedApp.VersionSource.Source // e.g., "chrishham/xanthus" or "coder/code-server"
+	var owner, repo string
+	if len(sourceRepo) > 0 {
+		parts := strings.Split(sourceRepo, "/")
+		if len(parts) == 2 {
+			owner, repo = parts[0], parts[1]
+		}
+	}
+	
+	if owner == "" || repo == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Invalid repository configuration",
+		})
+		return
+	}
+
+	releases, err := githubService.GetReleases(owner, repo, 20) // Get last 20 releases
 	if err != nil {
-		log.Printf("Error fetching code-server versions: %v", err)
+		log.Printf("Error fetching %s versions: %v", appType, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   "Failed to fetch version information",
