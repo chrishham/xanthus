@@ -10,47 +10,145 @@ Based on comprehensive analysis of the current codebase, here's a detailed plan 
 
 ---
 
-## 🎯 Phase 1: Backend API Standardization (Critical)
+## 🎯 Phase 1: JWT Authentication System (Critical & Mandatory)
 
-### 1.1 API Route Restructuring
-```bash
-# Current mixed routing → Standardized API routing
-/setup/hetzner     → /api/setup/hetzner
-/vps/create        → /api/vps/create
-/applications/     → /api/applications/
-/dns/configure     → /api/dns/configure
-```
-
-**Tasks:**
-- Update all handlers to return JSON responses instead of HTML
-- Implement `/api` prefix for all API endpoints
-- Standardize HTTP status codes (200, 201, 400, 401, 404, 500)
-- Add consistent error response format
-
-### 1.2 Authentication System Integration
+### 1.1 JWT Implementation (Mandatory)
 ```go
-// Update middleware for SPA authentication
-func AuthMiddleware(c *gin.Context) {
-    // Handle both cookie-based and JSON-based auth
-    if strings.HasPrefix(c.Request.URL.Path, "/api/") {
-        // JSON authentication for SPA
-    } else {
-        // Traditional cookie auth for legacy routes
-    }
+// JWT-based authentication for SPA
+type JWTService struct {
+    secretKey     []byte
+    tokenDuration time.Duration
+}
+
+func (j *JWTService) GenerateToken(userID string) (string, error) {
+    // Generate JWT token with user claims
+}
+
+func (j *JWTService) ValidateToken(tokenString string) (*Claims, error) {
+    // Validate and parse JWT token
 }
 ```
 
 **Tasks:**
-- Modify authentication middleware for SPA compatibility
-- Implement proper session management for API calls
-- Add JWT token support (optional enhancement)
-- Update login/logout handlers for JSON responses
+- Implement JWT token generation and validation
+- Create JWT middleware for API protection
+- Add token refresh mechanism
+- Implement secure token storage in frontend
+- Add logout token invalidation
+
+### 1.2 Authentication Flow Update
+```go
+// Updated authentication middleware
+func JWTAuthMiddleware(c *gin.Context) {
+    authHeader := c.GetHeader("Authorization")
+    if authHeader == "" {
+        c.JSON(401, gin.H{"error": "Authorization header required"})
+        c.Abort()
+        return
+    }
+    
+    tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+    claims, err := jwtService.ValidateToken(tokenString)
+    if err != nil {
+        c.JSON(401, gin.H{"error": "Invalid token"})
+        c.Abort()
+        return
+    }
+    
+    c.Set("userID", claims.UserID)
+    c.Next()
+}
+```
+
+**Tasks:**
+- Update login endpoint to return JWT tokens
+- Implement token-based authentication for all API routes
+- Add proper error handling for expired/invalid tokens
+- Create token refresh endpoint
+- Update Svelte auth store to handle JWT tokens
+
+### 1.3 Critical API Endpoints (Authentication-dependent)
+```bash
+# Priority API endpoints for JWT integration
+/api/auth/login     → JWT token generation
+/api/auth/refresh   → Token refresh
+/api/auth/logout    → Token invalidation
+/api/user/profile   → User information
+```
+
+**Tasks:**
+- Implement core authentication API endpoints
+- Add proper HTTP status codes and error responses
+- Test JWT flow with existing Svelte components
+- Ensure backward compatibility during transition
 
 ---
 
-## 🎯 Phase 2: Complete Svelte SPA Implementation (High Priority)
+## 🎯 Phase 2: Incremental API Migration (High Priority)
 
-### 2.1 Build System Integration
+### 2.1 Applications Module API Migration
+```bash
+# Applications API endpoints (Week 2)
+/applications/           → /api/applications/
+/applications/create     → /api/applications/create
+/applications/delete     → /api/applications/delete
+/applications/passwords  → /api/applications/passwords
+```
+
+**Tasks:**
+- Migrate applications handlers to return JSON
+- Update Svelte applications store to use JWT authentication
+- Test applications CRUD operations with new API
+- Add proper error handling and loading states
+
+### 2.2 VPS Module API Migration
+```bash
+# VPS API endpoints (Week 3)
+/vps/create    → /api/vps/create
+/vps/delete    → /api/vps/delete
+/vps/manage    → /api/vps/manage
+/vps/terminal  → /api/vps/terminal (WebSocket)
+```
+
+**Tasks:**
+- Migrate VPS handlers to JSON responses
+- Update WebSocket terminal authentication to use JWT
+- Test VPS management workflows
+- Ensure proper cleanup of WebSocket connections
+
+### 2.3 DNS Module API Migration
+```bash
+# DNS API endpoints (Week 4)
+/dns/configure → /api/dns/configure
+/dns/domains   → /api/dns/domains
+/dns/records   → /api/dns/records
+```
+
+**Tasks:**
+- Migrate DNS configuration handlers
+- Update DNS management components
+- Test domain and record management
+- Validate Cloudflare API integration
+
+### 2.4 Setup Module API Migration
+```bash
+# Setup API endpoints (Week 5)
+/setup/hetzner     → /api/setup/hetzner
+/setup/cloudflare  → /api/setup/cloudflare
+/setup/status      → /api/setup/status
+```
+
+**Tasks:**
+- Migrate setup handlers to JSON responses
+- Update setup workflow in Svelte
+- Test initial configuration flow
+- Ensure proper validation and error handling
+
+---
+
+## 🎯 Phase 3: Complete Svelte SPA Implementation (Medium Priority)
+
+### 3.1 Build System Integration
 ```makefile
 # Update Makefile to include Svelte build
 build: build-assets build-svelte
@@ -67,8 +165,9 @@ build-assets: build-svelte
 - Integrate Svelte build into `make build` and `make assets`
 - Update deployment scripts to include Svelte build
 - Ensure proper asset versioning and caching
+- Add development build optimization
 
-### 2.2 Complete Missing Features
+### 3.2 Complete Missing Svelte Features
 
 #### Applications Module
 - [ ] Complete port forwarding modal functionality
@@ -77,20 +176,22 @@ build-assets: build-svelte
 - [ ] Fix password management edge cases
 
 #### Terminal Integration
-- [ ] Complete WebSocket terminal implementation
+- [ ] Complete WebSocket terminal implementation with JWT auth
 - [ ] Fix session management and cleanup
 - [ ] Add proper error handling and reconnection
+- [ ] Implement terminal history and commands
 
-#### Type Safety
+#### Type Safety & Validation
 - [ ] Expand TypeScript definitions to match backend models
 - [ ] Add form validation throughout the application
 - [ ] Implement proper API response validation
+- [ ] Add runtime type checking for API responses
 
 ---
 
-## 🎯 Phase 3: HTMX Removal & Route Migration (Medium Priority)
+## 🎯 Phase 4: HTMX Removal & Legacy Cleanup (Low Priority)
 
-### 3.1 Remove HTMX Dependencies
+### 4.1 Remove HTMX Dependencies
 ```html
 <!-- Remove from templates -->
 <script src="https://unpkg.com/htmx.org@1.9.10"></script>
@@ -102,34 +203,7 @@ build-assets: build-svelte
 - Convert loading states to Svelte reactive stores
 - Update error handling to use Svelte notifications
 
-### 3.2 Setup Pages Migration
-```svelte
-<!-- Convert setup.html to Svelte -->
-<script>
-  import { setupStore } from '$lib/stores/setup';
-  import { apiClient } from '$lib/services/api';
-  
-  async function handleHetznerSetup(event) {
-    // Replace hx-post="/setup/hetzner" 
-    const result = await apiClient.post('/api/setup/hetzner', formData);
-    if (result.success) {
-      setupStore.setHetznerConfigured(true);
-    }
-  }
-</script>
-```
-
-**Tasks:**
-- Create Svelte setup pages (setup, server setup)
-- Replace HTMX form submissions with Svelte handlers
-- Implement setup workflow in Svelte routing
-- Add setup progress tracking
-
----
-
-## 🎯 Phase 4: Routing & Navigation (Medium Priority)
-
-### 4.1 Complete Client-Side Routing
+### 4.2 Complete Client-Side Routing
 ```javascript
 // Update Go routes to redirect to SPA
 router.GET("/", func(c *gin.Context) {
@@ -148,7 +222,7 @@ router.GET("/", func(c *gin.Context) {
 - Implement proper URL structure for SPA
 - Add browser history management
 
-### 4.2 Legacy Template Cleanup
+### 4.3 Legacy Template Cleanup
 ```bash
 # Remove templates no longer needed
 rm web/templates/main.html
@@ -181,27 +255,68 @@ rm web/templates/dns-config.html
 
 ---
 
-## 📅 Implementation Timeline
+## 📅 Implementation Timeline (6-8 Weeks)
 
-### Week 1: Backend API Standardization
-- **Days 1-2**: Implement `/api` prefix for all endpoints
-- **Days 3-4**: Update handlers to return JSON responses
-- **Days 5-7**: Fix authentication middleware for SPA
+### Week 1: JWT Authentication Foundation
+- **Days 1-2**: Implement JWT service and token generation
+- **Days 3-4**: Create JWT middleware and authentication flow
+- **Days 5-6**: Update login/logout endpoints for JWT
+- **Day 7**: Test JWT integration with existing Svelte auth store
 
-### Week 2: Complete Svelte Features
-- **Days 1-3**: Complete missing application features
-- **Days 4-5**: Fix terminal integration
-- **Days 6-7**: Add TypeScript definitions and validation
+### Week 2: Applications Module API Migration
+- **Days 1-2**: Migrate applications handlers to JSON responses
+- **Days 3-4**: Update Svelte applications components for JWT
+- **Days 5-6**: Test applications CRUD operations
+- **Day 7**: Fix any issues and add proper error handling
 
-### Week 3: HTMX Removal & Migration
-- **Days 1-3**: Remove HTMX dependencies and migrate forms
-- **Days 4-5**: Convert setup pages to Svelte
-- **Days 6-7**: Update routing and navigation
+### Week 3: VPS Module API Migration
+- **Days 1-2**: Migrate VPS handlers to JSON responses
+- **Days 3-4**: Update WebSocket terminal authentication
+- **Days 5-6**: Test VPS management workflows
+- **Day 7**: Ensure proper cleanup and error handling
 
-### Week 4: Testing & Cleanup
+### Week 4: DNS Module API Migration
+- **Days 1-2**: Migrate DNS configuration handlers
+- **Days 3-4**: Update DNS management components
+- **Days 5-6**: Test domain and record management
+- **Day 7**: Validate Cloudflare API integration
+
+### Week 5: Setup Module API Migration
+- **Days 1-2**: Migrate setup handlers to JSON responses
+- **Days 3-4**: Update setup workflow in Svelte
+- **Days 5-6**: Test initial configuration flow
+- **Day 7**: Comprehensive testing of setup process
+
+### Week 6: Complete Svelte Implementation
+- **Days 1-2**: Complete missing application features
+- **Days 3-4**: Fix terminal integration with JWT
+- **Days 5-6**: Add TypeScript definitions and validation
+- **Day 7**: Build system integration and optimization
+
+### Week 7: HTMX Removal & Cleanup
+- **Days 1-2**: Remove HTMX dependencies
+- **Days 3-4**: Complete client-side routing
+- **Days 5-6**: Remove legacy templates and code
+- **Day 7**: Final cleanup and documentation
+
+### Week 8: Testing & Polish
 - **Days 1-3**: Comprehensive testing of all features
-- **Days 4-5**: Remove legacy templates and code
-- **Days 6-7**: Performance optimization and polish
+- **Days 4-5**: Performance optimization and security audit
+- **Days 6-7**: Final polish and deployment preparation
+
+## 🔄 Rollback Strategy
+
+### Phase-by-Phase Rollback
+- **Phase 1**: Revert to cookie-based authentication
+- **Phase 2**: Restore original API endpoints by module
+- **Phase 3**: Re-enable HTMX/Alpine.js components
+- **Phase 4**: Restore legacy templates if needed
+
+### Git Strategy
+- Create feature branches for each phase
+- Merge only after thorough testing
+- Tag stable versions for easy rollback
+- Keep legacy code until migration is complete
 
 ---
 
