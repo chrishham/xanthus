@@ -25,14 +25,6 @@ func (h *SvelteHandler) HandleSPAFallback(c *gin.Context) {
 	// Get the requested path
 	path := c.Request.URL.Path
 
-	// Remove the /app prefix
-	if strings.HasPrefix(path, "/app") {
-		path = strings.TrimPrefix(path, "/app")
-		if path == "" {
-			path = "/"
-		}
-	}
-
 	// If the path starts with /_app (SvelteKit assets), serve the static file directly
 	if strings.HasPrefix(path, "/_app") {
 		// Remove leading slash for filesystem access
@@ -69,7 +61,7 @@ func (h *SvelteHandler) HandleSPAFallback(c *gin.Context) {
 		return
 	}
 
-	// For all other paths under /app/*, serve the SvelteKit index.html
+	// For all other paths, serve the SvelteKit index.html
 	// This enables client-side routing
 	indexFile, err := h.svelteFS.Open("index.html")
 	if err != nil {

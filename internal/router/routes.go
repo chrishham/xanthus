@@ -36,10 +36,16 @@ func SetupRoutes(r *gin.Engine, config RouteConfig) {
 // setupPublicRoutes configures routes that don't require authentication
 func setupPublicRoutes(r *gin.Engine, config RouteConfig) {
 	// Authentication routes
-	r.GET("/", config.AuthHandler.HandleRoot)
-	r.GET("/login", config.AuthHandler.HandleLoginPage)
 	r.POST("/login", config.AuthHandler.HandleLogin)
 	r.GET("/health", config.AuthHandler.HandleHealth)
+	
+	// Serve login page and assets via Svelte handler for unauthenticated users
+	if config.SvelteHandler != nil {
+		r.GET("/", config.SvelteHandler.HandleSPAFallback)
+		r.GET("/login", config.SvelteHandler.HandleSPAFallback)  
+		r.GET("/login/*path", config.SvelteHandler.HandleSPAFallback)
+		r.GET("/_app/*path", config.SvelteHandler.HandleSPAFallback)
+	}
 }
 
 // setupProtectedRoutes configures routes that require authentication
@@ -182,11 +188,11 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	protected.GET("/about", config.VersionHandler.GetAboutInfo)
 
 	// SvelteKit SPA routes - must be after all other routes to act as fallback
+	// This handles specific frontend routes for the SPA
 	if config.SvelteHandler != nil {
-		// Handle all /app/* routes for SvelteKit SPA routing
-		protected.GET("/app/*path", config.SvelteHandler.HandleSPAFallback)
-		// Handle the base /app route
-		protected.GET("/app", config.SvelteHandler.HandleSPAFallback)
+		// Handle root route (authenticated users)
+		protected.GET("/dashboard", config.SvelteHandler.HandleSPAFallback)
+		protected.GET("/dashboard/*path", config.SvelteHandler.HandleSPAFallback)
 	}
 }
 

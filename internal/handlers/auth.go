@@ -23,15 +23,6 @@ func NewAuthHandler(jwtService *services.JWTService) *AuthHandler {
 	}
 }
 
-// HandleRoot redirects to Svelte app
-func (h *AuthHandler) HandleRoot(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/app")
-}
-
-// HandleLoginPage redirects to Svelte login page
-func (h *AuthHandler) HandleLoginPage(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/app/login")
-}
 
 // HandleLogin processes login with Cloudflare token
 func (h *AuthHandler) HandleLogin(c *gin.Context) {
@@ -86,9 +77,9 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 			log.Println("✅ CSR already exists in KV")
 		}
 
-		// Valid token - proceed to main app (24 hours = 86400 seconds)
+		// Valid token - proceed to dashboard (24 hours = 86400 seconds)
 		c.SetCookie("cf_token", token, 86400, "/", "", false, true)
-		c.Redirect(http.StatusTemporaryRedirect, "/app")
+		c.Redirect(http.StatusTemporaryRedirect, "/dashboard")
 	} else {
 		c.Data(http.StatusOK, "text/html", []byte("❌ Invalid Cloudflare API token. Please check your token and try again."))
 	}
@@ -97,7 +88,7 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 // HandleLogout clears authentication and redirects to login
 func (h *AuthHandler) HandleLogout(c *gin.Context) {
 	c.SetCookie("cf_token", "", -1, "/", "", false, true)
-	c.Redirect(http.StatusTemporaryRedirect, "/app/login")
+	c.Redirect(http.StatusTemporaryRedirect, "/login")
 }
 
 // HandleHealth returns health status
