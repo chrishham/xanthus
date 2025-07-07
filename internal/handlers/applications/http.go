@@ -5,11 +5,28 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/chrishham/xanthus/internal/models"
 	"github.com/chrishham/xanthus/internal/services"
 	"github.com/gin-gonic/gin"
+	"gopkg.in/yaml.v3"
 )
+
+// HelmIndex represents the structure of a Helm repository index.yaml
+type HelmIndex struct {
+	APIVersion string                         `yaml:"apiVersion"`
+	Entries    map[string][]HelmChartVersion `yaml:"entries"`
+}
+
+// HelmChartVersion represents a single chart version in the Helm index
+type HelmChartVersion struct {
+	Version    string    `yaml:"version"`
+	AppVersion string    `yaml:"appVersion"`
+	Name       string    `yaml:"name"`
+	Created    time.Time `yaml:"created"`
+	Digest     string    `yaml:"digest"`
+}
 
 // HandleApplicationsPage renders the applications management page
 func (h *Handler) HandleApplicationsPage(c *gin.Context) {
@@ -701,10 +718,65 @@ func (h *Handler) fetchGitHubVersions(source, appType string) ([]models.VersionI
 
 // fetchHelmVersions fetches versions from Helm repository
 func (h *Handler) fetchHelmVersions(source, chart, appType string) ([]models.VersionInfo, error) {
-	// For now, we'll return a basic version list for Helm charts
-	// In a production system, you would parse the Helm repository index.yaml
-	// and extract available chart versions
-	versions := []models.VersionInfo{
+	// Construct the index.yaml URL
+	indexURL := fmt.Sprintf("%s/index.yaml", strings.TrimSuffix(source, "/"))
+	
+	log.Printf("Fetching Helm index from: %s", indexURL)
+	
+	// Fetch the index.yaml file
+	resp, err := http.Get(indexURL)
+	if err != nil {
+		log.Printf("Error fetching Helm index: %v", err)
+		return h.getFallbackHelmVersions(), nil
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Error fetching Helm index: status %d", resp.StatusCode)
+		return h.getFallbackHelmVersions(), nil
+	}
+	
+	// Parse the YAML content
+	var index HelmIndex
+	decoder := yaml.NewDecoder(resp.Body)
+	if err := decoder.Decode(&index); err != nil {
+		log.Printf("Error parsing Helm index YAML: %v", err)
+		return h.getFallbackHelmVersions(), nil
+	}
+	
+	// Extract versions for the specified chart
+	chartVersions, exists := index.Entries[chart]
+	if !exists {
+		log.Printf("Chart %s not found in Helm repository", chart)
+		return h.getFallbackHelmVersions(), nil
+	}
+	
+	// Convert to VersionInfo format (limit to first 20 versions)
+	var versions []models.VersionInfo
+	maxVersions := 20
+	if len(chartVersions) < maxVersions {
+		maxVersions = len(chartVersions)
+	}
+	
+	for i, chartVersion := range chartVersions[:maxVersions] {
+		versionInfo := models.VersionInfo{
+			Version:     chartVersion.Version,
+			Name:        fmt.Sprintf("%s (App: %s)", chartVersion.Version, chartVersion.AppVersion),
+			IsLatest:    i == 0, // First version is latest
+			IsStable:    true,   // Helm chart versions are considered stable
+			PublishedAt: chartVersion.Created,
+			URL:         "", // Helm charts don't have individual URLs
+		}
+		versions = append(versions, versionInfo)
+	}
+	
+	log.Printf("Successfully fetched %d versions for %s chart", len(versions), chart)
+	return versions, nil
+}
+
+// getFallbackHelmVersions returns basic version options when Helm parsing fails
+func (h *Handler) getFallbackHelmVersions() []models.VersionInfo {
+	return []models.VersionInfo{
 		{
 			Version:  "stable",
 			Name:     "Stable Version",
@@ -718,13 +790,4 @@ func (h *Handler) fetchHelmVersions(source, chart, appType string) ([]models.Ver
 			IsStable: true,
 		},
 	}
-
-	// TODO: Implement proper Helm repository parsing
-	// This would involve:
-	// 1. Fetching the repository index.yaml file
-	// 2. Parsing the chart versions
-	// 3. Returning structured version information
-	log.Printf("Helm version fetching for %s not fully implemented yet, returning basic options", appType)
-
-	return versions, nil
 }
