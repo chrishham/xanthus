@@ -12,9 +12,12 @@
 
   // Redirect if already authenticated
   onMount(async () => {
-    if ($authStore.isAuthenticated) {
-      goto('/app');
-    }
+    // Wait a bit for auth store to initialize
+    setTimeout(() => {
+      if ($authStore.isAuthenticated) {
+        goto('/app');
+      }
+    }, 100);
   });
 
   async function handleLogin() {

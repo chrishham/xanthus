@@ -30,7 +30,78 @@ const initialState: AuthState = {
 	isAuthenticated: false
 };
 
-export const authStore = writable<AuthState>(initialState);
+function createAuthStore() {
+	const { subscribe, set, update } = writable<AuthState>(initialState);
+
+	return {
+		subscribe,
+		set,
+		update,
+		// Actions
+		login: async (cf_token: string) => {
+			update(state => ({ ...state, loading: true, error: null }));
+
+			try {
+				const response = await fetch('/api/auth/login', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					body: JSON.stringify({ cf_token })
+				});
+
+				if (response.ok) {
+					const tokens: AuthTokens = await response.json();
+					saveTokens(tokens);
+					
+					// Get user profile after successful login
+					await checkAuthStatus();
+					return true;
+				} else {
+					const errorData = await response.json();
+					update(state => ({ ...state, error: errorData.error || 'Login failed' }));
+					return false;
+				}
+			} catch (error) {
+				update(state => ({ ...state, error: 'Network error during login' }));
+				return false;
+			} finally {
+				update(state => ({ ...state, loading: false }));
+			}
+		},
+		logout: async () => {
+			update(state => ({ ...state, loading: true }));
+			
+			try {
+				const tokens = getTokens();
+				if (tokens) {
+					await fetch('/api/auth/logout', {
+						method: 'POST',
+						headers: {
+							'Authorization': `${tokens.token_type} ${tokens.access_token}`,
+							'Content-Type': 'application/json'
+						}
+					});
+				}
+			} catch (error) {
+				console.error('Logout error:', error);
+			} finally {
+				set(initialState);
+				clearTokens();
+				// Redirect to login page
+				window.location.href = '/app/login';
+			}
+		},
+		initialize: async () => {
+			const tokens = getTokens();
+			if (tokens) {
+				await checkAuthStatus();
+			}
+		}
+	};
+}
+
+export const authStore = createAuthStore();
 
 // Derived stores
 export const user = derived(
@@ -109,98 +180,55 @@ export const shouldRefreshToken = (): boolean => {
 	}
 };
 
-// Actions
-export const setUser = (userData: User | null) => {
-	authStore.update(state => ({
-		...state,
-		user: userData,
-		isAuthenticated: !!userData,
-		error: null
-	}));
-};
-
-export const setTokens = (tokens: AuthTokens | null) => {
-	authStore.update(state => ({
-		...state,
-		tokens
-	}));
+// Helper function for auth status check
+export const checkAuthStatus = async () => {
+	authStore.update(state => ({ ...state, loading: true }));
 	
-	if (tokens) {
-		saveTokens(tokens);
-	} else {
-		clearTokens();
-	}
-};
-
-export const setAuthLoading = (loading: boolean) => {
-	authStore.update(state => ({
-		...state,
-		loading
-	}));
-};
-
-export const setAuthError = (error: string | null) => {
-	authStore.update(state => ({
-		...state,
-		error
-	}));
-};
-
-export const login = async (cf_token: string) => {
-	setAuthLoading(true);
-	setAuthError(null);
-
 	try {
-		const response = await fetch('/api/auth/login', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ cf_token })
-		});
-
-		if (response.ok) {
-			const tokens: AuthTokens = await response.json();
-			setTokens(tokens);
-			
-			// Get user profile after successful login
-			await checkAuthStatus();
-			return true;
-		} else {
-			const errorData = await response.json();
-			setAuthError(errorData.error || 'Login failed');
-			return false;
+		// Check if we need to refresh the token
+		if (shouldRefreshToken()) {
+			const refreshed = await refreshTokens();
+			if (!refreshed) {
+				authStore.update(state => ({ ...state, user: null, isAuthenticated: false, loading: false }));
+				return;
+			}
 		}
-	} catch (error) {
-		setAuthError('Network error during login');
-		return false;
-	} finally {
-		setAuthLoading(false);
-	}
-};
-
-export const logout = async () => {
-	setAuthLoading(true);
-	
-	try {
+		
 		const tokens = getTokens();
-		if (tokens) {
-			await fetch('/api/auth/logout', {
-				method: 'POST',
-				headers: {
-					'Authorization': `${tokens.token_type} ${tokens.access_token}`,
-					'Content-Type': 'application/json'
-				}
-			});
+		if (!tokens || isTokenExpired()) {
+			authStore.update(state => ({ ...state, user: null, isAuthenticated: false, loading: false }));
+			return;
+		}
+
+		const response = await fetch('/api/user/profile', {
+			headers: {
+				'Authorization': `${tokens.token_type} ${tokens.access_token}`
+			}
+		});
+		
+		if (response.ok) {
+			const data = await response.json();
+			if (data.authenticated && data.user) {
+				authStore.update(state => ({ 
+					...state, 
+					user: {
+						id: data.user.id,
+						account_id: data.user.account_id,
+						namespace_id: data.user.namespace_id,
+						isAuthenticated: true
+					},
+					isAuthenticated: true,
+					loading: false
+				}));
+			} else {
+				authStore.update(state => ({ ...state, user: null, isAuthenticated: false, loading: false }));
+			}
+		} else {
+			authStore.update(state => ({ ...state, user: null, isAuthenticated: false, loading: false }));
 		}
 	} catch (error) {
-		console.error('Logout error:', error);
-	} finally {
-		setUser(null);
-		setTokens(null);
-		setAuthLoading(false);
-		// Redirect to login page
-		window.location.href = '/login';
+		console.error('Auth check error:', error);
+		authStore.update(state => ({ ...state, user: null, isAuthenticated: false, loading: false }));
 	}
 };
 
@@ -221,75 +249,18 @@ export const refreshTokens = async (): Promise<boolean> => {
 
 		if (response.ok) {
 			const newTokens: AuthTokens = await response.json();
-			setTokens(newTokens);
+			saveTokens(newTokens);
 			return true;
 		} else {
 			// Refresh failed, clear tokens and redirect to login
-			setTokens(null);
-			setUser(null);
-			window.location.href = '/login';
+			clearTokens();
+			authStore.set(initialState);
+			window.location.href = '/app/login';
 			return false;
 		}
 	} catch (error) {
 		console.error('Token refresh error:', error);
 		return false;
-	}
-};
-
-export const checkAuthStatus = async () => {
-	setAuthLoading(true);
-	
-	try {
-		// Check if we need to refresh the token
-		if (shouldRefreshToken()) {
-			const refreshed = await refreshTokens();
-			if (!refreshed) {
-				setUser(null);
-				return;
-			}
-		}
-		
-		const tokens = getTokens();
-		if (!tokens || isTokenExpired()) {
-			setUser(null);
-			return;
-		}
-
-		const response = await fetch('/api/user/profile', {
-			headers: {
-				'Authorization': `${tokens.token_type} ${tokens.access_token}`
-			}
-		});
-		
-		if (response.ok) {
-			const data = await response.json();
-			if (data.authenticated && data.user) {
-				setUser({
-					id: data.user.id,
-					account_id: data.user.account_id,
-					namespace_id: data.user.namespace_id,
-					isAuthenticated: true
-				});
-			} else {
-				setUser(null);
-			}
-		} else {
-			setUser(null);
-		}
-	} catch (error) {
-		console.error('Auth check error:', error);
-		setUser(null);
-	} finally {
-		setAuthLoading(false);
-	}
-};
-
-// Auto-initialize auth store from stored tokens
-export const initializeAuth = async () => {
-	const tokens = getTokens();
-	if (tokens) {
-		setTokens(tokens);
-		await checkAuthStatus();
 	}
 };
 
