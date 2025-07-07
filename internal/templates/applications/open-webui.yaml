@@ -2,9 +2,8 @@
 # This template supports placeholder substitution for dynamic deployment
 
 # Image configuration
+# The image tag is managed by the Helm chart based on the chart version
 image:
-  repository: ghcr.io/open-webui/open-webui
-  tag: "{{VERSION}}"
   pullPolicy: Always
 
 # Service configuration

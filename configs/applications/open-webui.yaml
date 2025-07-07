@@ -5,9 +5,9 @@ icon: 🤖
 category: AI/ML
 
 version_source:
-  type: github
-  source: open-webui/open-webui
-  pattern: "v*"
+  type: helm
+  source: https://helm.openwebui.com/
+  chart: open-webui
 
 helm_chart:
   repository: https://helm.openwebui.com/
@@ -15,8 +15,7 @@ helm_chart:
   version: 6.22.0
   namespace: open-webui
   values_template: open-webui.yaml
-  placeholders:
-    APPLICATION_VERSION: "{{.Version}}"
+  placeholders: {}
 
 default_port: 8080
 
