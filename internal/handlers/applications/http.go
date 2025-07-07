@@ -293,8 +293,8 @@ func (h *Handler) HandleApplicationVersions(c *gin.Context) {
 		return
 	}
 
-	// Check if the application has GitHub version source configured
-	if predefinedApp.VersionSource.Type != "github" {
+	// Check if the application has a supported version source configured
+	if predefinedApp.VersionSource.Type == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "Version lookup not supported for this application type",
@@ -302,27 +302,22 @@ func (h *Handler) HandleApplicationVersions(c *gin.Context) {
 		return
 	}
 
-	githubService := services.NewGitHubService()
+	var versions []models.VersionInfo
+	var err error
 
-	// Parse owner/repo from the version source
-	sourceRepo := predefinedApp.VersionSource.Source // e.g., "chrishham/xanthus" or "coder/code-server"
-	var owner, repo string
-	if len(sourceRepo) > 0 {
-		parts := strings.Split(sourceRepo, "/")
-		if len(parts) == 2 {
-			owner, repo = parts[0], parts[1]
-		}
-	}
-
-	if owner == "" || repo == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{
+	switch predefinedApp.VersionSource.Type {
+	case "github":
+		versions, err = h.fetchGitHubVersions(predefinedApp.VersionSource.Source, appType)
+	case "helm":
+		versions, err = h.fetchHelmVersions(predefinedApp.VersionSource.Source, predefinedApp.VersionSource.Chart, appType)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"error":   "Invalid repository configuration",
+			"error":   fmt.Sprintf("Version source type '%s' not supported", predefinedApp.VersionSource.Type),
 		})
 		return
 	}
 
-	releases, err := githubService.GetReleases(owner, repo, 20) // Get last 20 releases
 	if err != nil {
 		log.Printf("Error fetching %s versions: %v", appType, err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -330,23 +325,6 @@ func (h *Handler) HandleApplicationVersions(c *gin.Context) {
 			"error":   "Failed to fetch version information",
 		})
 		return
-	}
-
-	// Convert to VersionInfo format
-	var versions []models.VersionInfo
-	for i, release := range releases {
-		// GitHub releases use tags like "v4.101.2", but Docker images use "4.101.2"
-		dockerTag := strings.TrimPrefix(release.TagName, "v")
-
-		versionInfo := models.VersionInfo{
-			Version:     dockerTag, // Use Docker-compatible version
-			Name:        release.Name,
-			IsLatest:    i == 0, // First release is latest
-			IsStable:    !release.Prerelease,
-			PublishedAt: release.PublishedAt,
-			URL:         release.HTMLURL,
-		}
-		versions = append(versions, versionInfo)
 	}
 
 	response := models.VersionsResponse{
@@ -677,4 +655,76 @@ func (h *Handler) HandleApplicationToken(c *gin.Context) {
 		"token":   authToken,
 		"message": "Authentication token retrieved successfully",
 	})
+}
+
+// fetchGitHubVersions fetches versions from GitHub releases
+func (h *Handler) fetchGitHubVersions(source, appType string) ([]models.VersionInfo, error) {
+	githubService := services.NewGitHubService()
+
+	// Parse owner/repo from the version source
+	var owner, repo string
+	if len(source) > 0 {
+		parts := strings.Split(source, "/")
+		if len(parts) == 2 {
+			owner, repo = parts[0], parts[1]
+		}
+	}
+
+	if owner == "" || repo == "" {
+		return nil, fmt.Errorf("invalid repository configuration: %s", source)
+	}
+
+	releases, err := githubService.GetReleases(owner, repo, 20) // Get last 20 releases
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch GitHub releases: %v", err)
+	}
+
+	// Convert to VersionInfo format
+	var versions []models.VersionInfo
+	for i, release := range releases {
+		// GitHub releases use tags like "v4.101.2", but Docker images use "4.101.2"
+		dockerTag := strings.TrimPrefix(release.TagName, "v")
+
+		versionInfo := models.VersionInfo{
+			Version:     dockerTag, // Use Docker-compatible version
+			Name:        release.Name,
+			IsLatest:    i == 0, // First release is latest
+			IsStable:    !release.Prerelease,
+			PublishedAt: release.PublishedAt,
+			URL:         release.HTMLURL,
+		}
+		versions = append(versions, versionInfo)
+	}
+
+	return versions, nil
+}
+
+// fetchHelmVersions fetches versions from Helm repository
+func (h *Handler) fetchHelmVersions(source, chart, appType string) ([]models.VersionInfo, error) {
+	// For now, we'll return a basic version list for Helm charts
+	// In a production system, you would parse the Helm repository index.yaml
+	// and extract available chart versions
+	versions := []models.VersionInfo{
+		{
+			Version:  "stable",
+			Name:     "Stable Version",
+			IsLatest: true,
+			IsStable: true,
+		},
+		{
+			Version:  "latest",
+			Name:     "Latest Version",
+			IsLatest: false,
+			IsStable: true,
+		},
+	}
+
+	// TODO: Implement proper Helm repository parsing
+	// This would involve:
+	// 1. Fetching the repository index.yaml file
+	// 2. Parsing the chart versions
+	// 3. Returning structured version information
+	log.Printf("Helm version fetching for %s not fully implemented yet, returning basic options", appType)
+
+	return versions, nil
 }

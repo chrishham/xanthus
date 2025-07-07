@@ -591,28 +591,26 @@ export function applicationsManagement() {
         },
 
         async showUpgradeModal(app) {
-            // Fetch available versions if it's a code-server app
+            // Fetch available versions for apps that support version detection
             let versionsHtml = '';
-            if (app.app_type === 'code-server') {
-                try {
-                    const versionsResponse = await fetch(`/applications/versions/code-server`);
-                    if (versionsResponse.ok) {
-                        const versionsData = await versionsResponse.json();
-                        if (versionsData.success && versionsData.versions.length > 0) {
-                            const options = versionsData.versions.map(v => 
-                                `<option value="${v.version}" ${v.is_latest ? 'selected' : ''}>${v.version}${v.is_latest ? ' (Latest)' : ''}${!v.is_stable ? ' (Pre-release)' : ''}</option>`
-                            ).join('');
-                            versionsHtml = `
-                                <select id="version-select" class="swal2-input m-0 w-full">
-                                    <option value="latest">latest (Automatic)</option>
-                                    ${options}
-                                </select>
-                            `;
-                        }
+            try {
+                const versionsResponse = await fetch(`/applications/versions/${app.app_type}`);
+                if (versionsResponse.ok) {
+                    const versionsData = await versionsResponse.json();
+                    if (versionsData.success && versionsData.versions.length > 0) {
+                        const options = versionsData.versions.map(v => 
+                            `<option value="${v.version}" ${v.is_latest ? 'selected' : ''}>${v.version}${v.is_latest ? ' (Latest)' : ''}${!v.is_stable ? ' (Pre-release)' : ''}</option>`
+                        ).join('');
+                        versionsHtml = `
+                            <select id="version-select" class="swal2-input m-0 w-full">
+                                <option value="latest">latest (Automatic)</option>
+                                ${options}
+                            </select>
+                        `;
                     }
-                } catch (error) {
-                    console.warn('Failed to fetch versions:', error);
                 }
+            } catch (error) {
+                console.warn(`Failed to fetch versions for ${app.app_type}:`, error);
             }
 
             // Only show modal if versions are available
