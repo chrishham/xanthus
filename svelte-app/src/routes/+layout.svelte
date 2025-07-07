@@ -5,12 +5,20 @@
 	import NotificationSystem from '$lib/components/common/NotificationSystem.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { setCurrentPage } from '$lib/stores/ui';
-	import { checkAuthStatus } from '$lib/stores/auth';
+	import { authStore } from '$lib/stores/auth';
 
 	onMount(() => {
-		checkAuthStatus();
+		authStore.initialize();
 	});
+
+	// Authentication guard for app routes
+	$: {
+		if ($page.url.pathname.startsWith('/app') && !$authStore.isAuthenticated) {
+			goto('/login');
+		}
+	}
 
 	// Update current page based on route
 	$: {
