@@ -58,6 +58,17 @@ secrets.yaml
 node_modules
 bin
 
+# SvelteKit artifacts
+.svelte-kit/
+svelte-app/.svelte-kit/
+svelte-app/build/
+svelte-app/dist/
+svelte-app/coverage/
+svelte-app/playwright-report/
+svelte-app/test-results/
+svelte-app/.env
+svelte-app/.env.*
+
 *.pem
 
 cookies.txt
