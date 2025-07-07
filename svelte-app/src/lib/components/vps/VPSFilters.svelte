@@ -149,6 +149,8 @@
 					<button
 						class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-purple-400 hover:text-purple-600 hover:bg-purple-200"
 						on:click={() => handleFilterChange('search', '')}
+						aria-label="Clear search filter"
+						title="Clear search filter"
 					>
 						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -163,6 +165,8 @@
 					<button
 						class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-purple-400 hover:text-purple-600 hover:bg-purple-200"
 						on:click={() => handleFilterChange('provider', '')}
+						aria-label="Clear provider filter"
+						title="Clear provider filter"
 					>
 						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -177,6 +181,8 @@
 					<button
 						class="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-purple-400 hover:text-purple-600 hover:bg-purple-200"
 						on:click={() => handleFilterChange('status', '')}
+						aria-label="Clear status filter"
+						title="Clear status filter"
 					>
 						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

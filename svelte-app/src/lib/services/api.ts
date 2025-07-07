@@ -1,3 +1,5 @@
+import { errorHandler } from './errorHandler';
+
 export class ApiError extends Error {
 	constructor(
 		message: string,
@@ -12,27 +14,41 @@ export class ApiError extends Error {
 export class ApiClient {
 	private baseUrl = '/api';
 
-	async get<T>(endpoint: string): Promise<T> {
-		const response = await fetch(`${this.baseUrl}${endpoint}`, {
-			method: 'GET',
-			headers: {
-				'Content-Type': 'application/json'
-			}
-		});
+	async get<T>(endpoint: string, context = 'API', showErrors = true): Promise<T> {
+		try {
+			const response = await fetch(`${this.baseUrl}${endpoint}`, {
+				method: 'GET',
+				headers: {
+					'Content-Type': 'application/json'
+				}
+			});
 
-		return this.handleResponse<T>(response);
+			return await this.handleResponse<T>(response);
+		} catch (error) {
+			if (showErrors) {
+				await this.handleError(error, context);
+			}
+			throw error;
+		}
 	}
 
-	async post<T>(endpoint: string, data?: unknown): Promise<T> {
-		const response = await fetch(`${this.baseUrl}${endpoint}`, {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json'
-			},
-			body: data ? JSON.stringify(data) : undefined
-		});
+	async post<T>(endpoint: string, data?: unknown, context = 'API', showErrors = true): Promise<T> {
+		try {
+			const response = await fetch(`${this.baseUrl}${endpoint}`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json'
+				},
+				body: data ? JSON.stringify(data) : undefined
+			});
 
-		return this.handleResponse<T>(response);
+			return await this.handleResponse<T>(response);
+		} catch (error) {
+			if (showErrors) {
+				await this.handleError(error, context);
+			}
+			throw error;
+		}
 	}
 
 	async put<T>(endpoint: string, data?: unknown): Promise<T> {
@@ -83,6 +99,24 @@ export class ApiClient {
 		} catch {
 			return {} as T;
 		}
+	}
+
+	private async handleError(error: any, context: string): Promise<void> {
+		if (this.isNetworkError(error)) {
+			await errorHandler.handleNetworkError(context);
+		} else {
+			await errorHandler.handleAPIError(error, context);
+		}
+	}
+
+	private isNetworkError(error: any): boolean {
+		// Network errors typically don't have a status code
+		return !error.status && (
+			error.message?.includes('NetworkError') ||
+			error.message?.includes('Failed to fetch') ||
+			error.message?.includes('fetch') ||
+			error.name === 'TypeError'
+		);
 	}
 
 	// Compatibility methods for existing API endpoints that don't use /api prefix

@@ -2,6 +2,7 @@
 	import '../app.css';
 	import Navigation from '$lib/components/common/Navigation.svelte';
 	import LoadingModal from '$lib/components/common/LoadingModal.svelte';
+	import NotificationSystem from '$lib/components/common/NotificationSystem.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { setCurrentPage } from '$lib/stores/ui';
@@ -21,6 +22,8 @@
 			setCurrentPage('vps');
 		} else if ($page.url.pathname.startsWith('/app/dns')) {
 			setCurrentPage('dns');
+		} else if ($page.url.pathname.startsWith('/app/version')) {
+			setCurrentPage('version');
 		}
 	}
 </script>
@@ -29,4 +32,5 @@
 	<Navigation currentPage={$page.url.pathname.includes('/app/') ? $page.url.pathname.split('/')[2] || 'main' : 'main'} />
 	<slot />
 	<LoadingModal />
+	<NotificationSystem />
 </div>

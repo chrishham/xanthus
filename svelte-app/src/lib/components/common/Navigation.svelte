@@ -88,6 +88,8 @@
 					return 'text-blue-600 bg-blue-50 px-3 py-2 rounded-md text-sm font-medium';
 				case 'applications':
 					return 'text-purple-600 bg-purple-50 px-3 py-2 rounded-md text-sm font-medium';
+				case 'version':
+					return 'text-green-600 bg-green-50 px-3 py-2 rounded-md text-sm font-medium';
 				case 'main':
 				default:
 					return 'text-gray-900 bg-gray-50 px-3 py-2 rounded-md text-sm font-medium';
@@ -109,6 +111,7 @@
 				<a href="/dns" class={getNavLinkClass('dns')}>DNS Config</a>
 				<a href="/vps" class={getNavLinkClass('vps')}>VPS Management</a>
 				<a href="/applications" class={getNavLinkClass('applications')}>Applications</a>
+				<a href="/version" class={getNavLinkClass('version')}>Version</a>
 				<button 
 					on:click={showAboutModal} 
 					class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"

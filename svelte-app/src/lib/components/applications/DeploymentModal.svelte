@@ -140,8 +140,19 @@
 <svelte:window on:keydown={handleKeydown} />
 
 {#if show}
-	<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={closeModal}>
-		<div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" on:click|stopPropagation>
+	<div 
+		class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" 
+		on:click={closeModal}
+		on:keydown={(e) => e.key === 'Escape' && closeModal()}
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="deployment-modal-title"
+		tabindex="-1"
+	>
+		<div 
+			class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto" 
+			role="document"
+		>
 			<!-- Header -->
 			<div class="p-6 border-b border-gray-200">
 				<div class="flex items-center justify-between">
@@ -149,12 +160,17 @@
 						{#if predefinedApp}
 							<div class="text-2xl mr-3">{predefinedApp.icon}</div>
 							<div>
-								<h3 class="text-lg font-medium text-gray-900">Deploy {predefinedApp.name}</h3>
+								<h3 id="deployment-modal-title" class="text-lg font-medium text-gray-900">Deploy {predefinedApp.name}</h3>
 								<p class="text-sm text-gray-600">{predefinedApp.description}</p>
 							</div>
 						{/if}
 					</div>
-					<button on:click={closeModal} class="text-gray-400 hover:text-gray-600">
+					<button 
+						on:click={closeModal} 
+						class="text-gray-400 hover:text-gray-600"
+						aria-label="Close deployment modal"
+						title="Close deployment modal"
+					>
 						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
 						</svg>
