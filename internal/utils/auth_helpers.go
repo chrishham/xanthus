@@ -63,3 +63,27 @@ func ValidateTokenAndGetAccountHTML(c *gin.Context) (token, accountID string, va
 	}
 	return result.Token, result.AccountID, true
 }
+
+// ValidateJWTAndGetAccountJSON validates JWT token from context and sends JSON error if invalid
+// This should be used for API endpoints protected by JWT middleware
+// Returns true if valid, false if invalid (and sends error response)
+func ValidateJWTAndGetAccountJSON(c *gin.Context) (token, accountID string, valid bool) {
+	// Get values set by JWT middleware
+	cfToken, tokenExists := c.Get("cf_token")
+	accID, accountExists := c.Get("account_id")
+
+	if !tokenExists || !accountExists {
+		JSONUnauthorized(c, "Missing authentication context")
+		return "", "", false
+	}
+
+	cfTokenStr, tokenOk := cfToken.(string)
+	accountIDStr, accountOk := accID.(string)
+
+	if !tokenOk || !accountOk || cfTokenStr == "" || accountIDStr == "" {
+		JSONUnauthorized(c, "Invalid authentication context")
+		return "", "", false
+	}
+
+	return cfTokenStr, accountIDStr, true
+}

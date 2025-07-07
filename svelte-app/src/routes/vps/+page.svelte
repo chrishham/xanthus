@@ -50,8 +50,8 @@
 		try {
 			setVPSLoading(true);
 			setVPSError(null);
-			const response = await api.get<VPS[]>('/vps/list');
-			setServers(response);
+			const response = await api.get<{ servers: VPS[] }>('/vps');
+			setServers(response.servers);
 		} catch (error) {
 			console.error('Failed to load VPS list:', error);
 			setVPSError(error instanceof Error ? error.message : 'Failed to load VPS list');
@@ -97,7 +97,8 @@
 			// Update server status optimistically
 			updateServer(vps.id, { status: action === 'poweron' ? 'starting' : action === 'poweroff' ? 'stopping' : 'rebooting' });
 			
-			await api.post(`/vps/${vps.id}/${action}`, {});
+			// Call the API endpoints that expect form data
+			await api.post(`/vps/${action}`, { server_id: vps.id });
 			
 			// Refresh the server list after a short delay
 			setTimeout(() => {
@@ -122,7 +123,7 @@
 			setVPSLoading(true);
 			
 			if (vps.provider === 'oracle') {
-				await api.post('/vps/oci/delete', { instance_id: vps.id });
+				await api.post('/vps/oci/delete', { server_id: vps.id });
 			} else {
 				await api.post('/vps/delete', { server_id: vps.id });
 			}

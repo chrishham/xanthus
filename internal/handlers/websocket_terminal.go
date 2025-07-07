@@ -57,17 +57,20 @@ func (h *WebSocketTerminalHandler) HandleWebSocketTerminal(c *gin.Context) {
 		return
 	}
 
-	// Authenticate WebSocket connection
-	token := h.authenticateWebSocket(c)
-	if token == "" {
+	// Get authentication context (set by JWT middleware)
+	tokenIntf, tokenExists := c.Get("cf_token")
+	accountIDIntf, accountExists := c.Get("account_id")
+
+	if !tokenExists || !accountExists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
-	// Get account ID
-	_, accountID, err := utils.CheckKVNamespaceExists(token)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to access account"})
+	token, tokenOk := tokenIntf.(string)
+	accountID, accountOk := accountIDIntf.(string)
+
+	if !tokenOk || !accountOk || token == "" || accountID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authentication context"})
 		return
 	}
 
@@ -100,35 +103,6 @@ func (h *WebSocketTerminalHandler) HandleWebSocketTerminal(c *gin.Context) {
 	}
 }
 
-// authenticateWebSocket authenticates WebSocket connections
-func (h *WebSocketTerminalHandler) authenticateWebSocket(c *gin.Context) string {
-	// Try to get token from multiple sources
-
-	// 1. Try Authorization header
-	authHeader := c.GetHeader("Authorization")
-	if authHeader != "" {
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			token := authHeader[7:]
-			if utils.VerifyCloudflareToken(token) {
-				return token
-			}
-		}
-	}
-
-	// 2. Try query parameter (for WebSocket connections from frontend)
-	token := c.Query("token")
-	if token != "" && utils.VerifyCloudflareToken(token) {
-		return token
-	}
-
-	// 3. Try cookie (fallback for same-origin requests)
-	token, err := c.Cookie("cf_token")
-	if err == nil && utils.VerifyCloudflareToken(token) {
-		return token
-	}
-
-	return ""
-}
 
 // sendErrorMessage sends an error message over WebSocket
 func (h *WebSocketTerminalHandler) sendErrorMessage(conn *websocket.Conn, message string) {

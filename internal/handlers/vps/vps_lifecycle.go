@@ -187,7 +187,12 @@ func (h *VPSLifecycleHandler) HandleVPSDelete(c *gin.Context) {
 		return
 	}
 
-	serverIDStr := c.PostForm("server_id")
+	serverIDStr, err := h.getServerIDFromRequest(c)
+	if err != nil {
+		utils.JSONBadRequest(c, err.Error())
+		return
+	}
+	
 	serverID, err := utils.ParseServerID(serverIDStr)
 	if err != nil {
 		utils.JSONServerIDInvalid(c)
@@ -528,7 +533,12 @@ func (h *VPSLifecycleHandler) HandleOCIDelete(c *gin.Context) {
 		return
 	}
 
-	serverIDStr := c.PostForm("server_id")
+	serverIDStr, err := h.getServerIDFromRequest(c)
+	if err != nil {
+		utils.JSONBadRequest(c, err.Error())
+		return
+	}
+	
 	serverID, err := utils.ParseServerID(serverIDStr)
 	if err != nil {
 		utils.JSONServerIDInvalid(c)
@@ -626,7 +636,12 @@ func (h *VPSLifecycleHandler) performOCIServerAction(c *gin.Context, action stri
 		return
 	}
 
-	serverIDStr := c.PostForm("server_id")
+	serverIDStr, err := h.getServerIDFromRequest(c)
+	if err != nil {
+		utils.JSONBadRequest(c, err.Error())
+		return
+	}
+	
 	serverID, err := utils.ParseServerID(serverIDStr)
 	if err != nil {
 		utils.JSONServerIDInvalid(c)

@@ -141,8 +141,11 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		wsTerminal.DELETE("/:session_id", config.WebSocketTerminalHandler.HandleTerminalStop)
 	}
 
-	// WebSocket endpoint (with special auth handling)
+	// WebSocket endpoint (with JWT auth)
 	ws := r.Group("/ws")
+	if config.JWTService != nil {
+		ws.Use(middleware.JWTWebSocketAuthMiddleware(config.JWTService))
+	}
 	{
 		ws.GET("/terminal/:session_id", config.WebSocketTerminalHandler.HandleWebSocketTerminal)
 	}
@@ -222,6 +225,66 @@ func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 	apps.POST("/:id/port-forwards", config.AppsHandler.HandlePortForwardsCreate)
 	apps.DELETE("/:id/port-forwards/:port_id", config.AppsHandler.HandlePortForwardsDelete)
 	apps.DELETE("/:id", config.AppsHandler.HandleApplicationDelete)
+
+	// VPS API endpoints
+	vps := protectedAPI.Group("/vps")
+	{
+		// Meta/UI endpoints
+		vps.GET("/locations", config.VPSMetaHandler.HandleVPSLocations)
+		vps.GET("/server-types", config.VPSMetaHandler.HandleVPSServerTypes)
+		vps.GET("/server-options", config.VPSMetaHandler.HandleVPSServerOptions)
+		vps.POST("/validate-name", config.VPSMetaHandler.HandleVPSValidateName)
+
+		// Info/monitoring endpoints
+		vps.GET("", config.VPSInfoHandler.HandleVPSList)
+		vps.GET("/ssh-key", config.VPSInfoHandler.HandleVPSSSHKey)
+		vps.GET("/:id/status", config.VPSInfoHandler.HandleVPSStatus)
+		vps.GET("/:id/info", config.VPSInfoHandler.HandleVPSInfo)
+		vps.GET("/:id/logs", config.VPSInfoHandler.HandleVPSLogs)
+		vps.GET("/:id/k3s-logs", config.VPSInfoHandler.HandleK3sLogs)
+		vps.GET("/:id/applications", config.VPSInfoHandler.HandleVPSApplications)
+		vps.POST("/:id/terminal", config.VPSInfoHandler.HandleVPSTerminal)
+		vps.GET("/:id/ssh-debug", config.VPSInfoHandler.HandleVPSSSHUserDebug)
+
+		// Lifecycle endpoints
+		vps.POST("", config.VPSLifecycleHandler.HandleVPSCreate)
+		vps.POST("/delete", config.VPSLifecycleHandler.HandleVPSDelete)
+		vps.POST("/poweroff", config.VPSLifecycleHandler.HandleVPSPowerOff)
+		vps.POST("/poweron", config.VPSLifecycleHandler.HandleVPSPowerOn)
+		vps.POST("/reboot", config.VPSLifecycleHandler.HandleVPSReboot)
+
+		// Provider-specific endpoints
+		vps.GET("/oci-ssh-key", config.VPSLifecycleHandler.HandleSSHKey)
+		vps.POST("/add-oci", config.VPSLifecycleHandler.HandleAddOCI)
+
+		// OCI automation endpoints
+		oci := vps.Group("/oci")
+		{
+			oci.GET("/check-token", config.VPSLifecycleHandler.HandleOCICheckToken)
+			oci.POST("/validate-token", config.VPSLifecycleHandler.HandleOCIValidateToken)
+			oci.POST("/store-token", config.VPSLifecycleHandler.HandleOCIStoreToken)
+			oci.GET("/home-region", config.VPSLifecycleHandler.HandleOCIGetHomeRegion)
+			oci.POST("/create", config.VPSLifecycleHandler.HandleOCICreate)
+			oci.POST("/delete", config.VPSLifecycleHandler.HandleOCIDelete)
+			oci.POST("/poweroff", config.VPSLifecycleHandler.HandleOCIPowerOff)
+			oci.POST("/poweron", config.VPSLifecycleHandler.HandleOCIPowerOn)
+			oci.POST("/reboot", config.VPSLifecycleHandler.HandleOCIReboot)
+		}
+
+		// Configuration endpoints
+		vps.GET("/check-key", config.VPSConfigHandler.HandleVPSCheckKey)
+		vps.POST("/validate-key", config.VPSConfigHandler.HandleVPSValidateKey)
+		vps.POST("/:id/configure", config.VPSConfigHandler.HandleVPSConfigure)
+		vps.POST("/:id/deploy", config.VPSConfigHandler.HandleVPSDeploy)
+
+		// Timezone endpoints
+		vps.GET("/timezones", config.VPSConfigHandler.HandleVPSListTimezones)
+		vps.GET("/:id/timezone", config.VPSConfigHandler.HandleVPSGetTimezone)
+		vps.POST("/:id/timezone", config.VPSConfigHandler.HandleVPSSetTimezone)
+
+		// Configuration update endpoint
+		vps.PATCH("/:id/config", config.VPSLifecycleHandler.HandleUpdateVPSConfig)
+	}
 
 	// Additional protected API routes will be added here in later phases
 }

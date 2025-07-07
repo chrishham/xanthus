@@ -31,7 +31,13 @@ func NewBaseHandler() *BaseHandler {
 
 // validateTokenAndAccount validates the token and returns account info
 // Returns true if valid, false if invalid (and sends appropriate error response)
+// This method auto-detects JWT vs cookie-based authentication
 func (h *BaseHandler) validateTokenAndAccount(c *gin.Context) (token, accountID string, valid bool) {
+	// Check if we have JWT context (from JWT middleware)
+	if _, hasJWT := c.Get("cf_token"); hasJWT {
+		return utils.ValidateJWTAndGetAccountJSON(c)
+	}
+	// Fallback to cookie-based authentication
 	return utils.ValidateTokenAndGetAccountJSON(c)
 }
 
@@ -90,6 +96,24 @@ func (h *BaseHandler) getSSHPrivateKey(c *gin.Context, token, accountID string) 
 	return csrConfig.PrivateKey, true
 }
 
+// getServerIDFromRequest gets server_id from either form data or JSON
+func (h *BaseHandler) getServerIDFromRequest(c *gin.Context) (string, error) {
+	// Try form data first (for backward compatibility)
+	if serverIDStr := c.PostForm("server_id"); serverIDStr != "" {
+		return serverIDStr, nil
+	}
+	
+	// Try JSON body
+	var reqBody struct {
+		ServerID string `json:"server_id"`
+	}
+	if err := c.ShouldBindJSON(&reqBody); err == nil && reqBody.ServerID != "" {
+		return reqBody.ServerID, nil
+	}
+	
+	return "", fmt.Errorf("server_id is required")
+}
+
 // performServerAction is a generic helper for server power management actions
 func (h *BaseHandler) performServerAction(c *gin.Context, action string) {
 	token, accountID, valid := h.validateTokenAndAccount(c)
@@ -97,7 +121,12 @@ func (h *BaseHandler) performServerAction(c *gin.Context, action string) {
 		return
 	}
 
-	serverIDStr := c.PostForm("server_id")
+	serverIDStr, err := h.getServerIDFromRequest(c)
+	if err != nil {
+		utils.JSONBadRequest(c, err.Error())
+		return
+	}
+	
 	serverID, err := utils.ParseServerID(serverIDStr)
 	if err != nil {
 		utils.JSONServerIDInvalid(c)
