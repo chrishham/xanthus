@@ -20,7 +20,6 @@ For detailed architecture information, see the following documentation:
 - `make dev` - Start development server with CSS compilation
 - `make build` - Build production binary (includes asset compilation)
 - `make build-windows` - Cross-compile for Windows 64-bit
-- `go run cmd/xanthus/main.go` - Run directly without Make
 
 ### Asset Management
 - `make css` - Compile CSS for production (minified)
