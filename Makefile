@@ -1,4 +1,4 @@
-.PHONY: dev build test test-unit test-integration test-e2e test-e2e-live test-e2e-coverage test-e2e-vps test-e2e-ssl test-e2e-apps test-e2e-ui test-e2e-perf test-e2e-security test-e2e-dr test-coverage test-all test-everything lint css css-watch clean help-testing docker-build docker-push docker-tag docker-multi help-docker release
+.PHONY: dev build test test-unit test-integration test-e2e test-e2e-live test-e2e-coverage test-e2e-vps test-e2e-ssl test-e2e-apps test-e2e-ui test-e2e-perf test-e2e-security test-e2e-dr test-coverage test-all test-everything lint css css-watch clean help-testing docker-build docker-push docker-tag docker-multi help-docker release re-release
 
 # Development mode
 dev: css
@@ -229,6 +229,35 @@ release:
 	@echo "📦 Release artifacts will be available at:"
 	@echo "   - Docker: ghcr.io/chrishham/xanthus:$(VERSION)"
 	@echo "   - Binaries: https://github.com/chrishham/xanthus/releases/tag/$(VERSION)"
+
+# Re-release an existing version (force update tag)
+re-release:
+	@echo "Re-releasing an existing version..."
+	@echo ""
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required."; \
+		echo "Usage: make re-release VERSION=v1.0.0"; \
+		echo ""; \
+		echo "This will force-update the existing tag to the current commit."; \
+		echo "Use this to fix issues in a release without bumping version."; \
+		exit 1; \
+	fi
+	@echo "Re-releasing $(VERSION) with current changes..."
+	@echo ""
+	@echo "Running tests first..."
+	@make test
+	@echo ""
+	@echo "Tests passed! Force-updating Git tag $(VERSION)..."
+	@git tag -f -a $(VERSION) -m "Re-release $(VERSION)"
+	@echo "Force-pushing tag to GitHub..."
+	@git push origin -f $(VERSION)
+	@echo ""
+	@echo "✅ Re-release $(VERSION) initiated!"
+	@echo ""
+	@echo "🚀 GitHub Actions will now rebuild and replace:"
+	@echo "   - Docker images: ghcr.io/chrishham/xanthus:$(VERSION)"
+	@echo "   - Release binaries and assets"
+	@echo "   - GitHub Release page"
 
 # Display available test commands
 help-testing:
