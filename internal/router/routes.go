@@ -5,6 +5,7 @@ import (
 	"github.com/chrishham/xanthus/internal/handlers/applications"
 	"github.com/chrishham/xanthus/internal/handlers/vps"
 	"github.com/chrishham/xanthus/internal/middleware"
+	"github.com/chrishham/xanthus/internal/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,6 +23,7 @@ type RouteConfig struct {
 	PagesHandler             *handlers.PagesHandler
 	VersionHandler           *handlers.VersionHandler
 	SvelteHandler            *handlers.SvelteHandler
+	JWTService               *services.JWTService
 }
 
 // SetupRoutes configures all application routes
@@ -187,9 +189,24 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 
 // setupAPIRoutes configures API routes with appropriate middleware
 func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
-	// API routes could be added here if needed
-	api := r.Group("/api")
-	api.Use(middleware.APIAuthMiddleware())
+	// Public API routes (no authentication required)
+	publicAPI := r.Group("/api")
+	
+	// Authentication endpoints
+	auth := publicAPI.Group("/auth")
+	auth.POST("/login", config.AuthHandler.HandleAPILogin)
+	auth.POST("/refresh", config.AuthHandler.HandleAPIRefreshToken)
+	auth.POST("/logout", config.AuthHandler.HandleAPILogout)
 
-	// Add API routes here when needed
+	// Protected API routes (JWT authentication required)
+	protectedAPI := r.Group("/api")
+	if config.JWTService != nil {
+		protectedAPI.Use(middleware.JWTAuthMiddleware(config.JWTService))
+	}
+	
+	// User endpoints
+	user := protectedAPI.Group("/user")
+	user.GET("/profile", config.AuthHandler.HandleAPIAuthStatus)
+	
+	// Additional protected API routes will be added here in later phases
 }

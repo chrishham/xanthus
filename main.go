@@ -58,9 +58,16 @@ func main() {
 
 	// Initialize shared services
 	wsTerminalService := services.NewWebSocketTerminalService()
+	
+	// Initialize JWT service with 32-byte secret key
+	jwtSecretKey, err := services.GenerateSecretKey()
+	if err != nil {
+		log.Fatal("Failed to generate JWT secret key:", err)
+	}
+	jwtService := services.NewJWTService(jwtSecretKey, 15*time.Minute, 7*24*time.Hour)
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler()
+	authHandler := handlers.NewAuthHandler(jwtService)
 	dnsHandler := handlers.NewDNSHandler()
 	vpsLifecycleHandler := vps.NewVPSLifecycleHandler()
 	vpsInfoHandler := vps.NewVPSInfoHandler()
@@ -87,6 +94,7 @@ func main() {
 		PagesHandler:             pagesHandler,
 		VersionHandler:           versionHandler,
 		SvelteHandler:            svelteHandler,
+		JWTService:               jwtService,
 	}
 
 	router.SetupRoutes(r, routeConfig)

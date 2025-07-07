@@ -8,8 +8,10 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chrishham/xanthus/internal/handlers"
+	"github.com/chrishham/xanthus/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +21,11 @@ func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	return router
+}
+
+func createTestJWTService() *services.JWTService {
+	secretKey, _ := services.GenerateSecretKey()
+	return services.NewJWTService(secretKey, 15*time.Minute, 7*24*time.Hour)
 }
 
 func TestHandleRoot(t *testing.T) {
@@ -37,7 +44,7 @@ func TestHandleRoot(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			authHandler := handlers.NewAuthHandler()
+			authHandler := handlers.NewAuthHandler(createTestJWTService())
 
 			router.GET("/", authHandler.HandleRoot)
 
@@ -56,7 +63,7 @@ func TestHandleRoot(t *testing.T) {
 func TestHandleLoginPage(t *testing.T) {
 	t.Run("should call HTML method with correct parameters", func(t *testing.T) {
 		router := setupTestRouter()
-		authHandler := handlers.NewAuthHandler()
+		authHandler := handlers.NewAuthHandler(createTestJWTService())
 
 		// Set up a simple template to avoid nil pointer panic
 		router.SetHTMLTemplate(template.Must(template.New("login.html").Parse("<html>Login Page</html>")))
@@ -108,7 +115,7 @@ func TestHandleLogin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			authHandler := handlers.NewAuthHandler()
+			authHandler := handlers.NewAuthHandler(createTestJWTService())
 
 			router.POST("/login", authHandler.HandleLogin)
 
@@ -158,7 +165,7 @@ func TestHandleLogout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			authHandler := handlers.NewAuthHandler()
+			authHandler := handlers.NewAuthHandler(createTestJWTService())
 
 			router.GET("/logout", authHandler.HandleLogout)
 
@@ -204,7 +211,7 @@ func TestHandleHealth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := setupTestRouter()
-			authHandler := handlers.NewAuthHandler()
+			authHandler := handlers.NewAuthHandler(createTestJWTService())
 
 			router.GET("/health", authHandler.HandleHealth)
 
@@ -229,7 +236,7 @@ func TestHandleHealth(t *testing.T) {
 // Benchmark tests for performance measurement
 func BenchmarkHandleRoot(b *testing.B) {
 	router := setupTestRouter()
-	authHandler := handlers.NewAuthHandler()
+	authHandler := handlers.NewAuthHandler(createTestJWTService())
 	router.GET("/", authHandler.HandleRoot)
 
 	req, _ := http.NewRequest("GET", "/", nil)
@@ -243,7 +250,7 @@ func BenchmarkHandleRoot(b *testing.B) {
 
 func BenchmarkHandleHealth(b *testing.B) {
 	router := setupTestRouter()
-	authHandler := handlers.NewAuthHandler()
+	authHandler := handlers.NewAuthHandler(createTestJWTService())
 	router.GET("/health", authHandler.HandleHealth)
 
 	req, _ := http.NewRequest("GET", "/health", nil)
