@@ -475,3 +475,94 @@ func (h *VPSConfigHandler) isValidTimezone(timezone string) bool {
 
 	return false
 }
+
+// Setup API endpoints for Svelte SPA
+
+// HandleSetupStatusAPI returns the current setup status
+func (h *VPSConfigHandler) HandleSetupStatusAPI(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	status := gin.H{
+		"hetzner_configured": false,
+		"cloudflare_configured": true, // Always true if user is authenticated
+		"setup_complete": false,
+	}
+
+	// Check if Hetzner key is configured
+	if existingKey, err := utils.GetHetznerAPIKey(token, accountID); err == nil && existingKey != "" {
+		status["hetzner_configured"] = true
+		status["setup_complete"] = true
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": status,
+		"success": true,
+	})
+}
+
+// HandleSetupHetznerAPI configures Hetzner API key via JSON API
+func (h *VPSConfigHandler) HandleSetupHetznerAPI(c *gin.Context) {
+	token, accountID, valid := h.validateTokenAndAccount(c)
+	if !valid {
+		return
+	}
+
+	// Parse JSON request body
+	var req struct {
+		HetznerKey string `json:"hetzner_key"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.JSONBadRequest(c, "Invalid request format")
+		return
+	}
+
+	hetznerKey := req.HetznerKey
+
+	// If no key provided, check if there's an existing key
+	if hetznerKey == "" {
+		if existingKey, err := utils.GetHetznerAPIKey(token, accountID); err == nil && existingKey != "" {
+			// Use existing key - setup is complete
+			log.Println("✅ Using existing Hetzner API key")
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "Using existing Hetzner API key",
+				"action": "existing_key",
+			})
+			return
+		} else {
+			utils.JSONBadRequest(c, "Hetzner API key is required")
+			return
+		}
+	}
+
+	// Validate Hetzner API key
+	if !utils.ValidateHetznerAPIKey(hetznerKey) {
+		utils.JSONBadRequest(c, "Invalid Hetzner API key. Please check your key and try again.")
+		return
+	}
+
+	// Store encrypted Hetzner API key in KV
+	client := &http.Client{Timeout: 10 * time.Second}
+	encryptedKey, err := utils.EncryptData(hetznerKey, token)
+	if err != nil {
+		log.Printf("Error encrypting Hetzner key: %v", err)
+		utils.JSONInternalServerError(c, "Error storing API key")
+		return
+	}
+
+	if err := utils.PutKVValue(client, token, accountID, "config:hetzner:api_key", encryptedKey); err != nil {
+		log.Printf("Error storing Hetzner key: %v", err)
+		utils.JSONInternalServerError(c, "Error storing API key")
+		return
+	}
+
+	log.Println("✅ Hetzner API key stored successfully")
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Hetzner API key configured successfully",
+		"action": "key_configured",
+	})
+}

@@ -286,5 +286,25 @@ func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 		vps.PATCH("/:id/config", config.VPSLifecycleHandler.HandleUpdateVPSConfig)
 	}
 
+	// DNS API endpoints
+	dns := protectedAPI.Group("/dns")
+	{
+		dns.GET("", config.DNSHandler.HandleDNSListAPI)
+		dns.POST("/configure", config.DNSHandler.HandleDNSConfigureAPI)
+		dns.POST("/remove", config.DNSHandler.HandleDNSRemoveAPI)
+		dns.GET("/config/:domain", config.DNSHandler.HandleDNSConfigGetAPI)
+	}
+
+	// Setup API endpoints
+	setup := protectedAPI.Group("/setup")
+	{
+		setup.GET("/status", config.VPSConfigHandler.HandleSetupStatusAPI)
+		setup.POST("/hetzner", config.VPSConfigHandler.HandleSetupHetznerAPI)
+		// Note: Other setup endpoints can reuse existing VPS API endpoints:
+		// - /api/vps/locations for server locations
+		// - /api/vps/server-types for server types
+		// - /api/vps/server-options for server options
+	}
+
 	// Additional protected API routes will be added here in later phases
 }
