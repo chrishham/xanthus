@@ -21,6 +21,7 @@ type RouteConfig struct {
 	WebSocketTerminalHandler *handlers.WebSocketTerminalHandler
 	PagesHandler             *handlers.PagesHandler
 	VersionHandler           *handlers.VersionHandler
+	SvelteHandler            *handlers.SvelteHandler
 }
 
 // SetupRoutes configures all application routes
@@ -174,6 +175,14 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 
 	// About route
 	protected.GET("/about", config.VersionHandler.GetAboutInfo)
+
+	// SvelteKit SPA routes - must be after all other routes to act as fallback
+	if config.SvelteHandler != nil {
+		// Handle all /app/* routes for SvelteKit SPA routing
+		protected.GET("/app/*path", config.SvelteHandler.HandleSPAFallback)
+		// Handle the base /app route
+		protected.GET("/app", config.SvelteHandler.HandleSPAFallback)
+	}
 }
 
 // setupAPIRoutes configures API routes with appropriate middleware

@@ -49,6 +49,13 @@ func main() {
 	}
 	r.StaticFS("/static", http.FS(staticFS))
 
+	// Setup SvelteKit files from embedded filesystem
+	svelteFS, err := fs.Sub(SvelteFiles, "svelte-app/build")
+	if err != nil {
+		log.Fatal("Failed to create SvelteKit files sub-filesystem:", err)
+	}
+	r.StaticFS("/app", http.FS(svelteFS))
+
 	// Initialize shared services
 	wsTerminalService := services.NewWebSocketTerminalService()
 
@@ -64,6 +71,7 @@ func main() {
 	webSocketTerminalHandler := handlers.NewWebSocketTerminalHandlerWithService(wsTerminalService)
 	pagesHandler := handlers.NewPagesHandler()
 	versionHandler := handlers.NewVersionHandler()
+	svelteHandler := handlers.NewSvelteHandler(svelteFS)
 
 	// Configure routes
 	routeConfig := router.RouteConfig{
@@ -78,6 +86,7 @@ func main() {
 		WebSocketTerminalHandler: webSocketTerminalHandler,
 		PagesHandler:             pagesHandler,
 		VersionHandler:           versionHandler,
+		SvelteHandler:            svelteHandler,
 	}
 
 	router.SetupRoutes(r, routeConfig)

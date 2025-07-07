@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Import existing custom CSS */
+/* @import url('/static/css/components.css'); */
+/* @import url('/static/css/sweetalert2.min.css'); */
+/* @import url('/static/css/xterm.css'); */

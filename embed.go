@@ -23,6 +23,15 @@ var HTMLTemplates embed.FS
 //go:embed web/static/*.webmanifest
 var StaticFiles embed.FS
 
+//go:embed svelte-app/build/*
+//go:embed svelte-app/build/_app/immutable/assets/*
+//go:embed svelte-app/build/_app/immutable/chunks/*
+//go:embed svelte-app/build/_app/immutable/entry/*
+//go:embed svelte-app/build/_app/immutable/nodes/*
+//go:embed svelte-app/build/_app/*.js
+//go:embed svelte-app/build/_app/*.json
+var SvelteFiles embed.FS
+
 //go:embed configs/applications/*.yaml
 //go:embed internal/templates/applications/*.yaml
 //go:embed internal/templates/applications/*.sh
