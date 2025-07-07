@@ -7,9 +7,15 @@
 	export let placeholder: string = '';
 	export let required: boolean = false;
 	export let disabled: boolean = false;
+	export let loading: boolean = false;
 	export let error: string = '';
 	export let helperText: string = '';
+	export let help: string = '';
 	export let size: 'sm' | 'md' | 'lg' = 'md';
+
+	// Allow custom class overrides
+	let className: string = '';
+	export { className as class };
 
 	function getSizeClasses(size: string): string {
 		switch (size) {
@@ -31,7 +37,8 @@
 		disabled:bg-gray-50 disabled:text-gray-500
 		${sizeClasses}
 		${error ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : ''}
-	`;
+		${className}
+	`.trim();
 </script>
 
 <div class="space-y-1">
@@ -44,31 +51,43 @@
 		</label>
 	{/if}
 	
-	<select
-		{id}
-		{name}
-		{required}
-		{disabled}
-		bind:value
-		class={selectClasses}
-		on:change
-		on:blur
-		on:focus
-	>
-		{#if placeholder}
-			<option value="" disabled selected={value === ''}>{placeholder}</option>
-		{/if}
+	<div class="relative">
+		<select
+			{id}
+			{name}
+			{required}
+			disabled={disabled || loading}
+			bind:value
+			class={selectClasses}
+			on:change
+			on:blur
+			on:focus
+		>
+			{#if placeholder}
+				<option value="" disabled selected={value === ''}>{placeholder}</option>
+			{/if}
+			
+			{#if loading}
+				<option value="" disabled>Loading options...</option>
+			{:else}
+				{#each options as option}
+					<option value={option.value} disabled={option.disabled}>
+						{option.label}
+					</option>
+				{/each}
+			{/if}
+		</select>
 		
-		{#each options as option}
-			<option value={option.value} disabled={option.disabled}>
-				{option.label}
-			</option>
-		{/each}
-	</select>
+		{#if loading}
+			<div class="absolute inset-y-0 right-0 flex items-center pr-8 pointer-events-none">
+				<div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+			</div>
+		{/if}
+	</div>
 	
 	{#if error}
 		<p class="text-sm text-red-600">{error}</p>
-	{:else if helperText}
-		<p class="text-sm text-gray-500">{helperText}</p>
+	{:else if help || helperText}
+		<p class="text-sm text-gray-500">{help || helperText}</p>
 	{/if}
 </div>

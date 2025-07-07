@@ -1,10 +1,10 @@
 import { browser } from '$app/environment';
+import { applicationStore, setAutoRefreshCountdown } from '$lib/stores/applications';
 
 export class AutoRefreshService {
 	private intervalId: number | null = null;
 	private countdownId: number | null = null;
 	private refreshCallback: (() => Promise<void>) | null = null;
-	private countdownCallback: ((countdown: number) => void) | null = null;
 	private interval = 30000; // 30 seconds default
 
 	constructor() {
@@ -13,13 +13,8 @@ export class AutoRefreshService {
 		}
 	}
 
-	start(
-		refreshFn: () => Promise<void>,
-		countdownFn: (countdown: number) => void,
-		interval = 30000
-	) {
+	start(refreshFn: () => Promise<void>, interval = 30000) {
 		this.refreshCallback = refreshFn;
-		this.countdownCallback = countdownFn;
 		this.interval = interval;
 
 		this.stop(); // Stop any existing intervals
@@ -45,9 +40,7 @@ export class AutoRefreshService {
 			clearInterval(this.countdownId);
 			this.countdownId = null;
 		}
-		if (this.countdownCallback) {
-			this.countdownCallback(0);
-		}
+		setAutoRefreshCountdown(0);
 	}
 
 	private startCountdown() {
@@ -56,15 +49,11 @@ export class AutoRefreshService {
 		}
 
 		let countdown = Math.floor(this.interval / 1000);
-		if (this.countdownCallback) {
-			this.countdownCallback(countdown);
-		}
+		setAutoRefreshCountdown(countdown);
 
 		this.countdownId = window.setInterval(() => {
 			countdown--;
-			if (this.countdownCallback) {
-				this.countdownCallback(countdown);
-			}
+			setAutoRefreshCountdown(countdown);
 			if (countdown <= 0) {
 				if (this.countdownId !== null) {
 					clearInterval(this.countdownId);
@@ -78,9 +67,9 @@ export class AutoRefreshService {
 		document.addEventListener('visibilitychange', () => {
 			if (document.hidden) {
 				this.stop();
-			} else if (this.refreshCallback && this.countdownCallback) {
+			} else if (this.refreshCallback) {
 				// Restart auto-refresh when page becomes visible
-				this.start(this.refreshCallback, this.countdownCallback, this.interval);
+				this.start(this.refreshCallback, this.interval);
 				// Refresh immediately when page becomes visible
 				this.refreshCallback();
 			}
@@ -91,3 +80,5 @@ export class AutoRefreshService {
 		return this.intervalId !== null;
 	}
 }
+
+export const autoRefreshService = new AutoRefreshService();

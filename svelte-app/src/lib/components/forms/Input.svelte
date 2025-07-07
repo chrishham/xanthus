@@ -10,6 +10,7 @@
 	export let readonly: boolean = false;
 	export let error: string = '';
 	export let helperText: string = '';
+	export let help: string = '';
 	export let size: 'sm' | 'md' | 'lg' = 'md';
 
 	function getSizeClasses(size: string): string {
@@ -63,7 +64,7 @@
 	
 	{#if error}
 		<p class="text-sm text-red-600">{error}</p>
-	{:else if helperText}
-		<p class="text-sm text-gray-500">{helperText}</p>
+	{:else if help || helperText}
+		<p class="text-sm text-gray-500">{help || helperText}</p>
 	{/if}
 </div>
