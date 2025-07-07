@@ -147,6 +147,31 @@ This command will:
    - Publish to GitHub Container Registry
    - Create GitHub Release with downloadable assets
 
+### Re-releasing (Fixing Issues)
+
+If you need to fix issues in an existing release without bumping the version:
+
+```bash
+# Fix your issues first
+git add .
+git commit -m "fix: critical bug in v1.0.0"
+
+# Re-release the same version with fixes
+make re-release VERSION=v1.0.0
+```
+
+The `re-release` command will:
+1. **Run tests** to ensure the fixes work
+2. **Force-update the existing Git tag** to point to the current commit
+3. **Trigger GitHub Actions** to rebuild and replace all artifacts
+4. **Update Docker images and binaries** without changing version numbers
+
+This is perfect for:
+- 🐛 **Critical bug fixes**
+- 🔒 **Security patches** 
+- 📝 **Documentation updates**
+- 🏗️ **Build improvements**
+
 ### Version Format
 
 - **Stable releases**: `v1.0.0`, `v1.1.0`, `v2.0.0`
@@ -166,6 +191,28 @@ After a successful release, artifacts will be available at:
 - **Tagged releases**: Full build pipeline with multi-platform artifacts
 - **Automated quality gates**: Tests must pass before release creation
 - **Security scanning**: All Docker images scanned for vulnerabilities
+
+### Troubleshooting Releases
+
+**Q: Release workflow failed with "tag already exists"**
+```bash
+# Use re-release instead of release for existing versions
+make re-release VERSION=v1.0.0
+```
+
+**Q: Docker build fails with "tailwindcss: not found"**
+- This should be fixed in recent versions. If you encounter this, ensure your Dockerfile includes devDependencies during build.
+
+**Q: How to cancel a failed release?**
+```bash
+# Delete the tag locally and remotely
+git tag -d v1.0.0
+git push origin --delete v1.0.0
+```
+
+**Q: Release assets are missing or incomplete**
+- Check GitHub Actions workflow logs for errors
+- Re-run the workflow from GitHub Actions UI, or use `make re-release`
 
 ## 📚 Documentation
 
