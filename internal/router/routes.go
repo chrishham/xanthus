@@ -20,6 +20,7 @@ type RouteConfig struct {
 	TerminalHandler          *handlers.TerminalHandler
 	WebSocketTerminalHandler *handlers.WebSocketTerminalHandler
 	PagesHandler             *handlers.PagesHandler
+	VersionHandler           *handlers.VersionHandler
 }
 
 // SetupRoutes configures all application routes
@@ -159,6 +160,16 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		apps.POST("/:id/port-forwards", config.AppsHandler.HandlePortForwardsCreate)
 		apps.DELETE("/:id/port-forwards/:port_id", config.AppsHandler.HandlePortForwardsDelete)
 		apps.DELETE("/:id", config.AppsHandler.HandleApplicationDelete)
+	}
+
+	// Version management routes
+	version := protected.Group("/version")
+	{
+		version.GET("/current", config.VersionHandler.GetCurrentVersion)
+		version.GET("/available", config.VersionHandler.GetAvailableVersions)
+		version.POST("/update", config.VersionHandler.TriggerUpdate)
+		version.GET("/status", config.VersionHandler.GetUpdateStatus)
+		version.POST("/rollback", config.VersionHandler.RollbackVersion)
 	}
 }
 

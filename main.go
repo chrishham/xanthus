@@ -55,6 +55,7 @@ func main() {
 	terminalHandler := handlers.NewTerminalHandlerWithService(wsTerminalService)
 	webSocketTerminalHandler := handlers.NewWebSocketTerminalHandlerWithService(wsTerminalService)
 	pagesHandler := handlers.NewPagesHandler()
+	versionHandler := handlers.NewVersionHandler()
 
 	// Configure routes
 	routeConfig := router.RouteConfig{
@@ -68,6 +69,7 @@ func main() {
 		TerminalHandler:          terminalHandler,
 		WebSocketTerminalHandler: webSocketTerminalHandler,
 		PagesHandler:             pagesHandler,
+		VersionHandler:           versionHandler,
 	}
 
 	router.SetupRoutes(r, routeConfig)
