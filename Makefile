@@ -1,4 +1,4 @@
-.PHONY: dev build test test-unit test-integration test-e2e test-e2e-live test-e2e-coverage test-e2e-vps test-e2e-ssl test-e2e-apps test-e2e-ui test-e2e-perf test-e2e-security test-e2e-dr test-coverage test-all test-everything lint css css-watch clean help-testing docker-build docker-push docker-tag docker-multi help-docker
+.PHONY: dev build test test-unit test-integration test-e2e test-e2e-live test-e2e-coverage test-e2e-vps test-e2e-ssl test-e2e-apps test-e2e-ui test-e2e-perf test-e2e-security test-e2e-dr test-coverage test-all test-everything lint css css-watch clean help-testing docker-build docker-push docker-tag docker-multi help-docker release
 
 # Development mode
 dev: css
@@ -186,6 +186,49 @@ help-docker:
 	@echo "  make docker-build"
 	@echo "  make docker-tag VERSION=v1.0.0"
 	@echo "  make docker-multi VERSION=v1.0.0"
+
+# Create a new release
+release:
+	@echo "Creating a new release..."
+	@echo ""
+	@echo "This will:"
+	@echo "1. Run tests to ensure quality"
+	@echo "2. Create a new Git tag"
+	@echo "3. Push the tag to trigger GitHub Actions release workflow"
+	@echo "4. GitHub Actions will automatically:"
+	@echo "   - Build multi-architecture Docker images"
+	@echo "   - Create cross-platform binaries"
+	@echo "   - Create GitHub Release with assets"
+	@echo ""
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Error: VERSION is required."; \
+		echo "Usage: make release VERSION=v1.0.0"; \
+		echo ""; \
+		echo "Version format: v<major>.<minor>.<patch> (e.g., v1.0.0)"; \
+		echo "Pre-release format: v<major>.<minor>.<patch>-<pre> (e.g., v1.0.0-rc.1)"; \
+		exit 1; \
+	fi
+	@echo "Creating release $(VERSION)..."
+	@echo ""
+	@echo "Running tests first..."
+	@make test
+	@echo ""
+	@echo "Tests passed! Creating Git tag $(VERSION)..."
+	@git tag -a $(VERSION) -m "Release $(VERSION)"
+	@echo "Pushing tag to GitHub (this will trigger the release workflow)..."
+	@git push origin $(VERSION)
+	@echo ""
+	@echo "✅ Release $(VERSION) initiated!"
+	@echo ""
+	@echo "🚀 GitHub Actions will now:"
+	@echo "   - Build Docker images for linux/amd64 and linux/arm64"
+	@echo "   - Create binaries for Windows, macOS, and Linux"
+	@echo "   - Publish to GitHub Container Registry (ghcr.io)"
+	@echo "   - Create GitHub Release with all assets"
+	@echo ""
+	@echo "📦 Release artifacts will be available at:"
+	@echo "   - Docker: ghcr.io/chrishham/xanthus:$(VERSION)"
+	@echo "   - Binaries: https://github.com/chrishham/xanthus/releases/tag/$(VERSION)"
 
 # Display available test commands
 help-testing:
