@@ -72,3 +72,18 @@ export const setCurrentPage = (page: string) => {
 		currentPage: page
 	}));
 };
+
+// Additional exports for backward compatibility with existing components
+export const setLoadingTitle = (title: string) => {
+	uiStore.update(state => ({
+		...state,
+		loadingTitle: title
+	}));
+};
+
+export const setLoadingMessage = (message: string) => {
+	uiStore.update(state => ({
+		...state,
+		loadingMessage: message
+	}));
+};
