@@ -15,7 +15,7 @@ import (
 
 // HelmIndex represents the structure of a Helm repository index.yaml
 type HelmIndex struct {
-	APIVersion string                         `yaml:"apiVersion"`
+	APIVersion string                        `yaml:"apiVersion"`
 	Entries    map[string][]HelmChartVersion `yaml:"entries"`
 }
 
@@ -720,9 +720,9 @@ func (h *Handler) fetchGitHubVersions(source, appType string) ([]models.VersionI
 func (h *Handler) fetchHelmVersions(source, chart, appType string) ([]models.VersionInfo, error) {
 	// Construct the index.yaml URL
 	indexURL := fmt.Sprintf("%s/index.yaml", strings.TrimSuffix(source, "/"))
-	
+
 	log.Printf("Fetching Helm index from: %s", indexURL)
-	
+
 	// Fetch the index.yaml file
 	resp, err := http.Get(indexURL)
 	if err != nil {
@@ -730,12 +730,12 @@ func (h *Handler) fetchHelmVersions(source, chart, appType string) ([]models.Ver
 		return h.getFallbackHelmVersions(), nil
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Error fetching Helm index: status %d", resp.StatusCode)
 		return h.getFallbackHelmVersions(), nil
 	}
-	
+
 	// Parse the YAML content
 	var index HelmIndex
 	decoder := yaml.NewDecoder(resp.Body)
@@ -743,21 +743,21 @@ func (h *Handler) fetchHelmVersions(source, chart, appType string) ([]models.Ver
 		log.Printf("Error parsing Helm index YAML: %v", err)
 		return h.getFallbackHelmVersions(), nil
 	}
-	
+
 	// Extract versions for the specified chart
 	chartVersions, exists := index.Entries[chart]
 	if !exists {
 		log.Printf("Chart %s not found in Helm repository", chart)
 		return h.getFallbackHelmVersions(), nil
 	}
-	
+
 	// Convert to VersionInfo format (limit to first 20 versions)
 	var versions []models.VersionInfo
 	maxVersions := 20
 	if len(chartVersions) < maxVersions {
 		maxVersions = len(chartVersions)
 	}
-	
+
 	for i, chartVersion := range chartVersions[:maxVersions] {
 		versionInfo := models.VersionInfo{
 			Version:     chartVersion.Version,
@@ -769,7 +769,7 @@ func (h *Handler) fetchHelmVersions(source, chart, appType string) ([]models.Ver
 		}
 		versions = append(versions, versionInfo)
 	}
-	
+
 	log.Printf("Successfully fetched %d versions for %s chart", len(versions), chart)
 	return versions, nil
 }

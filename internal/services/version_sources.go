@@ -45,10 +45,17 @@ func (g *GitHubVersionSource) GetLatestVersion() (string, error) {
 		}
 		return strings.TrimPrefix(release.TagName, "v"), nil
 	default:
-		// For now, we'll use the existing implementation pattern
-		// Future enhancement: implement generic GitHub API calls
-		log.Printf("Warning: Generic GitHub version fetching not yet implemented for %s", g.repository)
-		return "latest", fmt.Errorf("repository %s not supported yet", g.repository)
+		// Generic GitHub API implementation for any repository
+		parts := strings.Split(g.repository, "/")
+		if len(parts) != 2 {
+			return "", fmt.Errorf("invalid repository format: expected owner/repo, got %s", g.repository)
+		}
+
+		release, err := g.githubService.GetLatestRelease(parts[0], parts[1])
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch latest release for %s: %w", g.repository, err)
+		}
+		return strings.TrimPrefix(release.TagName, "v"), nil
 	}
 }
 
