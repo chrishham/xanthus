@@ -18,13 +18,13 @@ type SelfUpdateService struct {
 
 // UpdateStatus represents the status of an update operation
 type UpdateStatus struct {
-	InProgress bool   `json:"in_progress"`
-	Version    string `json:"version"`
-	Status     string `json:"status"`
-	Progress   int    `json:"progress"`
-	Message    string `json:"message"`
-	Error      string `json:"error,omitempty"`
-	StartTime  time.Time `json:"start_time"`
+	InProgress bool       `json:"in_progress"`
+	Version    string     `json:"version"`
+	Status     string     `json:"status"`
+	Progress   int        `json:"progress"`
+	Message    string     `json:"message"`
+	Error      string     `json:"error,omitempty"`
+	StartTime  time.Time  `json:"start_time"`
 	EndTime    *time.Time `json:"end_time,omitempty"`
 }
 
@@ -43,7 +43,7 @@ func NewSelfUpdateService() *SelfUpdateService {
 func (s *SelfUpdateService) GetCurrentVersion() string {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
-	
+
 	if s.currentVersion == "" {
 		return "dev"
 	}
@@ -54,7 +54,7 @@ func (s *SelfUpdateService) GetCurrentVersion() string {
 func (s *SelfUpdateService) GetPreviousVersion() string {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
-	
+
 	return s.previousVersion
 }
 
@@ -62,7 +62,7 @@ func (s *SelfUpdateService) GetPreviousVersion() string {
 func (s *SelfUpdateService) IsUpdateInProgress() bool {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
-	
+
 	return s.updateStatus.InProgress
 }
 
@@ -70,7 +70,7 @@ func (s *SelfUpdateService) IsUpdateInProgress() bool {
 func (s *SelfUpdateService) CanRollback() bool {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
-	
+
 	return s.previousVersion != "" && !s.updateStatus.InProgress
 }
 
@@ -78,7 +78,7 @@ func (s *SelfUpdateService) CanRollback() bool {
 func (s *SelfUpdateService) GetUpdateStatus() *UpdateStatus {
 	s.updateMutex.RLock()
 	defer s.updateMutex.RUnlock()
-	
+
 	// Return a copy to avoid race conditions
 	status := *s.updateStatus
 	return &status
@@ -88,14 +88,14 @@ func (s *SelfUpdateService) GetUpdateStatus() *UpdateStatus {
 func (s *SelfUpdateService) StartUpdate(token, accountID, version, releaseNotes string) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
-	
+
 	if s.updateStatus.InProgress {
 		return
 	}
-	
+
 	// Set previous version for rollback
 	s.previousVersion = s.currentVersion
-	
+
 	// Initialize update status
 	s.updateStatus = &UpdateStatus{
 		InProgress: true,
@@ -105,7 +105,7 @@ func (s *SelfUpdateService) StartUpdate(token, accountID, version, releaseNotes 
 		Message:    "Initializing update...",
 		StartTime:  time.Now(),
 	}
-	
+
 	// Start the actual update process
 	go s.performUpdate(token, accountID, version, releaseNotes)
 }
@@ -114,11 +114,11 @@ func (s *SelfUpdateService) StartUpdate(token, accountID, version, releaseNotes 
 func (s *SelfUpdateService) StartRollback(token, accountID, version string) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
-	
+
 	if s.updateStatus.InProgress {
 		return
 	}
-	
+
 	// Initialize rollback status
 	s.updateStatus = &UpdateStatus{
 		InProgress: true,
@@ -128,7 +128,7 @@ func (s *SelfUpdateService) StartRollback(token, accountID, version string) {
 		Message:    "Starting rollback...",
 		StartTime:  time.Now(),
 	}
-	
+
 	// Start the actual rollback process
 	go s.performRollback(token, accountID, version)
 }
@@ -149,18 +149,18 @@ func (s *SelfUpdateService) performUpdate(token, accountID, version, releaseNote
 		{"Starting new instance", 90, s.startNewInstance},
 		{"Validating deployment", 100, s.validateDeployment},
 	}
-	
+
 	for _, step := range steps {
 		s.updateStatusProgress(step.progress, step.name)
-		
+
 		if err := step.action(); err != nil {
 			s.updateStatusError(fmt.Sprintf("Failed at step '%s': %v", step.name, err))
 			return
 		}
-		
+
 		time.Sleep(time.Second) // Simulate work
 	}
-	
+
 	// Update completed successfully
 	s.updateMutex.Lock()
 	s.currentVersion = version
@@ -190,18 +190,18 @@ func (s *SelfUpdateService) performRollback(token, accountID, version string) {
 		{"Starting previous instance", 80, s.startNewInstance},
 		{"Validating rollback", 100, s.validateDeployment},
 	}
-	
+
 	for _, step := range steps {
 		s.updateStatusProgress(step.progress, step.name)
-		
+
 		if err := step.action(); err != nil {
 			s.updateStatusError(fmt.Sprintf("Failed at rollback step '%s': %v", step.name, err))
 			return
 		}
-		
+
 		time.Sleep(time.Second) // Simulate work
 	}
-	
+
 	// Rollback completed successfully
 	s.updateMutex.Lock()
 	s.currentVersion = version
@@ -223,7 +223,7 @@ func (s *SelfUpdateService) performRollback(token, accountID, version string) {
 func (s *SelfUpdateService) updateStatusProgress(progress int, message string) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
-	
+
 	s.updateStatus.Progress = progress
 	s.updateStatus.Message = message
 	s.updateStatus.Status = "in_progress"
@@ -233,7 +233,7 @@ func (s *SelfUpdateService) updateStatusProgress(progress int, message string) {
 func (s *SelfUpdateService) updateStatusError(errorMsg string) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
-	
+
 	endTime := time.Now()
 	s.updateStatus.InProgress = false
 	s.updateStatus.Status = "failed"
@@ -288,12 +288,12 @@ func getVersionFromEnv() string {
 	if version := os.Getenv("XANTHUS_VERSION"); version != "" {
 		return version
 	}
-	
+
 	// Try to get from build info
 	if version := getBuildVersion(); version != "" {
 		return version
 	}
-	
+
 	return "dev"
 }
 

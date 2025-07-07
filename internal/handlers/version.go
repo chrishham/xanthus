@@ -70,7 +70,7 @@ type UpdateStatus struct {
 func (h *VersionHandler) GetCurrentVersion(c *gin.Context) {
 	// Get current version from build info or environment
 	currentVersion := h.versionService.GetCurrentVersion()
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"version": currentVersion,
 		"status":  "running",
@@ -104,7 +104,7 @@ func (h *VersionHandler) GetAvailableVersions(c *gin.Context) {
 	})
 
 	currentVersion := h.versionService.GetCurrentVersion()
-	
+
 	versionInfo := VersionInfo{
 		Current:   currentVersion,
 		Available: availableReleases,

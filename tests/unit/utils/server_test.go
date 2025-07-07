@@ -22,9 +22,9 @@ func TestFindAvailablePort(t *testing.T) {
 		portNum, err := strconv.Atoi(port)
 		assert.NoError(t, err)
 
-		// Port should be in the expected range (8080-8090)
+		// Port should be in the expected range (8080-8110)
 		assert.GreaterOrEqual(t, portNum, 8080)
-		assert.LessOrEqual(t, portNum, 8090)
+		assert.LessOrEqual(t, portNum, 8110)
 
 		// Verify the port is actually available by trying to listen on it
 		listener, err := net.Listen("tcp", ":"+port)
@@ -55,16 +55,16 @@ func TestFindAvailablePort(t *testing.T) {
 		port1Num, _ := strconv.Atoi(port1)
 		port2Num, _ := strconv.Atoi(port2)
 		assert.GreaterOrEqual(t, port1Num, 8080)
-		assert.LessOrEqual(t, port1Num, 8090)
+		assert.LessOrEqual(t, port1Num, 8110)
 		assert.GreaterOrEqual(t, port2Num, 8080)
-		assert.LessOrEqual(t, port2Num, 8090)
+		assert.LessOrEqual(t, port2Num, 8110)
 	})
 
 	t.Run("Return empty string when all ports are occupied", func(t *testing.T) {
-		// Occupy all ports in the range 8080-8090
+		// Occupy all ports in the range 8080-8110
 		var listeners []net.Listener
 
-		for port := 8080; port <= 8090; port++ {
+		for port := 8080; port <= 8110; port++ {
 			listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 			if err == nil {
 				listeners = append(listeners, listener)
@@ -93,13 +93,13 @@ func TestFindAvailablePort(t *testing.T) {
 				portNum, err := strconv.Atoi(port)
 				assert.NoError(t, err)
 				assert.GreaterOrEqual(t, portNum, 8080)
-				assert.LessOrEqual(t, portNum, 8090)
+				assert.LessOrEqual(t, portNum, 8110)
 			}
 		}
 	})
 
 	t.Run("Port scanning order", func(t *testing.T) {
-		// This test verifies that the function scans ports in order from 8080 to 8090
+		// This test verifies that the function scans ports in order from 8080 to 8110
 
 		// Occupy port 8080
 		listener8080, err8080 := net.Listen("tcp", ":8080")
@@ -112,7 +112,7 @@ func TestFindAvailablePort(t *testing.T) {
 				portNum, err := strconv.Atoi(port)
 				assert.NoError(t, err)
 				assert.GreaterOrEqual(t, portNum, 8081)
-				assert.LessOrEqual(t, portNum, 8090)
+				assert.LessOrEqual(t, portNum, 8110)
 			}
 		}
 	})
@@ -147,7 +147,7 @@ func TestFindAvailablePort(t *testing.T) {
 			portNum, err := strconv.Atoi(port)
 			assert.NoError(t, err)
 			assert.GreaterOrEqual(t, portNum, 8080)
-			assert.LessOrEqual(t, portNum, 8090)
+			assert.LessOrEqual(t, portNum, 8110)
 		}
 
 		// Check for uniqueness (though not guaranteed due to race conditions)
@@ -171,7 +171,7 @@ func TestFindAvailablePort(t *testing.T) {
 				portNum, err := strconv.Atoi(port)
 				assert.NoError(t, err, "Port should be a valid number")
 				assert.GreaterOrEqual(t, portNum, 8080, "Port should be >= 8080")
-				assert.LessOrEqual(t, portNum, 8090, "Port should be <= 8090")
+				assert.LessOrEqual(t, portNum, 8110, "Port should be <= 8110")
 
 				// Validate port is actually usable
 				listener, err := net.Listen("tcp", ":"+port)
@@ -187,7 +187,7 @@ func TestFindAvailablePort(t *testing.T) {
 
 func TestFindAvailablePortEdgeCases(t *testing.T) {
 	t.Run("Port range boundary testing", func(t *testing.T) {
-		// Test that the function respects the 8080-8090 range
+		// Test that the function respects the 8080-8110 range
 		port := utils.FindAvailablePort()
 
 		if port != "" {
@@ -196,11 +196,11 @@ func TestFindAvailablePortEdgeCases(t *testing.T) {
 
 			// Verify exact boundaries
 			assert.True(t, portNum >= 8080, "Port should be at least 8080")
-			assert.True(t, portNum <= 8090, "Port should be at most 8090")
+			assert.True(t, portNum <= 8110, "Port should be at most 8110")
 
 			// Verify it's not outside the range
 			assert.False(t, portNum < 8080, "Port should not be below 8080")
-			assert.False(t, portNum > 8090, "Port should not be above 8090")
+			assert.False(t, portNum > 8110, "Port should not be above 8110")
 		}
 	})
 
