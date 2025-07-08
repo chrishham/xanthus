@@ -27,12 +27,12 @@ func NewVPSMetaHandler() *VPSMetaHandler {
 
 // HandleVPSManagePage redirects to Svelte VPS page
 func (h *VPSMetaHandler) HandleVPSManagePage(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/app/vps")
+	c.Redirect(http.StatusTemporaryRedirect, "/vps")
 }
 
 // HandleVPSCreatePage redirects to Svelte VPS page  
 func (h *VPSMetaHandler) HandleVPSCreatePage(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/app/vps")
+	c.Redirect(http.StatusTemporaryRedirect, "/vps")
 }
 
 // HandleVPSServerOptions fetches available server types and locations with filtering/sorting

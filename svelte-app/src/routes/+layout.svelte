@@ -20,7 +20,7 @@
 		const isSetupRoute = $page.url.pathname === '/app/setup' || $page.url.pathname.startsWith('/app/setup/');
 		
 		if (isAppRoute && !isLoginRoute && !isSetupRoute && !$authStore.isAuthenticated) {
-			goto('/app/login');
+			goto('/login');
 		}
 	}
 

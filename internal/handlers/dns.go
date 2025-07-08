@@ -46,7 +46,7 @@ type CloudflareDomainsResponse struct {
 
 // HandleDNSConfigPage redirects to Svelte DNS page
 func (h *DNSHandler) HandleDNSConfigPage(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/app/dns")
+	c.Redirect(http.StatusTemporaryRedirect, "/dns")
 }
 
 // HandleDNSList returns a JSON list of domains

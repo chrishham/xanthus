@@ -30,7 +30,7 @@ type HelmChartVersion struct {
 
 // HandleApplicationsPage redirects to Svelte applications page
 func (h *Handler) HandleApplicationsPage(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/app/applications")
+	c.Redirect(http.StatusTemporaryRedirect, "/applications")
 }
 
 // HandleApplicationsList returns a JSON list of applications

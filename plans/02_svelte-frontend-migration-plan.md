@@ -544,7 +544,7 @@ Ready to complete the remaining frontend migration tasks to achieve a pure Svelt
     try {
       const success = await authStore.login(cloudflareToken);
       if (success) {
-        goto('/app');
+        goto('/');
       }
     } catch (error) {
       notificationStore.error(error.message);
@@ -576,7 +576,7 @@ Ready to complete the remaining frontend migration tasks to achieve a pure Svelt
   
   async function handleSetup() {
     await setupStore.configure({ hetznerToken, cloudflareToken });
-    goto('/app');
+    goto('/');
   }
 </script>
 ```

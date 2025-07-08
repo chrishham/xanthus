@@ -27,56 +27,7 @@ func createTestJWTService() *services.JWTService {
 	return services.NewJWTService(secretKey, 15*time.Minute, 7*24*time.Hour)
 }
 
-func TestHandleRoot(t *testing.T) {
-	tests := []struct {
-		name           string
-		expectedStatus int
-		expectedHeader string
-	}{
-		{
-			name:           "should redirect to app page",
-			expectedStatus: http.StatusTemporaryRedirect,
-			expectedHeader: "/app",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			router := setupTestRouter()
-			authHandler := handlers.NewAuthHandler(createTestJWTService())
-
-			router.GET("/", authHandler.HandleRoot)
-
-			req, err := http.NewRequest("GET", "/", nil)
-			require.NoError(t, err)
-
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, req)
-
-			assert.Equal(t, tt.expectedStatus, w.Code)
-			assert.Equal(t, tt.expectedHeader, w.Header().Get("Location"))
-		})
-	}
-}
-
-func TestHandleLoginPage(t *testing.T) {
-	t.Run("should redirect to app login page", func(t *testing.T) {
-		router := setupTestRouter()
-		authHandler := handlers.NewAuthHandler(createTestJWTService())
-
-		router.GET("/login", authHandler.HandleLoginPage)
-
-		req, err := http.NewRequest("GET", "/login", nil)
-		require.NoError(t, err)
-
-		w := httptest.NewRecorder()
-		router.ServeHTTP(w, req)
-
-		// Should return 307 redirect to Svelte login page
-		assert.Equal(t, http.StatusTemporaryRedirect, w.Code)
-		assert.Equal(t, "/app/login", w.Header().Get("Location"))
-	})
-}
+// Note: HandleRoot and HandleLoginPage handlers were removed as they're now handled by SvelteHandler
 
 func TestHandleLogin(t *testing.T) {
 	tests := []struct {
@@ -154,7 +105,7 @@ func TestHandleLogout(t *testing.T) {
 		{
 			name:           "should clear cookie and redirect to login",
 			expectedStatus: http.StatusTemporaryRedirect,
-			expectedHeader: "/app/login",
+			expectedHeader: "/login",
 			checkCookie:    true,
 		},
 	}

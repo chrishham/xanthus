@@ -89,7 +89,7 @@ function createAuthStore() {
 				set(initialState);
 				clearTokens();
 				// Redirect to login page
-				window.location.href = '/app/login';
+				window.location.href = '/login';
 			}
 		},
 		initialize: async () => {
@@ -255,7 +255,7 @@ export const refreshTokens = async (): Promise<boolean> => {
 			// Refresh failed, clear tokens and redirect to login
 			clearTokens();
 			authStore.set(initialState);
-			window.location.href = '/app/login';
+			window.location.href = '/login';
 			return false;
 		}
 	} catch (error) {

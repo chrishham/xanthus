@@ -15,7 +15,7 @@
     // Wait a bit for auth store to initialize
     setTimeout(() => {
       if ($authStore.isAuthenticated) {
-        goto('/app');
+        goto('/');
       }
     }, 100);
   });
@@ -37,7 +37,7 @@
       if (success) {
         errorHandler.showSuccess('Login Successful', 'Welcome back! Redirecting to dashboard...');
         setTimeout(() => {
-          goto('/app');
+          goto('/');
         }, 1000);
       } else {
         errors.cf_token = 'Invalid Cloudflare API token. Please check your token and try again.';

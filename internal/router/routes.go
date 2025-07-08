@@ -313,4 +313,7 @@ func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 	}
 
 	// Additional protected API routes will be added here in later phases
+	
+	// About endpoint
+	protectedAPI.GET("/about", config.VersionHandler.GetAboutInfo)
 }

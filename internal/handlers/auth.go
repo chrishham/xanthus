@@ -77,9 +77,9 @@ func (h *AuthHandler) HandleLogin(c *gin.Context) {
 			log.Println("✅ CSR already exists in KV")
 		}
 
-		// Valid token - proceed to dashboard (24 hours = 86400 seconds)
+		// Valid token - proceed to main page (24 hours = 86400 seconds)
 		c.SetCookie("cf_token", token, 86400, "/", "", false, true)
-		c.Redirect(http.StatusTemporaryRedirect, "/dashboard")
+		c.Redirect(http.StatusTemporaryRedirect, "/")
 	} else {
 		c.Data(http.StatusOK, "text/html", []byte("❌ Invalid Cloudflare API token. Please check your token and try again."))
 	}

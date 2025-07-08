@@ -18,12 +18,12 @@ func NewPagesHandler() *PagesHandler {
 
 // HandleMainPage redirects to Svelte app
 func (h *PagesHandler) HandleMainPage(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/app")
+	c.Redirect(http.StatusTemporaryRedirect, "/")
 }
 
 // HandleSetupPage redirects to Svelte setup page
 func (h *PagesHandler) HandleSetupPage(c *gin.Context) {
-	c.Redirect(http.StatusTemporaryRedirect, "/app/setup")
+	c.Redirect(http.StatusTemporaryRedirect, "/setup")
 }
 
 // HandleTerminalPage renders a standalone terminal page for WebSocket terminals

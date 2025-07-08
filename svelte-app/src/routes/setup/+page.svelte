@@ -23,7 +23,7 @@
     if ($authStore.isAuthenticated) {
       const status = await setupStore.checkSetupStatus();
       if (!status.isSetupRequired) {
-        goto('/app');
+        goto('/');
         return;
       }
       setupStatus = status;
@@ -72,7 +72,7 @@
       if (success) {
         // Setup complete, redirect to app
         setTimeout(() => {
-          goto('/app');
+          goto('/');
         }, 1500);
       }
     } catch (error) {
@@ -285,7 +285,7 @@
         <p class="text-sm text-gray-500 mb-6">Your Xanthus platform is now configured and ready to use.</p>
         
         <Button 
-          on:click={() => goto('/app')}
+          on:click={() => goto('/')}
           class="w-full"
           variant="primary"
         >
