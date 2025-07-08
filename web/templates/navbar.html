@@ -7,9 +7,9 @@
                 <h1 class="text-xl font-semibold text-gray-900">Xanthus</h1>
             </div>
             <div class="flex items-center space-x-4">
-                <a href="/main" class="{{if eq .ActivePage "main"}}text-gray-900 bg-gray-50{{else}}text-gray-600 hover:text-gray-900{{end}} px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
+                <a href="/dashboard" class="{{if eq .ActivePage "dashboard"}}text-gray-900 bg-gray-50{{else}}text-gray-600 hover:text-gray-900{{end}} px-3 py-2 rounded-md text-sm font-medium">Dashboard</a>
                 <a href="/dns" class="{{if eq .ActivePage "dns"}}text-blue-600 bg-blue-50{{else}}text-gray-600 hover:text-gray-900{{end}} px-3 py-2 rounded-md text-sm font-medium">DNS Config</a>
-                <a href="/vps" class="{{if eq .ActivePage "vps"}}text-blue-600 bg-blue-50{{else}}text-gray-600 hover:text-gray-900{{end}} px-3 py-2 rounded-md text-sm font-medium">VPS Management</a>
+                <a href="/vps" class="{{if eq .ActivePage "vps"}}text-green-600 bg-green-50{{else}}text-gray-600 hover:text-gray-900{{end}} px-3 py-2 rounded-md text-sm font-medium">VPS Management</a>
                 <a href="/applications" class="{{if eq .ActivePage "applications"}}text-purple-600 bg-purple-50{{else}}text-gray-600 hover:text-gray-900{{end}} px-3 py-2 rounded-md text-sm font-medium">Applications</a>
                 <button onclick="showAboutModal()" class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">About</button>
                 <a href="/logout" class="text-red-600 hover:text-red-800 px-3 py-2 rounded-md text-sm font-medium">Logout</a>

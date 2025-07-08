@@ -173,3 +173,5 @@ ssh -i xanthus-key.pem ubuntu@{oracle_ip}     # Oracle (ubuntu)
 **⚠️ Important**: All Go files must stay under 500 lines. If exceeded, suggest refactoring plan.
 
 When debugging with puppeteer please consult @logic/01-puppeteer.md
+
+lsof -ti:8081 | xargs kill -9

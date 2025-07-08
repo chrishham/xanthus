@@ -73,3 +73,5 @@ web/svelte-app
 *.pem
 
 cookies.txt
+
+01-puppeteer.md

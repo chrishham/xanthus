@@ -36,6 +36,21 @@ func (h *PagesHandler) HandleSetupPage(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, "/app/setup")
 }
 
+// HandleVPSPage redirects to Svelte VPS page
+func (h *PagesHandler) HandleVPSPage(c *gin.Context) {
+	c.Redirect(http.StatusTemporaryRedirect, "/app/vps")
+}
+
+// HandleApplicationsPage redirects to Svelte applications page
+func (h *PagesHandler) HandleApplicationsPage(c *gin.Context) {
+	c.Redirect(http.StatusTemporaryRedirect, "/app/applications")
+}
+
+// HandleVersionPage redirects to dashboard with version info modal
+func (h *PagesHandler) HandleVersionPage(c *gin.Context) {
+	c.Redirect(http.StatusTemporaryRedirect, "/app?show=version")
+}
+
 // HandleTerminalPage renders a standalone terminal page for WebSocket terminals
 func (h *PagesHandler) HandleTerminalPage(c *gin.Context) {
 	sessionID := c.Param("session_id")
