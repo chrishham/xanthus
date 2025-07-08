@@ -1,20 +1,43 @@
-import jester, asyncdispatch, json, os, strutils
-import handlers/[health]
-import middleware/[cors_middleware]
+import mummy, mummy/routers, json
+import handlers/health
+import middleware/cors_middleware
 
-proc setupRoutes(app: Jester) =
-  # CORS middleware
-  app.all "*", corsMiddleware
-  
-  # Health check endpoint
-  app.get "/health", healthHandler
+proc indexHandler(request: Request) =
+  var headers: HttpHeaders
+  headers["Content-Type"] = "text/plain"
+  addCorsHeaders(headers)
+  request.respond(200, headers, "Xanthus Nim Backend is running")
+
+proc healthHandlerWrapper(request: Request) =
+  healthHandler(request)
+
+proc loginHandler(request: Request) =
+  # Placeholder for login - will implement JWT validation
+  # This is a fake JWT token with header.payload.signature format
+  let fakeJwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjk5OTk5OTk5OTl9.fake-signature"
+  let response = %* {
+    "status": "success",
+    "data": {
+      "jwt_token": fakeJwt
+    }
+  }
+  var headers: HttpHeaders
+  headers["Content-Type"] = "application/json"
+  addCorsHeaders(headers)
+  request.respond(200, headers, $response)
+
+proc optionsHandler(request: Request) =
+  var headers: HttpHeaders
+  addCorsHeaders(headers)
+  request.respond(200, headers, "")
 
 when isMainModule:
-  let port = if existsEnv("PORT"): parseInt(getEnv("PORT")) else: 8080
-  let settings = newSettings(port=Port(port))
+  var router: Router
+  router.get("/health", healthHandlerWrapper)
+  router.get("/", indexHandler)
+  router.post("/api/auth/login", loginHandler)
+  router.options("/api/auth/login", optionsHandler)
   
-  echo "Starting Xanthus Nim backend on port ", port
-  
-  var jester = initJester(settings)
-  jester.setupRoutes()
-  runForever()
+  let server = newServer(router)
+  echo "Server starting on port 8080"
+  server.serve(Port(8080))

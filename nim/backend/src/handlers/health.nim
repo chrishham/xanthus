@@ -1,6 +1,6 @@
-import jester, json, times
+import json, times, mummy
 
-proc healthHandler*(): string =
+proc healthHandler*(request: Request) =
   let response = %* {
     "status": "healthy",
     "service": "xanthus-nim-backend",
@@ -8,4 +8,6 @@ proc healthHandler*(): string =
     "version": "0.1.0"
   }
   
-  result = $response
+  var headers: HttpHeaders
+  headers["Content-Type"] = "application/json"
+  request.respond(200, headers, $response)
