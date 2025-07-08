@@ -61,10 +61,9 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	protected.GET("/terminal-page/:session_id", config.TerminalHandler.HandleTerminalPage)
 	protected.GET("/logout", config.AuthHandler.HandleLogout)
 
-	// DNS management routes
+	// DNS management API routes
 	dns := protected.Group("/dns")
 	{
-		dns.GET("", config.DNSHandler.HandleDNSConfigPage)
 		dns.GET("/list", config.DNSHandler.HandleDNSList)
 		dns.POST("/configure", config.DNSHandler.HandleDNSConfigure)
 		dns.POST("/remove", config.DNSHandler.HandleDNSRemove)
@@ -193,6 +192,7 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		// Handle root route (authenticated users)
 		protected.GET("/dashboard", config.SvelteHandler.HandleSPAFallback)
 		protected.GET("/dashboard/*path", config.SvelteHandler.HandleSPAFallback)
+		protected.GET("/dns", config.SvelteHandler.HandleSPAFallback)
 	}
 }
 

@@ -2,6 +2,8 @@
 	export let variant: 'default' | 'blue' | 'green' | 'purple' | 'orange' | 'red' = 'default';
 	export let padding: 'sm' | 'md' | 'lg' = 'md';
 	export let shadow: 'sm' | 'md' | 'lg' | 'none' = 'md';
+	let className = '';
+	export { className as class };
 
 	function getVariantClasses(variant: string): string {
 		switch (variant) {
@@ -52,7 +54,7 @@
 	$: variantClasses = getVariantClasses(variant);
 	$: paddingClasses = getPaddingClasses(padding);
 	$: shadowClasses = getShadowClasses(shadow);
-	$: allClasses = `rounded-lg border ${variantClasses} ${paddingClasses} ${shadowClasses}`;
+	$: allClasses = `rounded-lg border ${variantClasses} ${paddingClasses} ${shadowClasses} ${className}`;
 </script>
 
 <div class={allClasses}>

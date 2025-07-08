@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { authStore } from '$lib/stores/auth';
@@ -8,7 +8,7 @@
 
   let cloudflareToken = '';
   let loading = false;
-  let errors = {};
+  let errors: { cf_token?: string } = {};
 
   // Redirect if already authenticated
   onMount(async () => {
@@ -44,7 +44,7 @@
       }
     } catch (error) {
       console.error('Login error:', error);
-      errors.cf_token = error.message || 'Login failed. Please try again.';
+      errors.cf_token = (error as Error).message || 'Login failed. Please try again.';
     } finally {
       loading = false;
     }

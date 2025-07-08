@@ -5,6 +5,8 @@
 	export let loading = false;
 	export let href: string | undefined = undefined;
 	export let type: 'button' | 'submit' | 'reset' = 'button';
+	let className = '';
+	export { className as class };
 
 	function getVariantClasses(variant: string): string {
 		switch (variant) {
@@ -42,7 +44,7 @@
 	$: variantClasses = getVariantClasses(variant);
 	$: sizeClasses = getSizeClasses(size);
 	$: disabledClasses = disabled || loading ? 'opacity-50 cursor-not-allowed' : '';
-	$: allClasses = `${baseClasses} ${variantClasses} ${sizeClasses} ${disabledClasses}`;
+	$: allClasses = `${baseClasses} ${variantClasses} ${sizeClasses} ${disabledClasses} ${className}`;
 </script>
 
 {#if href}

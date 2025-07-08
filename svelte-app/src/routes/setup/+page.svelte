@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { setupStore } from '$lib/stores/setup';
@@ -11,8 +11,8 @@
   let hetznerToken = '';
   let cloudflareToken = '';
   let loading = false;
-  let errors = {};
-  let setupStatus = null;
+  let errors: { hetzner_token?: string; cloudflare_token?: string } = {};
+  let setupStatus: any = null;
 
   // Subscribe to setup store
   $: setupConfig = $setupStore;
@@ -51,7 +51,7 @@
       }
     } catch (error) {
       console.error('Hetzner setup error:', error);
-      errors.hetzner_token = error.message || 'Failed to configure Hetzner token';
+      errors.hetzner_token = (error as Error).message || 'Failed to configure Hetzner token';
     } finally {
       loading = false;
     }
@@ -77,13 +77,13 @@
       }
     } catch (error) {
       console.error('Cloudflare setup error:', error);
-      errors.cloudflare_token = error.message || 'Failed to configure Cloudflare token';
+      errors.cloudflare_token = (error as Error).message || 'Failed to configure Cloudflare token';
     } finally {
       loading = false;
     }
   }
 
-  function handleInputChange(field) {
+  function handleInputChange(field: keyof typeof errors) {
     // Clear error when user starts typing
     if (errors[field]) {
       errors = { ...errors, [field]: '' };
