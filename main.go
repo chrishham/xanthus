@@ -54,7 +54,7 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to create SvelteKit files sub-filesystem:", err)
 	}
-	// Note: SvelteHandler will handle /app routes including static files
+	// Note: SvelteHandler will handle /_app routes (SvelteKit assets) and /app redirect routes
 
 	// Initialize shared services
 	wsTerminalService := services.NewWebSocketTerminalService()

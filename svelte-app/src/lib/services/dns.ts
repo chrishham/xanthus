@@ -31,7 +31,7 @@ export class DNSService {
 	 * Fetch all domains from the API
 	 */
 	async fetchDomains(): Promise<Domain[]> {
-		const response = await api.get('/dns/list', 'DNS Management');
+		const response = await api.get('/dns', 'DNS Management');
 		return response.domains || [];
 	}
 
@@ -43,7 +43,7 @@ export class DNSService {
 			const formData = new FormData();
 			formData.append('domain', domain);
 			
-			const response = await fetch('/dns/configure', {
+			const response = await fetch('/api/dns/configure', {
 				method: 'POST',
 				body: formData
 			});
@@ -73,7 +73,7 @@ export class DNSService {
 			const formData = new FormData();
 			formData.append('domain', domain);
 			
-			const response = await fetch('/dns/remove', {
+			const response = await fetch('/api/dns/remove', {
 				method: 'POST',
 				body: formData
 			});

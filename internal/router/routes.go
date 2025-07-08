@@ -186,13 +186,11 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	// About route
 	protected.GET("/about", config.VersionHandler.GetAboutInfo)
 
-	// SvelteKit SPA routes - must be after all other routes to act as fallback
-	// This handles specific frontend routes for the SPA
+	// SvelteKit SPA routes - all frontend routes under /app prefix
 	if config.SvelteHandler != nil {
-		// Handle root route (authenticated users)
-		protected.GET("/dashboard", config.SvelteHandler.HandleSPAFallback)
-		protected.GET("/dashboard/*path", config.SvelteHandler.HandleSPAFallback)
-		protected.GET("/dns", config.SvelteHandler.HandleSPAFallback)
+		// Handle all /app routes as Svelte territory
+		protected.GET("/app", config.SvelteHandler.HandleSPAFallback)
+		protected.GET("/app/*path", config.SvelteHandler.HandleSPAFallback)
 	}
 }
 
