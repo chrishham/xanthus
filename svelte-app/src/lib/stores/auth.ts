@@ -1,4 +1,5 @@
 import { writable, derived } from 'svelte/store';
+import { browser } from '$app/environment';
 
 export interface User {
 	id: string;
@@ -268,12 +269,23 @@ export const refreshTokens = async (): Promise<boolean> => {
 export const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
 	// Check if we need to refresh the token
 	if (shouldRefreshToken()) {
-		await refreshTokens();
+		const refreshed = await refreshTokens();
+		if (!refreshed) {
+			// Redirect to login if refresh failed
+			if (browser) {
+				window.location.href = '/login';
+			}
+			throw new Error('Authentication required');
+		}
 	}
 	
 	const tokens = getTokens();
 	if (!tokens) {
-		throw new Error('No authentication tokens available');
+		// Redirect to login if no tokens
+		if (browser) {
+			window.location.href = '/login';
+		}
+		throw new Error('Authentication required');
 	}
 	
 	return fetch(url, {

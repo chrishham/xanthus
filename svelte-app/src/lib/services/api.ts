@@ -103,6 +103,13 @@ export class ApiClient {
 	}
 
 	private async handleError(error: any, context: string): Promise<void> {
+		// Check if this is an authentication error
+		if (error.message === 'Authentication required' || error.message === 'No authentication tokens available') {
+			// Don't show error notification for auth errors, just let the redirect happen
+			console.warn('Authentication required, user will be redirected to login');
+			return;
+		}
+		
 		if (this.isNetworkError(error)) {
 			await errorHandler.handleNetworkError(context);
 		} else {

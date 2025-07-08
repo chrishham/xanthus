@@ -13,14 +13,16 @@
 		authStore.initialize();
 	});
 
-	// Authentication guard for app routes (exclude login and setup)
+	// Authentication guard for all routes except login and setup
 	$: {
 		const isAppRoute = $page.url.pathname.startsWith('/app');
 		const isLoginRoute = $page.url.pathname === '/app/login' || $page.url.pathname.startsWith('/app/login/');
 		const isSetupRoute = $page.url.pathname === '/app/setup' || $page.url.pathname.startsWith('/app/setup/');
+		const isRootRoute = $page.url.pathname === '/';
 		
-		if (isAppRoute && !isLoginRoute && !isSetupRoute && !$authStore.isAuthenticated) {
-			goto('/login');
+		// Redirect to login if not authenticated and accessing protected routes
+		if (((isAppRoute || isRootRoute) && !isLoginRoute && !isSetupRoute && !$authStore.isAuthenticated)) {
+			goto('/app/login');
 		}
 	}
 
