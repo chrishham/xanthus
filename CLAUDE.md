@@ -17,7 +17,7 @@ For detailed architecture information, see the following documentation:
 ## Development Commands
 
 ### Building and Running
-- `make dev` - Start development server with CSS compilation
+- `make dev-full` - Start development server with CSS compilation
 - `make build` - Build production binary (includes asset compilation)
 - `make build-windows` - Cross-compile for Windows 64-bit
 
@@ -114,7 +114,7 @@ YAML Config → Template Processing → Helm Values → K8s Deployment
 
 ### Quick Development Tasks
 ```bash
-make dev              # Start development with CSS watching
+make dev-full              # Start development with CSS watching
 make test            # Quick tests (< 5 minutes)
 make lint            # Format and validate code
 ```
@@ -171,3 +171,5 @@ ssh -i xanthus-key.pem ubuntu@{oracle_ip}     # Oracle (ubuntu)
 ---
 
 **⚠️ Important**: All Go files must stay under 500 lines. If exceeded, suggest refactoring plan.
+
+When debugging with puppeteer please consult @logic/01-puppeteer.md

@@ -281,7 +281,7 @@ touch internal/templates/applications/new-app.yaml
 ### Step 4: Test Configuration
 ```bash
 # Restart application to load new config
-make dev
+make dev-full
 ```
 
 ## 🔗 Integration with Services

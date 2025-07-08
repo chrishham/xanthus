@@ -77,7 +77,7 @@ make build
 
 ```bash
 # Start development server
-make dev
+make dev-full
 
 # Run tests
 make test
@@ -240,3 +240,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Container Registry](https://ghcr.io/chrishham/xanthus)
 - [Documentation](CLAUDE.md)
 - [Issues](https://github.com/chrishham/xanthus/issues)
+
+
+claude mcp add-json "puppeteer" '{"command":"npx","args":["-y","@modelcontextprotocol/server-puppeteer"]}'

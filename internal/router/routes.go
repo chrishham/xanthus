@@ -54,8 +54,10 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	protected := r.Group("/")
 	protected.Use(middleware.AuthMiddleware())
 
-	// Main application pages
+	// Main application pages - redirects to /app routes
 	protected.GET("/main", config.PagesHandler.HandleMainPage)
+	protected.GET("/dashboard", config.PagesHandler.HandleDashboardPage)
+	protected.GET("/dns", config.PagesHandler.HandleDNSPage)
 	protected.GET("/setup", config.PagesHandler.HandleSetupPage)
 	protected.POST("/setup/hetzner", config.VPSConfigHandler.HandleSetupHetzner)
 	protected.GET("/terminal-page/:session_id", config.TerminalHandler.HandleTerminalPage)
