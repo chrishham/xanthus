@@ -25,10 +25,10 @@ func (h *SvelteHandler) HandleSPAFallback(c *gin.Context) {
 	// Get the requested path
 	path := c.Request.URL.Path
 
-	// If the path starts with /_app (SvelteKit assets), serve the static file directly
-	if strings.HasPrefix(path, "/_app") {
-		// Remove leading slash for filesystem access
-		filePath := strings.TrimPrefix(path, "/")
+	// If the path starts with /app/_app (SvelteKit assets), serve the static file directly
+	if strings.HasPrefix(path, "/app/_app") {
+		// Remove the /app prefix and leading slash for filesystem access
+		filePath := strings.TrimPrefix(path, "/app/")
 		
 		// Try to open the file
 		file, err := h.svelteFS.Open(filePath)

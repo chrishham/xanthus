@@ -79,7 +79,7 @@ func (h *VersionHandler) GetCurrentVersion(c *gin.Context) {
 
 // GetAboutInfo returns about information including version and platform details
 func (h *VersionHandler) GetAboutInfo(c *gin.Context) {
-	_, _, valid := h.validateTokenAndAccount(c)
+	_, _, valid := utils.ValidateJWTAndGetAccountJSON(c)
 	if !valid {
 		return
 	}

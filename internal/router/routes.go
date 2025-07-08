@@ -49,7 +49,9 @@ func setupPublicRoutes(r *gin.Engine, config RouteConfig) {
 		r.GET("/", config.SvelteHandler.HandleSPAFallback)
 		r.GET("/login", config.SvelteHandler.HandleSPAFallback)  
 		r.GET("/login/*path", config.SvelteHandler.HandleSPAFallback)
-		r.GET("/_app/*path", config.SvelteHandler.HandleSPAFallback)
+		// Serve all /app routes (including assets) publicly - SvelteKit handles internal auth
+		r.GET("/app", config.SvelteHandler.HandleSPAFallback)
+		r.GET("/app/*path", config.SvelteHandler.HandleSPAFallback)
 	}
 }
 
@@ -67,7 +69,6 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 	protected.GET("/vps", config.PagesHandler.HandleVPSPage)
 	protected.GET("/applications", config.PagesHandler.HandleApplicationsPage)
 	protected.GET("/version", config.PagesHandler.HandleVersionPage)
-	protected.GET("/about", config.VersionHandler.GetAboutInfo)
 	protected.GET("/logout", config.AuthHandler.HandleLogout)
 
 	// Legacy terminal page (will be migrated to SvelteKit)
@@ -82,12 +83,8 @@ func setupProtectedRoutes(r *gin.Engine, config RouteConfig) {
 		ws.GET("/terminal/:session_id", config.WebSocketTerminalHandler.HandleWebSocketTerminal)
 	}
 
-	// SvelteKit SPA routes - all frontend routes under /app prefix
-	if config.SvelteHandler != nil {
-		// Handle all /app routes as Svelte territory
-		protected.GET("/app", config.SvelteHandler.HandleSPAFallback)
-		protected.GET("/app/*path", config.SvelteHandler.HandleSPAFallback)
-	}
+	// Note: /app routes are now served publicly to avoid authentication conflicts
+	// SvelteKit handles its own authentication via API calls
 
 	// Note: NoRoute is handled at the global level, not on router groups
 }
@@ -197,6 +194,9 @@ func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 		dns.GET("/config/:domain", config.DNSHandler.HandleDNSConfigGetAPI)
 	}
 
+	// About API endpoint (JWT-based)
+	protectedAPI.GET("/about", config.VersionHandler.GetAboutInfo)
+
 	// Setup API endpoints
 	setup := protectedAPI.Group("/setup")
 	{
@@ -208,9 +208,5 @@ func setupAPIRoutes(r *gin.Engine, config RouteConfig) {
 		// - /api/vps/server-options for server options
 	}
 
-
 	// Additional protected API routes will be added here in later phases
-	
-	// About endpoint
-	protectedAPI.GET("/about", config.VersionHandler.GetAboutInfo)
 }
