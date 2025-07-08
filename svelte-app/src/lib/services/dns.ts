@@ -1,4 +1,5 @@
 import { api } from './api';
+import { authenticatedFetch } from '../stores/auth';
 import type { Domain } from '../stores/dns';
 
 export interface DNSConfigurationOptions {
@@ -43,7 +44,7 @@ export class DNSService {
 			const formData = new FormData();
 			formData.append('domain', domain);
 			
-			const response = await fetch('/api/dns/configure', {
+			const response = await authenticatedFetch('/api/dns/configure', {
 				method: 'POST',
 				body: formData
 			});
@@ -73,7 +74,7 @@ export class DNSService {
 			const formData = new FormData();
 			formData.append('domain', domain);
 			
-			const response = await fetch('/api/dns/remove', {
+			const response = await authenticatedFetch('/api/dns/remove', {
 				method: 'POST',
 				body: formData
 			});

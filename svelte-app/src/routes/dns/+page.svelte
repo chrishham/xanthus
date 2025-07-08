@@ -24,6 +24,8 @@
 		} catch (err) {
 			// Error handling is now done by the errorHandler service
 			setError('Failed to load domains');
+		} finally {
+			setLoading(false);
 		}
 	}
 

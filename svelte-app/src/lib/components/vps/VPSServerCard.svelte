@@ -126,51 +126,53 @@
 			<!-- Server Type -->
 			<div class="flex justify-between items-center">
 				<span class="text-sm text-gray-500">Server Type</span>
-				<span class="text-sm font-medium text-gray-900">{vps.server_type || 'N/A'}</span>
+				<span class="text-sm font-medium text-gray-900">{vps.server_type?.name || 'N/A'}</span>
 			</div>
 
 			<!-- Region -->
 			<div class="flex justify-between items-center">
 				<span class="text-sm text-gray-500">Region</span>
-				<span class="text-sm font-medium text-gray-900">{vps.region || 'N/A'}</span>
+				<span class="text-sm font-medium text-gray-900">{vps.labels?.region || vps.datacenter?.location?.description || 'N/A'}</span>
 			</div>
 
 			<!-- Public IP -->
-			{#if vps.public_ip}
+			{#if vps.public_net?.ipv4?.ip || vps.labels?.ip_address}
 				<div class="flex justify-between items-center">
 					<span class="text-sm text-gray-500">Public IP</span>
-					<span class="text-sm font-mono font-medium text-gray-900">{vps.public_ip}</span>
+					<span class="text-sm font-mono font-medium text-gray-900">{vps.public_net?.ipv4?.ip || vps.labels?.ip_address}</span>
 				</div>
 			{/if}
 
-			<!-- Private IP -->
-			{#if vps.private_ip}
+			<!-- Server Specs -->
+			{#if vps.server_type?.cores || vps.server_type?.memory}
 				<div class="flex justify-between items-center">
-					<span class="text-sm text-gray-500">Private IP</span>
-					<span class="text-sm font-mono font-medium text-gray-900">{vps.private_ip}</span>
+					<span class="text-sm text-gray-500">Specs</span>
+					<span class="text-sm font-medium text-gray-900">
+						{vps.server_type?.cores || 0} CPU, {vps.server_type?.memory || 0}GB RAM
+					</span>
 				</div>
 			{/if}
 
 			<!-- Cost Information -->
-			{#if vps.monthly_cost}
+			{#if vps.labels?.monthly_cost}
 				<div class="flex justify-between items-center">
 					<span class="text-sm text-gray-500">Monthly Cost</span>
-					<span class="text-sm font-medium text-gray-900">{formatCost(vps.monthly_cost)}</span>
+					<span class="text-sm font-medium text-gray-900">€{vps.labels.monthly_cost}</span>
 				</div>
 			{/if}
 
-			{#if vps.hourly_cost}
+			{#if vps.labels?.hourly_cost}
 				<div class="flex justify-between items-center">
 					<span class="text-sm text-gray-500">Hourly Cost</span>
-					<span class="text-sm font-medium text-gray-900">{formatCost(vps.hourly_cost)}</span>
+					<span class="text-sm font-medium text-gray-900">€{vps.labels.hourly_cost}</span>
 				</div>
 			{/if}
 
 			<!-- Created Date -->
-			{#if vps.created_at}
+			{#if vps.created}
 				<div class="flex justify-between items-center">
 					<span class="text-sm text-gray-500">Created</span>
-					<span class="text-sm font-medium text-gray-900">{formatDate(vps.created_at)}</span>
+					<span class="text-sm font-medium text-gray-900">{formatDate(vps.created)}</span>
 				</div>
 			{/if}
 		</div>
