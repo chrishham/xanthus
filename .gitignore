@@ -68,7 +68,7 @@ svelte-app/playwright-report/
 svelte-app/test-results/
 svelte-app/.env
 svelte-app/.env.*
-web/svelte-app/_app/
+web/svelte-app
 
 *.pem
 
