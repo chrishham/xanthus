@@ -319,18 +319,24 @@ type
 
 ### 2.5 Authentication & JWT Integration
 
-**CRITICAL: Complex Authentication Flow (Current Go Implementation Analysis)**
+**CLEAR: Complete Login Setup → Simple JWT Usage**
 
-The current authentication system is far more complex than initially outlined. Here's the actual flow that must be preserved:
+The authentication system has **two phases**:
 
-**Current Go Authentication Flow:**
-1. **Cloudflare Token Validation** (with 10-minute cache)
-2. **KV Namespace Creation/Verification** 
-3. **CSR Generation and Storage**
-4. **Account Setup and Verification**
-5. **Context Storage** (token, account_id, namespace_id)
+**PHASE 1: Login (Complex Setup - ONE TIME)**
+1. **User provides Cloudflare token** (via login form)
+2. **App validates token** with Cloudflare API  
+3. **App creates/verifies KV namespace** (like current Go implementation)
+4. **App generates/verifies CSR** (like current Go implementation)
+5. **App creates JWT** with all user info
+6. **Return JWT to frontend**
 
-**Enhanced Authentication Service:**
+**PHASE 2: All Subsequent Requests (Simple)**
+- **Frontend sends JWT** in `Authorization: Bearer <token>` header
+- **Backend validates JWT** and extracts user info
+- **No more Cloudflare API calls** - just JWT validation
+
+**Complete Authentication Service (Like Current Go):**
 ```nim
 # services/auth_service.nim
 import asyncdispatch, jwt, json, times, httpclient, strformat
@@ -342,68 +348,47 @@ type
     cloudflareClient: CloudflareClient
     kvClient: KVClient
     jwtSecret: string
-    tokenCache: Table[string, CachedAuthInfo]
-  
-  CachedAuthInfo* = object
-    accountInfo: AccountInfo
-    namespaceId: string
-    cachedAt: DateTime
-    
-  CompleteAuthInfo* = object
-    accountId: string
-    email: string
-    name: string
-    token: string
-    namespaceId: string
-    csrGenerated: bool
-    jwtToken: string
 
 proc newAuthService*(cloudflareClient: CloudflareClient, kvClient: KVClient, jwtSecret: string): AuthService =
   AuthService(
     cloudflareClient: cloudflareClient,
     kvClient: kvClient,
-    jwtSecret: jwtSecret,
-    tokenCache: initTable[string, CachedAuthInfo]()
+    jwtSecret: jwtSecret
   )
 
-proc authenticateUser*(service: AuthService, cloudflareToken: string): Future[CompleteAuthInfo] {.async.} =
-  # Step 1: Check cache (10-minute expiry)
-  if service.tokenCache.hasKey(cloudflareToken):
-    let cached = service.tokenCache[cloudflareToken]
-    if (now() - cached.cachedAt) < 10.minutes:
-      return service.buildCompleteAuthInfo(cached, cloudflareToken)
-  
-  # Step 2: Validate Cloudflare token
+proc login*(service: AuthService, cloudflareToken: string): Future[LoginResult] {.async.} =
+  # Step 1: Validate Cloudflare token
   let accountInfo = await service.cloudflareClient.getAccountInfo(cloudflareToken)
   
-  # Step 3: Setup/verify KV namespace
+  # Step 2: Create/verify KV namespace (preserve Go behavior)
   let namespaceId = await service.ensureKVNamespace(accountInfo.id, cloudflareToken)
   
-  # Step 4: Generate/verify CSR
+  # Step 3: Generate/verify CSR (preserve Go behavior)  
   let csrGenerated = await service.ensureCSR(accountInfo.id, namespaceId, cloudflareToken)
   
-  # Step 5: Cache the results
-  service.tokenCache[cloudflareToken] = CachedAuthInfo(
-    accountInfo: accountInfo,
-    namespaceId: namespaceId,
-    cachedAt: now()
-  )
+  # Step 4: Create JWT with all info
+  let payload = %* {
+    "accountId": accountInfo.id,
+    "email": accountInfo.email,
+    "name": accountInfo.name,
+    "namespaceId": namespaceId,
+    "cloudflareToken": cloudflareToken,  # Store for API operations
+    "exp": (now() + 24.hours).toTime().toUnix()
+  }
   
-  # Step 6: Generate JWT
-  let jwtToken = service.generateJWT(accountInfo, namespaceId)
+  # Step 5: Generate JWT
+  let jwtToken = jwt.encode(payload, service.jwtSecret)
   
-  return CompleteAuthInfo(
+  return LoginResult(
+    jwtToken: jwtToken,
     accountId: accountInfo.id,
     email: accountInfo.email,
     name: accountInfo.name,
-    token: cloudflareToken,
-    namespaceId: namespaceId,
-    csrGenerated: csrGenerated,
-    jwtToken: jwtToken
+    namespaceId: namespaceId
   )
 
 proc ensureKVNamespace*(service: AuthService, accountId: string, token: string): Future[string] {.async.} =
-  # Check if namespace exists
+  # Same logic as current Go implementation
   let namespaces = await service.cloudflareClient.listKVNamespaces(token)
   let namespaceName = fmt"xanthus_{accountId}"
   
@@ -416,7 +401,7 @@ proc ensureKVNamespace*(service: AuthService, accountId: string, token: string):
   return newNamespace.id
 
 proc ensureCSR*(service: AuthService, accountId: string, namespaceId: string, token: string): Future[bool] {.async.} =
-  # Check if CSR exists in KV
+  # Same logic as current Go implementation
   let existingCSR = await service.kvClient.get(token, namespaceId, "csr")
   if existingCSR.isSome:
     return true
@@ -429,25 +414,12 @@ proc ensureCSR*(service: AuthService, accountId: string, namespaceId: string, to
   await service.kvClient.store(token, namespaceId, "private_key", privateKey)
   
   return true
-
-proc generateJWT*(service: AuthService, accountInfo: AccountInfo, namespaceId: string): string =
-  let payload = %* {
-    "accountId": accountInfo.id,
-    "email": accountInfo.email,
-    "name": accountInfo.name,
-    "namespaceId": namespaceId,
-    "exp": (now() + 24.hours).toTime().toUnix()
-  }
-  
-  return jwt.encode(payload, service.jwtSecret)
 ```
 
-**Enhanced JWT Middleware:**
+**Simple JWT Middleware:**
 ```nim
 # middleware/auth_middleware.nim
 import jester, jwt, json, asyncdispatch, times
-import ../services/auth_service
-import ../models/user_model
 
 type
   UserInfo* = object
@@ -455,6 +427,7 @@ type
     email*: string
     name*: string
     namespaceId*: string
+    cloudflareToken*: string  # Available for API operations
     exp*: int64
 
 proc authMiddleware*(request: Request, response: Response): Future[ResponseData] {.async.} =
@@ -463,7 +436,7 @@ proc authMiddleware*(request: Request, response: Response): Future[ResponseData]
   if not authHeader.startsWith("Bearer "):
     return %* {
       "status": "error",
-      "message": "Missing or invalid authorization header"
+      "message": "Missing authorization header"
     }
   
   let token = authHeader[7..^1]
@@ -472,7 +445,7 @@ proc authMiddleware*(request: Request, response: Response): Future[ResponseData]
     let payload = jwt.decode(token, getJWTSecret())
     let userInfo = payload.to(UserInfo)
     
-    # Verify token expiration
+    # Check expiration
     if userInfo.exp < now().toTime().toUnix():
       return %* {
         "status": "error",
@@ -492,12 +465,11 @@ proc getUserInfo*(request: Request): UserInfo =
   request.ctx["userInfo"].to(UserInfo)
 ```
 
-**Authentication Handlers:**
+**Simple Authentication Handler:**
 ```nim
 # handlers/auth.nim
 import jester, json, asyncdispatch
 import ../services/auth_service
-import ../models/user_model
 
 proc loginHandler*(request: Request): Future[ResponseData] {.async.} =
   let body = parseJson(request.body)
@@ -505,45 +477,59 @@ proc loginHandler*(request: Request): Future[ResponseData] {.async.} =
   
   try:
     let authService = getAuthService()
-    let authInfo = await authService.authenticateUser(cloudflareToken)
+    let result = await authService.login(cloudflareToken)
     
     return %* {
       "status": "success",
       "data": {
-        "jwt_token": authInfo.jwtToken,
-        "account_id": authInfo.accountId,
-        "email": authInfo.email,
-        "name": authInfo.name
+        "jwt_token": result.jwtToken,
+        "account_id": result.accountId,
+        "email": result.email,
+        "name": result.name
       }
     }
   except Exception as e:
     return %* {
       "status": "error",
-      "message": e.msg
-    }
-
-proc validateCloudflareToken*(request: Request): Future[ResponseData] {.async.} =
-  let body = parseJson(request.body)
-  let cloudflareToken = body["token"].getStr()
-  
-  try:
-    let authService = getAuthService()
-    let authInfo = await authService.authenticateUser(cloudflareToken)
-    
-    return %* {
-      "status": "success",
-      "data": {
-        "valid": true,
-        "account_id": authInfo.accountId,
-        "namespace_id": authInfo.namespaceId
-      }
-    }
-  except Exception as e:
-    return %* {
-      "status": "error",
-      "message": "Token validation failed"
+      "message": "Login failed: " & e.msg
     }
 ```
+
+**Simple Models:**
+```nim
+# models/user_model.nim
+import json, times
+
+type
+  LoginResult* = object
+    jwtToken*: string
+    accountId*: string
+    email*: string
+    name*: string
+    namespaceId*: string
+  
+  AccountInfo* = object
+    id*: string
+    email*: string
+    name*: string
+```
+
+**Authentication Flow Summary:**
+
+**LOGIN (Complex - One Time):**
+1. **Frontend** → POST `/api/auth/login` with `{"token": "cloudflare_token"}`
+2. **Backend** → Validates token with Cloudflare API
+3. **Backend** → Creates/verifies KV namespace (like current Go)
+4. **Backend** → Generates/verifies CSR (like current Go)
+5. **Backend** → Creates JWT with account info + namespace + cloudflare token
+6. **Backend** → Returns JWT to frontend
+
+**ALL SUBSEQUENT REQUESTS (Simple):**
+1. **Frontend** → Uses JWT for all API calls: `Authorization: Bearer <jwt_token>`
+2. **Backend** → Validates JWT and extracts user info (no Cloudflare API calls)
+3. **Backend** → Has access to accountId, namespaceId, cloudflareToken from JWT
+
+**Perfect!** Complex setup during login preserves all current functionality, but after that it's just simple JWT validation.
 
 ### 2.6 External Integration Migration
 
@@ -1555,7 +1541,7 @@ jobs:
 
 ### **Original Plan Holes:**
 1. **❌ Route Responsibility Confusion** - Plan didn't separate API from web routes
-2. **❌ Authentication Oversimplification** - Missed complex Cloudflare token flow
+2. **❌ Authentication Flow Unclear** - Didn't clarify login complexity vs usage simplicity
 3. **❌ WebSocket Implementation Gaps** - Ignored Jester WebSocket limitations
 4. **❌ Static File Serving Missing** - No strategy for asset compilation/serving
 5. **❌ Domain Organization Loss** - Risk of losing current domain boundaries
@@ -1572,10 +1558,10 @@ jobs:
 - **Frontend (SvelteKit)**: Web routes + static files
 - **Clear separation**: `/api/v1/*` vs `/app/*`
 
-**2. Enhanced Authentication Flow** (Section 2.5)
-- **Preserved complex flow**: Cloudflare token → KV namespace → CSR → JWT
-- **10-minute caching**: Token validation caching
-- **Complete auth info**: Account setup, namespace verification
+**2. Clarified Authentication Flow** (Section 2.5)
+- **Login phase**: Complete KV namespace setup + CSR generation (like current Go)
+- **Usage phase**: Simple JWT validation for all subsequent requests
+- **Clean API**: Complex login preserves functionality, simple JWT usage thereafter
 
 **3. WebSocket Strategy** (Section 3.6)
 - **Hybrid approach**: Option to keep Go WebSocket service
@@ -1597,7 +1583,7 @@ jobs:
 ### **HIGH-RISK ITEMS REQUIRING IMMEDIATE ATTENTION:**
 
 1. **WebSocket Implementation** - Consider keeping Go service for terminals
-2. **Complex Authentication** - Ensure all 5 steps are implemented
+2. **Authentication Implementation** - Ensure complex login + simple JWT usage
 3. **Performance Benchmarking** - Must compare against Go implementation
 4. **Session Management** - Cross-server session handling is critical
 5. **Static File Strategy** - Asset compilation pipeline must be defined
@@ -1606,14 +1592,14 @@ jobs:
 
 1. **Prototype WebSocket** - Test Jester WebSocket with terminal sessions
 2. **Benchmark Performance** - Compare Nim vs Go for critical operations
-3. **Test Authentication** - Verify all 5 auth steps work in Nim
+3. **Test Authentication** - Verify complex login setup + simple JWT usage works in Nim
 4. **Define Asset Pipeline** - CSS/JS compilation strategy
 5. **Setup Reverse Proxy** - Production deployment architecture
 
 ### **SUCCESS FACTORS (UPDATED):**
 
 - **✅ Maintain Handler-Service-Model architecture**
-- **✅ Preserve ALL existing functionality** (especially complex auth)
+- **✅ Preserve ALL existing functionality** (complex login, simple usage)
 - **✅ Implement comprehensive testing** (unit, integration, E2E)
 - **✅ Use established libraries and patterns** (avoid experimental)
 - **✅ Plan for rollback capabilities** (especially for WebSocket)
@@ -1626,7 +1612,7 @@ jobs:
 This migration plan now addresses the critical architectural holes identified in the original plan. However, the **complexity and risk level is HIGH** due to:
 
 - **WebSocket limitations** in Jester
-- **Complex authentication flow** requiring precise implementation
+- **Authentication flow implementation** (complex login + simple usage pattern)
 - **Two-server architecture** requiring careful coordination
 - **Performance requirements** for production workloads
 
